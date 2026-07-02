@@ -185,7 +185,7 @@ sforge serve
 # 4. Run an agent
 SFORGE_AGENT_API_KEY="sk-xxx" \
   sforge run --task ad_placement_optimization --agent claude-code \
-    --model claude-opus-4-8 --timeout 43200
+    --model "claude-opus-4-8[1m]" --timeout 43200 --run-id edgebench-001
 ```
 
 **Step-by-step examples:**
