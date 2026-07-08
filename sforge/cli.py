@@ -104,6 +104,11 @@ def cmd_build(args):
     force_rebuild = args.force_rebuild or args.force_rebuild_with_base
     force_rebuild_base = args.force_rebuild_with_base
 
+    if args.kits_dir:
+        _build_from_kits(args, config, task_specs, client,
+                         force_rebuild, force_rebuild_base, verbose)
+        return
+
     if len(task_specs) == 1:
         task_spec = task_specs[0]
         print(f"Building images for task: {task_spec.task_id}")
@@ -136,6 +141,40 @@ def cmd_build(args):
                 except Exception as e:
                     print(f"  [{ts.task_id}] FAILED: {e}", file=sys.stderr)
 
+    print("Done.")
+
+
+def _build_from_kits(args, config, task_specs, client,
+                     force_rebuild, force_rebuild_base, verbose):
+    """Build task images from pre-exported build kits instead of setup_cmds."""
+    from sforge.harness.kits import build_task_images_from_kits
+
+    kits_root = Path(args.kits_dir)
+    verify = args.verify
+    print(f"Building {len(task_specs)} task(s) from kits at {kits_root}"
+          + (" (with verification)" if verify else ""))
+
+    def _build_one(ts: TaskSpec):
+        return ts.task_id, *build_task_images_from_kits(
+            ts, kits_root, config, client,
+            force_rebuild=force_rebuild, force_rebuild_base=force_rebuild_base,
+            verify=verify, verbose=verbose,
+        )
+
+    failed = False
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(task_specs))) as ex:
+        futures = {ex.submit(_build_one, ts): ts for ts in task_specs}
+        for fut in concurrent.futures.as_completed(futures):
+            ts = futures[fut]
+            try:
+                task_id, base, work, judge = fut.result()
+                print(f"  [{task_id}] OK  base={base}  work={work}  judge={judge}"
+                      + ("  verified" if verify else ""))
+            except Exception as e:
+                failed = True
+                print(f"  [{ts.task_id}] FAILED: {e}", file=sys.stderr)
+    if failed:
+        sys.exit(1)
     print("Done.")
 
 
@@ -905,6 +944,13 @@ def main():
                          help="Force rebuild work + judge images (skip base)")
     p_build.add_argument("--force-rebuild-with-base", action="store_true", default=False,
                          help="Force rebuild ALL images including base")
+    p_build.add_argument("--kits-dir", default=None,
+                         help="Build work/judge from exported build kits at "
+                              "<kits-dir>/<task_id>/{work,judge}/ instead of setup_cmds "
+                              "(base is built from BENCHMARK.yaml as usual)")
+    p_build.add_argument("--verify", action="store_true", default=False,
+                         help="With --kits-dir: verify built images file-by-file "
+                              "against the kits' MANIFEST.sha256")
     p_build.set_defaults(func=cmd_build)
 
     # pull
