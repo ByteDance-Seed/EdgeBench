@@ -19,8 +19,9 @@ from __future__ import annotations
 from sforge.harness.agent.base import Agent
 from sforge.harness.config import SForgeConfig
 
-from sforge.harness.agent.claude_code import ClaudeCodeAgent
+from sforge.harness.agent.claude_code import ClaudeCode2_1_214Agent, ClaudeCodeAgent
 from sforge.harness.agent.codex import CodexAgent
+from sforge.harness.agent.opencode import OpenCodeAgent
 
 # ---------------------------------------------------------------------------
 # Registry: name → agent class
@@ -28,7 +29,9 @@ from sforge.harness.agent.codex import CodexAgent
 
 _REGISTRY: dict[str, type[Agent]] = {
     "claude-code": ClaudeCodeAgent,
+    "claude-code-2.1.214": ClaudeCode2_1_214Agent,
     "codex": CodexAgent,
+    "opencode": OpenCodeAgent,
 }
 
 

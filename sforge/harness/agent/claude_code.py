@@ -120,6 +120,18 @@ class ClaudeCodeAgent(Agent):
         logger.info("Configured Claude Code settings with hooks")
 
 
+class ClaudeCode2_1_214Agent(ClaudeCodeAgent):
+    """Claude Code pinned to 2.1.214 — required by Claude 5-family models
+    (Fable/Mythos); the 2.1.159 pin predates them. Kept as a separate agent
+    so existing claude-code results stay comparable."""
+
+    name = "claude-code-2.1.214"
+    install_cmds = [
+        ClaudeCodeAgent.install_cmds[0],
+        "sudo -E npm install -g @anthropic-ai/claude-code@2.1.214",
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Script generators (private to this module)
 # ---------------------------------------------------------------------------
