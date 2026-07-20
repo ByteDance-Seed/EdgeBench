@@ -10,13 +10,17 @@ SForge 内置了 2 种 Agent：
 |-----------|----------|-----------------|-------------|---------|-----------|-------------|
 | Claude Code | `claude-code` | `ANTHROPIC_AUTH_TOKEN` | `ANTHROPIC_MODEL` | — | 支持 | 支持 |
 | Codex | `codex` | `CODEX_API_KEY` | `CODEX_MODEL` | — | 支持 | 支持 |
+| opencode | `opencode` | `ANTHROPIC_API_KEY` | — | — | 不支持（靠自动恢复） | 支持 |
 
 使用 `--agent` 参数指定要运行的 Agent：
 
 ```bash
 sforge run --task ad_placement_optimization --agent claude-code
 sforge run --task ad_placement_optimization --agent codex
+sforge run --task ad_placement_optimization --agent opencode
 ```
+
+> **opencode 说明**：模型名格式为 `provider/model`（裸模型名会视为 `anthropic/<model>`）。默认模型、自定义 base URL（`SFORGE_AGENT_API_BASE_URL`）和权限均通过 `OPENCODE_CONFIG_CONTENT` 环境变量注入，容器内不写配置文件。opencode 无 Stop Hook 机制，长时运行依赖自动恢复循环（`opencode run --continue`）。
 
 ## Agent 配置
 
@@ -85,6 +89,7 @@ Stop Hook 是 SForge 的一个重要机制，用于阻止 Agent 提前退出。
 |-------|----------|------|
 | `claude-code` | Claude Code Stop Hook | 通过 `.claude/settings.json` 注册 |
 | `codex` | Codex Stop Hook | 通过 `/etc/codex/hooks.json` 注册 |
+| `opencode` | — | 无 hook 机制，提前退出由自动恢复兜底 |
 
 ### 禁用 Stop Hook
 
@@ -112,6 +117,7 @@ Auto-Resume 处理的是 **Agent 异常退出** 的情况（如 API 断连、瞬
 |-------|---------|
 | `claude-code` | `claude --continue -p "Continue working."` |
 | `codex` | `codex exec resume --last "Continue working."` |
+| `opencode` | `opencode run --continue "Continue working."` |
 
 ### 安全保护
 

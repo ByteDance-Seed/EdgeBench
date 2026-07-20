@@ -967,7 +967,7 @@ def main():
                             "Multiple tasks are run fully in parallel.")
     p_run.add_argument("--experiment", default=None,
                        help="Path to experiment YAML config file (model config + per-task overrides)")
-    p_run.add_argument("--agent", default=None, help="Agent name (claude-code, aider, codex)")
+    p_run.add_argument("--agent", default=None, help="Agent name (claude-code, codex, opencode)")
     p_run.add_argument("--model", default=None, help="Model override")
     p_run.add_argument("--timeout", type=int, default=None, help="Agent timeout in seconds")
     p_run.add_argument("--eval-interval", type=int, default=None, help=f"Auto-eval interval in seconds (default {DEFAULT_EVAL_INTERVAL})")

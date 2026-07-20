@@ -8,13 +8,22 @@ SForge manages different Code Agents through a plugin-style agent registry. To r
 |-------|----------|-------------|-----------|---------------|-----------|-------------|
 | Claude Code | `claude-code` | `ANTHROPIC_AUTH_TOKEN` | `ANTHROPIC_MODEL` | -- | Yes | Yes |
 | Codex | `codex` | `CODEX_API_KEY` | `CODEX_MODEL` | -- | Yes | Yes |
+| opencode | `opencode` | `ANTHROPIC_API_KEY` | -- | -- | No (auto-resume only) | Yes |
 
 Use the `--agent` flag to select an Agent:
 
 ```bash
 sforge run --task ad_placement_optimization --agent claude-code
 sforge run --task ad_placement_optimization --agent codex
+sforge run --task ad_placement_optimization --agent opencode
 ```
+
+> **opencode notes**: models are addressed as `provider/model` (a bare model
+> name is treated as `anthropic/<model>`). The default model, custom base URL
+> (`SFORGE_AGENT_API_BASE_URL`), and permissions are injected via the
+> `OPENCODE_CONFIG_CONTENT` environment variable — no config file is written
+> into the container. opencode has no Stop-hook mechanism; long runs rely on
+> the harness auto-resume loop (`opencode run --continue`).
 
 ## Agent Configuration
 
@@ -83,6 +92,7 @@ When an Agent such as Claude Code decides the task is complete and tries to exit
 |-------|-----------|-------------|
 | `claude-code` | Claude Code Stop Hook | Registered via `.claude/settings.json` |
 | `codex` | Codex Stop Hook | Registered via `/etc/codex/hooks.json` |
+| `opencode` | -- | No hook mechanism; early exits are covered by auto-resume |
 
 ### Disabling the Stop Hook
 
@@ -110,6 +120,7 @@ Auto-resume handles **abnormal agent exits** (API disconnects, transient errors,
 |-------|------------------|
 | `claude-code` | `claude --continue -p "Continue working."` |
 | `codex` | `codex exec resume --last "Continue working."` |
+| `opencode` | `opencode run --continue "Continue working."` |
 
 ### Safety Guards
 
