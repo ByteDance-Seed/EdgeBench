@@ -70,6 +70,14 @@ fi''',
             prompt_path, model=model, cwd=cwd, internet=internet, resume=resume,
         )
 
+        effort = self._config.agent_effort
+        if effort:
+            # codex vocabulary tops out at "xhigh" where ours says "max".
+            effort = {"max": "xhigh"}.get(effort, effort)
+            cmd = cmd.replace(
+                "codex exec", f'codex exec -c model_reasoning_effort="{effort}"', 1,
+            )
+
         if not internet:
             cmd = cmd.replace(
                 "codex exec", 'codex exec -c web_search="disabled"', 1,

@@ -82,7 +82,17 @@ class OpenCodeAgent(Agent):
             }
         if model_id:
             # Declare the model so opencode accepts ids unknown to models.dev.
-            provider_cfg["models"] = {model_id: {}}
+            model_cfg: dict = {}
+            # Anthropic-style providers have no reasoningEffort, only a
+            # thinking budgetTokens knob; the effort->tokens mapping is a
+            # policy decision we haven't made, so effort applies to
+            # OpenAI-style providers only for now.
+            effort = config.agent_effort
+            if effort and provider_id != "anthropic":
+                model_cfg["options"] = {
+                    "reasoningEffort": {"max": "xhigh"}.get(effort, effort),
+                }
+            provider_cfg["models"] = {model_id: model_cfg}
         if provider_cfg:
             cfg["provider"] = {provider_id: provider_cfg}
 

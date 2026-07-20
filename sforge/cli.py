@@ -251,6 +251,10 @@ def _run_single_task(
     from sforge.harness.agent import create_agent
     from sforge.harness.run_agent import run_agent
 
+    # CLI --effort wins over experiment/env values already on the config.
+    if getattr(args, "effort", None):
+        config.agent_effort = args.effort
+
     agent = create_agent(args.agent, config)
     effective_timeout = args.timeout or config.agent_timeout or agent.timeout
     disable_stop_hook = getattr(args, "disable_stop_hook", False)
@@ -272,6 +276,8 @@ def _run_single_task(
     print(f"  Timeout:     {effective_timeout}s")
     if args.model or config.agent_model or agent.default_model:
         print(f"  Model:       {args.model or config.agent_model or agent.default_model}")
+    if config.agent_effort:
+        print(f"  Effort:      {config.agent_effort}")
     if not task_spec.game_mode:
         eval_status = f"{effective_eval_interval}s" if not disable_auto_eval and effective_eval_interval > 0 else "disabled"
         print(f"  Auto-eval:   {eval_status}")
@@ -339,6 +345,7 @@ def _run_single_task(
         "task": task_spec.task_id,
         "run_id": run_id,
         "model": args.model or config.agent_model or agent.default_model,
+        "effort": config.agent_effort,
         **result.to_dict(),
     }
     (run_log_dir / "final_result.json").write_text(
@@ -406,6 +413,9 @@ def _apply_experiment_overrides(
 
     if task_args.model is None and merged.model is not None:
         task_args.model = merged.model
+
+    if getattr(task_args, "effort", None) is None and merged.effort is not None:
+        task_config.agent_effort = merged.effort
 
     if task_args.timeout is None and merged.timeout is not None:
         task_args.timeout = merged.timeout
@@ -480,6 +490,7 @@ def _effective_config_dict(
         "task_id": task_spec.task_id,
         "agent": agent_name,
         "model": model,
+        "effort": getattr(args, "effort", None) or config.agent_effort,
         "timeout": timeout,
         "eval_interval": eval_interval,
         "disable_stop_hook": getattr(args, "disable_stop_hook", False),
@@ -969,6 +980,11 @@ def main():
                        help="Path to experiment YAML config file (model config + per-task overrides)")
     p_run.add_argument("--agent", default=None, help="Agent name (claude-code, codex, opencode)")
     p_run.add_argument("--model", default=None, help="Model override")
+    p_run.add_argument("--effort", default=None,
+                       choices=["low", "medium", "high", "max"],
+                       help="Reasoning effort; each agent translates to its native "
+                            "mechanism (claude-code env, codex/opencode config). "
+                            "Default: agent's own default")
     p_run.add_argument("--timeout", type=int, default=None, help="Agent timeout in seconds")
     p_run.add_argument("--eval-interval", type=int, default=None, help=f"Auto-eval interval in seconds (default {DEFAULT_EVAL_INTERVAL})")
     p_run.add_argument("--disable-auto-eval", action="store_true", default=False,

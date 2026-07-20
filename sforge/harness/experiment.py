@@ -63,6 +63,7 @@ class ModelConfig:
 class TaskOverrides:
     agent: str | None = None
     model: str | None = None
+    effort: str | None = None
     timeout: int | None = None
     eval_interval: int | None = None
     disable_stop_hook: bool | None = None
@@ -126,7 +127,7 @@ def _parse_task_overrides(data: dict | None) -> TaskOverrides:
     if not data:
         return TaskOverrides()
     ovr = TaskOverrides()
-    for key in ("agent", "model"):
+    for key in ("agent", "model", "effort"):
         val = data.get(key)
         if val is not None:
             setattr(ovr, key, str(val))
@@ -217,6 +218,9 @@ def resolve_task_overrides(
     merged = TaskOverrides(
         agent=task_ovr.agent if task_ovr.agent is not None else defaults.agent,
         model=task_ovr.model if task_ovr.model is not None else defaults.model,
+        effort=(
+            task_ovr.effort if task_ovr.effort is not None else defaults.effort
+        ),
         timeout=(
             task_ovr.timeout if task_ovr.timeout is not None else defaults.timeout
         ),

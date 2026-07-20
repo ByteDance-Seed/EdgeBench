@@ -42,6 +42,12 @@ class SForgeConfig:
     agent_api_key: str | None = None
     agent_api_base_url: str | None = None
     agent_model: str | None = None
+    # Reasoning effort, canonical vocabulary "low"/"medium"/"high"/"max";
+    # each agent translates to its native mechanism (env var, CLI flag or
+    # config option) and maps aliases (e.g. max -> xhigh).  None means the
+    # agent's own default — existing runs were recorded under that behavior,
+    # so never default this to an explicit level.
+    agent_effort: str | None = None
     agent_timeout: int | None = None
     agent_extra_env: dict[str, str] = field(default_factory=dict)
 
@@ -105,6 +111,7 @@ def load_config(cli_overrides: dict | None = None) -> SForgeConfig:
         "agent_api_key": ["SFORGE_AGENT_API_KEY"],
         "agent_api_base_url": ["SFORGE_AGENT_API_BASE_URL"],
         "agent_model": ["SFORGE_AGENT_MODEL"],
+        "agent_effort": ["SFORGE_AGENT_EFFORT"],
         "agent_timeout": ["SFORGE_AGENT_TIMEOUT"],
         "git_user": ["SFORGE_GIT_USER"],
         "git_token": ["SFORGE_GIT_TOKEN"],

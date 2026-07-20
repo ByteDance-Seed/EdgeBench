@@ -55,6 +55,9 @@ class ClaudeCodeAgent(Agent):
             env["CLAUDE_CODE_ATTRIBUTION_HEADER"] = "0"
         if not self._config.agent_api_base_url and self._config.agent_api_key:
             env["ANTHROPIC_API_KEY"] = self._config.agent_api_key
+        # setdefault so an explicit extra_env value stays authoritative.
+        if self._config.agent_effort:
+            env.setdefault("CLAUDE_CODE_EFFORT_LEVEL", self._config.agent_effort)
 
     def format_run_cmd(
         self,
