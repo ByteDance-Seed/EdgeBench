@@ -20,7 +20,7 @@ from sforge.harness.agent.base import Agent
 from sforge.harness.config import SForgeConfig
 
 from sforge.harness.agent.claude_code import ClaudeCode2_1_214Agent, ClaudeCodeAgent
-from sforge.harness.agent.codex import CodexAgent
+from sforge.harness.agent.codex import Codex0_145_0Agent, CodexAgent
 from sforge.harness.agent.opencode import OpenCodeAgent
 
 # ---------------------------------------------------------------------------
@@ -31,6 +31,7 @@ _REGISTRY: dict[str, type[Agent]] = {
     "claude-code": ClaudeCodeAgent,
     "claude-code-2.1.214": ClaudeCode2_1_214Agent,
     "codex": CodexAgent,
+    "codex-0.145.0": Codex0_145_0Agent,
     "opencode": OpenCodeAgent,
 }
 
