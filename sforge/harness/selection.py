@@ -62,7 +62,7 @@ def _pass_rate_first(entries: list[dict], score_direction: str) -> dict:
         if pr < 1.0 or best_pass_rate < 1.0:
             if pr > best_pass_rate:
                 best_pass_rate = pr
-                best_score = s if s is not None else pr
+                best_score = s
                 is_new_best = True
         else:
             if s is not None and _is_better_score(s, best_score, score_direction):
