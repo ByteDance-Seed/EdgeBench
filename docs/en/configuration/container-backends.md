@@ -4,7 +4,9 @@ title: Container Backends
 
 # Container Backends
 
-SForge uses a container backend to create work containers and judge containers. The default backend is local Docker. Switch to the `k8s` backend when you want SForge workloads to run in a Kubernetes cluster.
+SForge uses a container backend to create work and judge environments. The
+default backend is local Docker. Use `k8s` for an existing Kubernetes cluster,
+or `e2b` for E2B-hosted environments.
 
 ## Choosing a Backend
 
@@ -12,8 +14,11 @@ SForge uses a container backend to create work containers and judge containers. 
 |---------|----------|-------------------|
 | `docker` | Local development, task debugging, single-machine evaluation, small experiments | A working local Docker daemon |
 | `k8s` | Shared clusters, high-concurrency batch evaluation, running Work/Judge pods in a cluster | `kubectl` access, images pullable by the cluster, and a Judge URL reachable from pods |
+| `e2b` | Managed remote Work/Judge Sandboxes without operating a cluster or Judge broker | E2B API access and E2B Templates; see [E2B Backend](#e2b-backend) |
 
 If you are trying a task locally, use the default Docker backend first. The Kubernetes backend is intended for team environments that already have a cluster and container registry.
+The E2B backend has a one-time Template preparation step before a new or
+changed task image can run.
 
 ::: warning Docker backend does not scale to large batches
 Each task runs a work container plus ephemeral judge containers, each with its own CPU/memory limits. Running many tasks concurrently on one host (roughly **20+**) causes severe resource contention even on a high-end server. For large batch runs, use the `k8s` backend.
@@ -29,15 +34,13 @@ sforge run \
   --task ad_placement_optimization \
   --agent claude-code \
   --backend k8s \
-  --judge-url http://10.0.0.12:8080 --backend k8s
+  --judge-url http://10.0.0.12:8080
 
 # Override through environment variables
 export SFORGE_BACKEND=k8s
 sforge run \
   --task ad_placement_optimization \
-  --agent claude-code \
-  --backend k8s \
-  --judge-url http://10.0.0.12:8080
+  --agent claude-code
 ```
 
 Experiment YAML can also set the default backend:
@@ -62,9 +65,7 @@ sforge serve
 export SFORGE_AGENT_API_KEY="sk-..."
 sforge run \
   --task ad_placement_optimization \
-  --agent claude-code \
-  --backend k8s \
-  --judge-url http://10.0.0.12:8080
+  --agent claude-code
 ```
 
 The Docker backend:
@@ -222,13 +223,190 @@ Notes:
 - Your kubeconfig must be allowed to create and delete `NetworkPolicy` resources.
 - DNS, egress gateways, and policy implementations differ between clusters, so validate isolation with a small task first.
 
-## Troubleshooting
+## E2B Backend
+
+The E2B backend runs Work, Judge, and Game environments as E2B Sandboxes.
+When `--judge-url` is omitted, SForge also creates a temporary managed Judge
+Controller, so no separately deployed Judge service is required.
+
+### Docker Images and E2B Templates
+
+The pre-built EdgeBench images published under
+[`seededge`](https://hub.docker.com/u/seededge) can be used directly as source
+images. You do not need to run `sforge build`, `sforge pull`, or `sforge push`
+for an unchanged published task.
+
+A Docker image and an E2B Template are different runtime objects.
+`Template.from_image()` imports the Docker image into an E2B Template, while
+`Sandbox.create()` starts the resulting Template rather than accepting a
+Docker image reference. SForge automates this conversion:
+
+```text
+seededge Docker image
+  -> sforge e2b-template
+  -> E2B Template in the user's E2B team
+  -> sforge run --backend e2b
+  -> E2B Sandbox
+```
+
+Template preparation is required once for a new or changed task image in an
+E2B team. Matching Templates are reused; normal `sforge run` commands do not
+rebuild them.
+
+### Prepare Templates
+
+```bash
+uv sync --extra e2b
+export E2B_API_KEY=...
+
+sforge fetch-tasks edgebench
+sforge e2b-template \
+  --task ad_placement_optimization \
+  --source-registry seededge
+```
+
+Use `--all` instead of `--task` to prepare all downloaded tasks. SForge
+automatically derives both image references, pins immutable digests, restores
+non-sensitive OCI environment variables, snapshots the image's initial `/tmp`,
+builds the Work and Judge Templates, waits for terminal status, retries
+transient failures, writes versioned manifests, and reuses matching builds.
+Users do not write an E2B Dockerfile or upload image layers manually.
+
+The current implementation requires a Linux amd64 host with a running local
+Docker daemon, but does not rebuild the published images. The official task
+images predate E2B and ship evaluator helpers under `/tmp` — a wrapper the
+command names plus other files that wrapper reads at runtime. Docker and
+Kubernetes boot from the image, so those files are simply present; E2B resets
+`/tmp` on every Sandbox. When a role's command references `/tmp`, SForge snapshots
+the whole image `/tmp` (so helpers reached only indirectly come along too),
+stores it in the Template, and restores it on Sandbox start, so the evaluator
+sees the same files as on the other backends. This never modifies the official
+image, the evaluators, or scoring. The source registry must also be reachable by
+the E2B build service.
+
+### Portable Image Fallback
+
+Some image versions contain an APT source that is inaccessible from the E2B
+build network. For those images, provide a writable registry:
+
+```bash
+export SFORGE_PORTABLE_REGISTRY_USERNAME=...
+export SFORGE_PORTABLE_REGISTRY_PASSWORD=...
+
+sforge e2b-template \
+  --task TASK \
+  --source-registry seededge \
+  --portable-registry registry.example.com/project
+```
+
+SForge creates a versioned portable derivative only after E2B reports an APT
+provisioning failure. Registry push access is required for this fallback, but
+the derivative is not rebuilt for every evaluation run.
+
+### Run a Task
+
+```bash
+export SFORGE_AGENT_API_KEY=...
+export SFORGE_AGENT_API_BASE_URL=...
+export SFORGE_AGENT_MODEL=...
+
+sforge run \
+  --backend e2b \
+  --task ad_placement_optimization \
+  --agent claude-code
+```
+
+SForge checks the Work/Judge Templates, creates a secured Controller, registers
+the task, creates Work/Judge/Game Sandboxes as needed, propagates gateway
+credentials, collects results, and removes the Sandboxes. Pass `--judge-url`
+only when using a separately deployed Judge Server.
+
+Work Sandboxes reach a managed Controller through its secured E2B service
+gateway. Host-side orchestration requests use the E2B command channel and the
+Controller's loopback interface instead, avoiding an unnecessary round trip
+through that public gateway. This transport choice is specific to E2B and does
+not change Docker or Kubernetes Judge routing.
+
+Each E2B evaluation is scoped to one task. Supplying multiple task IDs only
+batch-schedules several independent evaluations; it does not combine tasks into
+one Work or Judge environment. The validation described here invoked one task
+per `sforge run` command.
+
+### Plan Limits and Run Sizing
+
+E2B plan limits are part of the runtime contract. Template CPU and memory are
+fixed when the Template is built, and requests above the team's limits are
+rejected during Template creation. Rebuild the Template with values supported
+by the target team; runtime `--work-*` and `--judge-*` flags cannot resize an
+existing E2B Template.
+
+Keep the agent timeout comfortably below the team's maximum Sandbox lifetime.
+The lifetime must also cover agent installation, archive extraction, pending
+Judge evaluations, result collection, and cleanup. A managed Judge Controller
+lives for the entire multi-task command, so the whole staggered or multi-wave
+batch—not only one task—must fit within that Controller's permitted lifetime.
+For example, a team limited to one-hour Sandboxes should use a shorter agent
+budget such as 30 minutes and avoid scheduling enough waves to keep one managed
+Controller alive for an hour. Alternatively, use a separately deployed Judge
+Server.
+
+Check each task's `judge.eval_timeout` as well. A Judge Sandbox is subject to
+the same team lifetime limit, so a task whose declared evaluator timeout is
+longer than that limit cannot be guaranteed to finish when the evaluator uses
+its full budget. Do not silently lower the evaluator timeout if leaderboard
+comparability matters; use a plan with a sufficient lifetime instead.
+
+`--max-workers` limits concurrent Work Sandboxes, not total E2B usage. Budget
+for one managed Controller, the Work Sandboxes, temporary Judge Sandboxes, and
+active Game Sandboxes. Leave capacity for overlap while evaluations finish and
+resources are cleaned up.
+
+The final score retains SForge's backend-independent semantics: it is the best
+result among completed agent and auto-eval submissions. `final_archive.tar.gz`
+is a recovery snapshot and is not submitted implicitly at timeout. For short
+runs, choose an auto-eval interval that leaves enough time for at least one
+evaluation to finish, or have the agent call `sforge-submit` before the run
+ends.
+
+### Required User Input
+
+| Input | When required |
+| --- | --- |
+| `E2B_API_KEY` | Template preparation and E2B runs |
+| Agent API key, base URL, and model | Agent runs |
+| Linux amd64 host and local Docker daemon | Template preparation with the current implementation |
+| `--source-registry seededge` | Published EdgeBench images |
+| Source registry credentials | Private source registries only |
+| `--portable-registry` and credentials | APT portability fallback only |
+| CPU/memory overrides | Only when task defaults are unsuitable; E2B resources are fixed in the Template |
+
+Host `HTTP_PROXY` and `HTTPS_PROXY` variables are not copied into E2B Work,
+Judge, or Game Sandboxes. A remote-reachable proxy is forwarded only when the
+user explicitly configures `SFORGE_HTTP_PROXY` or `SFORGE_HTTPS_PROXY`; isolated
+tasks remove proxy variables entirely. See [Network Isolation](/en/features/network-isolation).
+
+### E2B Troubleshooting
 
 | Symptom | Likely cause | Fix |
-|---------|--------------|-----|
-| `kubectl cluster-info failed` | Wrong kubeconfig, unreachable cluster, or wrong namespace context | Check `kubectl -n <namespace> cluster-info`; set `SFORGE_K8S_KUBECONFIG` and `SFORGE_K8S_NAMESPACE` if needed |
-| Pod never becomes Running | Image pull failure, scheduling failure, or insufficient resources | Run `kubectl -n <namespace> describe pod <pod>` and check events |
-| Pod cannot pull image | Image was not pushed to a registry reachable by the cluster, or registry credentials are missing | Run `sforge push`; verify `SFORGE_K8S_IMAGE_REGISTRY`; configure image pull secrets for the namespace |
-| Work pod cannot submit evaluations | `--judge-url` is not reachable from pods, or the Judge server is not listening externally | Start `sforge serve` with `--host 0.0.0.0` and pass a pod-reachable IP/Service URL with `--judge-url` |
-| `--disable-internet` has no effect | CNI does not enforce NetworkPolicy, or permissions are insufficient | Confirm NetworkPolicy support and verify the current identity can create NetworkPolicies |
-| Pod stays Pending after setting a node selector | No nodes match the selector | Check `SFORGE_K8S_NODE_SELECTOR` and node labels |
+| --- | --- | --- |
+| Template not found | The image has not been converted in this E2B team, or its inputs changed | Run `sforge e2b-template` for the task |
+| E2B cannot pull a `seededge` image | Registry/network failure or the exact tag is unavailable | Confirm the task definition and retry |
+| Template provisioning cannot reach an APT source | The source image contains an inaccessible mirror | Supply `--portable-registry` and credentials |
+| A Template build reports an internal error or remains `building` past the client timeout | Transient E2B build-service failure; the SDK has no per-build cancellation API | Check whether the requested tag became launchable before retrying, then retry the specific role; avoid starting many cold builds at once |
+| A runtime evaluator under `/tmp` is missing | The Template was built outside SForge, so the image's `/tmp` snapshot is absent | Rebuild with `sforge e2b-template`; SForge snapshots the whole image `/tmp` and restores it on Sandbox start |
+| A secured Judge returns 403 | Its traffic access token was not provided | Use managed mode, or set `SFORGE_JUDGE_ACCESS_TOKEN` for an external secured Judge |
+| Agent-side Judge requests intermittently time out | The Work Sandbox could not establish a connection through the E2B public gateway | Retry the agent submission, reduce simultaneous submission bursts, or use an external Judge Server; host-side managed-controller calls already use E2B command-channel loopback |
+| A run ends at the configured task timeout with `Sandbox not found` | The team-level maximum Sandbox lifetime was reached before final extraction and cleanup | Shorten the agent timeout, reduce multi-wave batch duration, or use a plan with a longer Sandbox lifetime |
+| CPU or memory is rejected while preparing a Template | The requested Template resources exceed the E2B team's limits | Rebuild at supported values; note that this is not equivalent to leaderboard resource settings when those require more resources |
+| A run leaves a Sandbox | Cleanup failed or the runner was terminated abruptly | Inspect the run log and wait for the configured E2B TTL as the final safeguard |
+
+## Troubleshooting
+
+| Backend | Symptom | Likely cause | Fix |
+| --- | --- | --- | --- |
+| Kubernetes | `kubectl cluster-info failed` | Wrong kubeconfig, unreachable cluster, or wrong namespace context | Check `kubectl -n <namespace> cluster-info`; set `SFORGE_K8S_KUBECONFIG` and `SFORGE_K8S_NAMESPACE` if needed |
+| Kubernetes | Pod never becomes Running | Image pull failure, scheduling failure, or insufficient resources | Run `kubectl -n <namespace> describe pod <pod>` and check events |
+| Kubernetes | Pod cannot pull an image | The image is unavailable to cluster nodes, or registry credentials are missing | Run `sforge push`; verify `SFORGE_K8S_IMAGE_REGISTRY`; configure image pull secrets for the namespace |
+| Kubernetes | Work cannot reach Judge | The Judge URL is not pod-reachable, or the server is not listening externally | Start `sforge serve` with `--host 0.0.0.0` and pass a pod-reachable IP or Service URL |
+| Kubernetes | `--disable-internet` has no effect | CNI does not enforce NetworkPolicy, or permissions are insufficient | Confirm NetworkPolicy support and permissions |
+| Kubernetes | Pod remains Pending with a node selector | No nodes match the selector | Check `SFORGE_K8S_NODE_SELECTOR` and node labels |

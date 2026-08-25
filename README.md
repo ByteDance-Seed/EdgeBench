@@ -193,6 +193,7 @@ SFORGE_AGENT_API_KEY="sk-xxx" \
 **Step-by-step examples:**
 - [Single task on local Docker](examples/single-task-docker/) — run one task end-to-end with Docker
 - [All tasks on Kubernetes](examples/all-tasks-k8s/) — run the full suite on a K8s cluster with the **official leaderboard setting**
+- [E2B backend](https://bytedance-seed.github.io/EdgeBench/en/configuration/container-backends#e2b-backend) — run Work and Judge environments on E2B without operating a cluster
 
 > [!IMPORTANT]
 > - **Official setting** — leaderboard numbers use the [official experiment YAMLs](examples/all-tasks-k8s/) unchanged, including the time budget, stop hook, auto-eval, submission cooldowns, and hardware resource limits.

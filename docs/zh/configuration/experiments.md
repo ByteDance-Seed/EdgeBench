@@ -63,7 +63,7 @@ tasks:
 | `disable_auto_resume` | `bool` | `false` | 禁用 Agent 异常退出时的自动恢复 |
 | `internet` | `bool` | --- | 启用/禁用网络访问 |
 | `extra_env` | `dict` | --- | 注入 Agent 容器的额外环境变量 |
-| `backend` | `string` | --- | 容器后端（`docker` 或 `k8s`） |
+| `backend` | `string` | --- | 容器后端（`docker`、`k8s` 或 `e2b`） |
 | `judge_url` | `string` | --- | Judge 服务器 URL 覆盖 |
 | `max_submissions` | `int` | --- | 每次运行中 Agent 最大提交次数 |
 | `submission_cooldown` | `int` | --- | Agent 两次提交之间的最小间隔（秒） |

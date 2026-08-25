@@ -114,7 +114,9 @@ The server exposes the [Judge HTTP API](/en/reference/judge-api) and handles bot
 
 ## sforge run
 
-Run an agent on one or more tasks. This is the primary command for evaluation.
+Run an agent on one task, or batch-schedule independent evaluations for several
+tasks. Each task always has its own Work environment, Judge session, results,
+and cleanup lifecycle.
 
 ### Basic usage
 
@@ -122,7 +124,7 @@ Run an agent on one or more tasks. This is the primary command for evaluation.
 # Standard agent mode
 sforge run --task ad_placement_optimization --agent claude-code
 
-# Multiple tasks in parallel
+# Batch-schedule independent task runs
 sforge run --task ad_placement_optimization gitlet rookiedb --agent claude-code
 
 # Experiment config mode
@@ -133,7 +135,7 @@ sforge run --experiment experiment.yaml
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--task` | required* | One or more task IDs (space-separated). Multiple tasks run fully in parallel. |
+| `--task` | required* | One or more task IDs (space-separated). Multiple IDs batch-schedule independent task runs; they are not combined into one evaluation. |
 | `--agent` | required* | Agent name (e.g., `claude-code`, `codex`). Required unless `--experiment` is specified. |
 | `--experiment` | --- | Path to experiment YAML config file. If `--task` is omitted, all YAML tasks run; if `--task` is provided, only that subset runs with the experiment settings. |
 | `--model` | --- | Model override (e.g., `claude-opus-4-8`) |
@@ -141,8 +143,9 @@ sforge run --experiment experiment.yaml
 | `--eval-interval` | `300` | Auto-eval daemon interval in seconds |
 | `--run-id` | random | Run identifier for tracking and log organization |
 | `--judge-url` | `http://host.docker.internal:8080` | Judge server URL as seen from inside the container |
-| `--backend` | `docker` | Container backend (`docker` or `k8s`) |
+| `--backend` | `docker` | Container backend (`docker`, `k8s`, or `e2b`) |
 | `--stagger` | --- | Spread task launches evenly over N seconds (e.g., `--stagger 300`) |
+| `--max-workers` | backend-specific | Maximum number of independent task runs scheduled at once. Defaults to all selected tasks for Docker/Kubernetes and 4 for E2B. |
 | `--max-submissions` | --- | Maximum number of agent submissions per run |
 | `--submission-cooldown` | --- | Minimum seconds between agent submissions |
 | `--work-cpu-limit` | --- | Number of CPUs for work containers |
@@ -192,7 +195,7 @@ sforge eval --task ad_placement_optimization --archive - < solution.tar.gz
 | `--run-id` | Custom run ID for log organization |
 | `--timeout` | Evaluation timeout in seconds |
 | `--json` | Also output the full JSON report |
-| `--backend` | Container backend (`docker` or `k8s`) |
+| `--backend` | Container backend (`docker`, `k8s`, or `e2b`) |
 | `--judge-cpu-limit` | Number of CPUs for judge container |
 | `--judge-mem-limit` | Memory limit for judge container (e.g., `'4g'`) |
 

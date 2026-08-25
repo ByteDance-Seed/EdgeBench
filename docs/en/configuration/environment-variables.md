@@ -59,6 +59,11 @@ Used when running agents via `sforge run`. These are injected as container envir
 Directly injecting `SFORGE_HTTP_PROXY` / `SFORGE_HTTPS_PROXY` into the agent container gives that container proxy-mediated network access. This is useful only for exceptional run-time dependency downloads and is **not recommended** for LLM API access.
 
 It is also incompatible with network isolation (`--disable-internet`). If the agent needs to call an LLM API through a corporate proxy while network isolation is enabled, run `sforge proxy` on the host and point `SFORGE_AGENT_API_BASE_URL` to `http://host.docker.internal:<port>` instead.
+
+For E2B, generic host `HTTP_PROXY` / `HTTPS_PROXY` variables are not forwarded
+to Work Sandboxes. Set the `SFORGE_` variants only when the proxy is reachable
+from E2B; isolated E2B runs always remove proxy variables and use the native
+host allowlist directly.
 :::
 
 ## Judge Variables
@@ -66,6 +71,8 @@ It is also incompatible with network isolation (`--disable-internet`). If the ag
 | Variable | Purpose |
 |----------|---------|
 | `SFORGE_JUDGE_EXTRA_ENV` | Extra env vars for judge containers, format: `"KEY1=VAL1,KEY2=VAL2"` |
+| `SFORGE_ADMIN_SECRET` | Trusted-host credential for Judge session registration and auto-eval. If omitted, SForge creates a mode-`0600` secret under `SFORGE_LOG_DIR`. Never expose it to Work containers. |
+| `SFORGE_JUDGE_ACCESS_TOKEN` | E2B traffic access token for an explicitly configured secured Judge URL. Managed mode sets this automatically. |
 
 ## Resource Limit Variables
 
@@ -80,11 +87,15 @@ Judge CPU/memory limits are currently set through CLI flags (`--judge-cpu-limit`
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `SFORGE_BACKEND` | `docker` | Container backend: `docker` or `k8s` |
+| `SFORGE_BACKEND` | `docker` | Container backend: `docker`, `k8s`, or official `e2b` |
 | `SFORGE_K8S_NAMESPACE` | `default` | Kubernetes namespace |
 | `SFORGE_K8S_IMAGE_REGISTRY` | --- | Container registry for K8s image pulls |
 | `SFORGE_K8S_KUBECONFIG` | --- | Path to kubeconfig file |
 | `SFORGE_K8S_NODE_SELECTOR` | --- | Node selector for K8s pods, format: `"key1=val1,key2=val2"` |
+| `SFORGE_E2B_TEMPLATE_MAP` | --- | Explicit E2B image-key to template mapping |
+| `SFORGE_E2B_SANDBOX_TTL` | `3600` | E2B Sandbox TTL in seconds |
+| `SFORGE_PORTABLE_REGISTRY_USERNAME` | --- | Registry username for portable E2B derivative images |
+| `SFORGE_PORTABLE_REGISTRY_PASSWORD` | --- | Registry password for portable E2B derivative images |
 
 ## Path Variables
 
@@ -93,6 +104,8 @@ Judge CPU/memory limits are currently set through CLI flags (`--judge-cpu-limit`
 | `SFORGE_LOG_DIR` | `logs/` | Override log output directory |
 | `SFORGE_TASKS_DIR` | `tasks/` | Override task definitions directory |
 | `SFORGE_REGISTRY` | --- | Default Docker registry URL for `pull`/`push` commands |
+| `SFORGE_REGISTRY_USERNAME` | --- | Source-registry username for E2B Template builds |
+| `SFORGE_REGISTRY_PASSWORD` | --- | Source-registry password for E2B Template builds |
 
 ## Proxy Fallback Chain
 
