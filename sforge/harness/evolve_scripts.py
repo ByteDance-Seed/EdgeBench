@@ -81,7 +81,6 @@ done
 
 JUDGE_URL="${SFORGE_JUDGE_URL}"
 TOKEN="${SFORGE_TOKEN}"
-ACCESS_TOKEN="${SFORGE_JUDGE_ACCESS_TOKEN:-}"
 PATCH_DIR="${SFORGE_PATCH_DIR:-$(pwd)}"
 STATE_FILE="/tmp/sforge_state.json"
 
@@ -94,14 +93,8 @@ if [ -z "$TOKEN" ]; then
     exit 1
 fi
 
-CURL_AUTH=()
-if [ -n "$ACCESS_TOKEN" ]; then
-    CURL_AUTH=(-H "e2b-traffic-access-token: $ACCESS_TOKEN")
-fi
-CURL_SESSION=(-H "Authorization: Bearer $TOKEN")
-
 if [ "$LIST_MODE" -eq 1 ]; then
-    HIST=$(curl -s -m 30 "${CURL_AUTH[@]}" "${CURL_SESSION[@]}" "$JUDGE_URL/api/v1/history")
+    HIST=$(curl -s -m 30 "$JUDGE_URL/api/v1/history?token=$TOKEN")
     if [ -z "$HIST" ]; then
         echo "ERROR: No response from judge server" >&2
         exit 1
@@ -165,12 +158,10 @@ echo ""
 # ── Submit + poll ──
 
 HTTP_CODE=$(curl -s -o /tmp/_submit_resp.json -w '%{http_code}' -m 120 -X POST "$JUDGE_URL/api/v1/submit" \
-    "${CURL_AUTH[@]}" \
-    "${CURL_SESSION[@]}" \
+    -F "token=$TOKEN" \
     -F "archive=@$ARCHIVE_FILE")
 rm -f "$ARCHIVE_FILE"
 SUBMIT_RESP=$(cat /tmp/_submit_resp.json)
-rm -f /tmp/_submit_resp.json
 
 if [ "$HTTP_CODE" = "429" ]; then
     DETAIL=$(echo "$SUBMIT_RESP" | jq -r '.detail // empty')
@@ -204,7 +195,7 @@ fi
 
 for _ in $(seq 1 720); do
     sleep 10
-    RESULT=$(curl -s -m 30 "${CURL_AUTH[@]}" "${CURL_SESSION[@]}" "$JUDGE_URL/api/v1/result/$SUBMISSION_ID" 2>/dev/null || true)
+    RESULT=$(curl -s -m 30 "$JUDGE_URL/api/v1/result/$SUBMISSION_ID" 2>/dev/null || true)
     STATUS=$(echo "$RESULT" | jq -r '.status // empty')
     if [ "$STATUS" = "completed" ] || [ "$STATUS" = "error" ]; then
         break
@@ -428,10 +419,7 @@ def generate_game_prompt(original_query: str, internet: bool = True) -> str:
         "---\n\n"
         f"{network_note}"
         "## Game Server HTTP API\n\n"
-        "The server URL is available in the `GAME_SERVER_URL` environment variable. "
-        "Every request must include `Authorization: Bearer $SFORGE_TOKEN`; when "
-        "`SFORGE_JUDGE_ACCESS_TOKEN` is set, also include "
-        "`e2b-traffic-access-token: $SFORGE_JUDGE_ACCESS_TOKEN`.\n\n"
+        "The server URL is available in the `GAME_SERVER_URL` environment variable.\n\n"
         "### Start a new game\n"
         "```\n"
         "POST {GAME_SERVER_URL}/new\n"

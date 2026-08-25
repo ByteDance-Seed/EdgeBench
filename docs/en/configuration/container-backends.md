@@ -14,7 +14,7 @@ or `e2b` for E2B-hosted environments.
 |---------|----------|-------------------|
 | `docker` | Local development, task debugging, single-machine evaluation, small experiments | A working local Docker daemon |
 | `k8s` | Shared clusters, high-concurrency batch evaluation, running Work/Judge pods in a cluster | `kubectl` access, images pullable by the cluster, and a Judge URL reachable from pods |
-| `e2b` | Managed remote Work/Judge Sandboxes without operating a cluster or Judge broker | E2B API access and E2B Templates; see [E2B Backend](#e2b-backend) |
+| `e2b` | Remote Work/Judge Sandboxes without operating a cluster | E2B API access, E2B Templates, and a routable Judge Server; see [E2B Backend](#e2b-backend) |
 
 If you are trying a task locally, use the default Docker backend first. The Kubernetes backend is intended for team environments that already have a cluster and container registry.
 The E2B backend has a one-time Template preparation step before a new or
@@ -226,8 +226,9 @@ Notes:
 ## E2B Backend
 
 The E2B backend runs Work, Judge, and Game environments as E2B Sandboxes.
-When `--judge-url` is omitted, SForge also creates a temporary managed Judge
-Controller, so no separately deployed Judge service is required.
+The Judge Server itself runs on a host you control, exactly as with the other
+backends: start `sforge serve` on a machine the Sandboxes can reach and pass
+its address via `--judge-url`.
 
 ### Docker Images and E2B Templates
 
@@ -243,10 +244,22 @@ modified task.
 
 ### Run a Task
 
+Start the Judge Server on a host with a publicly routable address (agents
+inside E2B Sandboxes submit to it over the internet):
+
 ```bash
 uv sync --extra e2b
 export E2B_API_KEY=...
+export SFORGE_ADMIN_SECRET=...   # same value on the serve and run hosts
 
+sforge serve --host 0.0.0.0 --port 8080
+```
+
+Then run the agent, pointing `--judge-url` at that host:
+
+```bash
+export E2B_API_KEY=...
+export SFORGE_ADMIN_SECRET=...   # same value as on the serve host
 export SFORGE_AGENT_API_KEY=...
 export SFORGE_AGENT_API_BASE_URL=...
 export SFORGE_AGENT_MODEL=...
@@ -254,19 +267,14 @@ export SFORGE_AGENT_MODEL=...
 sforge run \
   --backend e2b \
   --task ad_placement_optimization \
-  --agent claude-code
+  --agent claude-code \
+  --judge-url http://YOUR_HOST:8080
 ```
 
-SForge checks the Work/Judge Templates, creates a secured Controller, registers
-the task, creates Work/Judge/Game Sandboxes as needed, propagates gateway
-credentials, collects results, and removes the Sandboxes. Pass `--judge-url`
-only when using a separately deployed Judge Server.
-
-Work Sandboxes reach a managed Controller through its secured E2B service
-gateway. Host-side orchestration requests use the E2B command channel and the
-Controller's loopback interface instead, avoiding an unnecessary round trip
-through that public gateway. This transport choice is specific to E2B and does
-not change Docker or Kubernetes Judge routing.
+The Judge Server needs `E2B_API_KEY` too: registrations from an e2b run make
+it create Judge and Game Sandboxes on E2B (mirroring how a k8s run makes it
+schedule judge pods). Work Sandboxes submit to the Judge Server's public URL;
+the Judge Server reaches Game Sandboxes through the E2B service gateway.
 
 Each E2B evaluation is scoped to one task. Supplying multiple task IDs only
 batch-schedules several independent evaluations; it does not combine tasks into
@@ -283,13 +291,7 @@ existing E2B Template.
 
 Keep the agent timeout comfortably below the team's maximum Sandbox lifetime.
 The lifetime must also cover agent installation, archive extraction, pending
-Judge evaluations, result collection, and cleanup. A managed Judge Controller
-lives for the entire multi-task command, so the whole staggered or multi-wave
-batch—not only one task—must fit within that Controller's permitted lifetime.
-For example, a team limited to one-hour Sandboxes should use a shorter agent
-budget such as 30 minutes and avoid scheduling enough waves to keep one managed
-Controller alive for an hour. Alternatively, use a separately deployed Judge
-Server.
+Judge evaluations, result collection, and cleanup.
 
 Check each task's `judge.eval_timeout` as well. A Judge Sandbox is subject to
 the same team lifetime limit, so a task whose declared evaluator timeout is
@@ -298,9 +300,9 @@ its full budget. Do not silently lower the evaluator timeout if leaderboard
 comparability matters; use a plan with a sufficient lifetime instead.
 
 Tasks run fully in parallel, so total E2B usage scales with the number of
-selected tasks. Budget for one managed Controller, the Work Sandboxes,
-temporary Judge Sandboxes, and active Game Sandboxes, and leave capacity for
-overlap while evaluations finish and resources are cleaned up.
+selected tasks. Budget for the Work Sandboxes, temporary Judge Sandboxes, and
+active Game Sandboxes, and leave capacity for overlap while evaluations finish
+and resources are cleaned up.
 
 The final score retains SForge's backend-independent semantics: it is the best
 result among completed agent and auto-eval submissions. `final_archive.tar.gz`
@@ -313,7 +315,8 @@ ends.
 
 | Input | When required |
 | --- | --- |
-| `E2B_API_KEY` | E2B runs |
+| `E2B_API_KEY` | E2B runs, on both the `sforge run` host and the Judge Server host |
+| A publicly routable `--judge-url` | All E2B runs |
 | Agent API key, base URL, and model | Agent runs |
 
 Host `HTTP_PROXY` and `HTTPS_PROXY` variables are not copied into E2B Work,
@@ -326,8 +329,7 @@ tasks remove proxy variables entirely. See [Network Isolation](/en/features/netw
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
 | Template not found | The task image version has no published official Template, or the task uses a modified image | Verify the task uses a published image version, or point `SFORGE_E2B_TEMPLATE_MAP` at a self-built Template |
-| A secured Judge returns 403 | Its traffic access token was not provided | Use managed mode, or set `SFORGE_JUDGE_ACCESS_TOKEN` for an external secured Judge |
-| Agent-side Judge requests intermittently time out | The Work Sandbox could not establish a connection through the E2B public gateway | Retry the agent submission, reduce simultaneous submission bursts, or use an external Judge Server; host-side managed-controller calls already use E2B command-channel loopback |
+| Agent-side Judge requests intermittently time out | The Work Sandbox could not reach the Judge Server over the internet | Check that the Judge host and port are publicly reachable, then retry the agent submission |
 | A run ends at the configured task timeout with `Sandbox not found` | The team-level maximum Sandbox lifetime was reached before final extraction and cleanup | Shorten the agent timeout, reduce multi-wave batch duration, or use a plan with a longer Sandbox lifetime |
 | A run leaves a Sandbox | Cleanup failed or the runner was terminated abruptly | Inspect the run log and wait for the configured E2B TTL as the final safeguard |
 

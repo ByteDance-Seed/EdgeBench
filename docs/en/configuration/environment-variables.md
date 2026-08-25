@@ -72,7 +72,6 @@ host allowlist directly.
 |----------|---------|
 | `SFORGE_JUDGE_EXTRA_ENV` | Extra env vars for judge containers, format: `"KEY1=VAL1,KEY2=VAL2"` |
 | `SFORGE_ADMIN_SECRET` | Trusted-host credential for Judge session registration and auto-eval. If omitted, SForge creates a mode-`0600` secret under `SFORGE_LOG_DIR`. Never expose it to Work containers. |
-| `SFORGE_JUDGE_ACCESS_TOKEN` | E2B traffic access token for an explicitly configured secured Judge URL. Managed mode sets this automatically. |
 
 ## Resource Limit Variables
 

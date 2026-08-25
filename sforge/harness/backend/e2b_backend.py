@@ -371,16 +371,15 @@ class E2BBackend(ContainerBackend):
                 return
             except Exception as exc:
                 if attempt == 3:
+                    # Match the docker/k8s cleanup contract: log and rely on
+                    # the on_timeout=kill lifecycle instead of raising.
                     log.error(
                         "Failed to kill sandbox %s after %d attempts: %s",
                         handle.id,
                         attempt,
                         exc,
                     )
-                    raise RuntimeError(
-                        f"Failed to kill E2B Sandbox {handle.id} after "
-                        f"{attempt} attempts: {exc}"
-                    ) from exc
+                    return
                 time.sleep(attempt)
 
     def container_exists(self, name: str) -> bool:

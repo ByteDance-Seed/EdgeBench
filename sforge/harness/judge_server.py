@@ -28,7 +28,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 import requests
-from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from sforge.harness.backend import ContainerBackend
@@ -42,7 +42,6 @@ from sforge.harness.config import (
 )
 from sforge.harness.constants import get_admin_secret
 from sforge.harness.docker_build import BuildImageError, build_judge_image
-from sforge.harness.judge_client import SFORGE_ADMIN_SECRET_HEADER
 from sforge.harness.run_evaluation import judge_submission
 from sforge.harness.selection import select_best
 from sforge.harness.task_spec import TaskSpec, load_all_tasks
@@ -125,6 +124,7 @@ class GameCloseResponse(BaseModel):
 class RegisterRequest(BaseModel):
     task_id: str
     run_id: str
+    admin_secret: str = ""
     judge_cpu_limit: int | None = None
     judge_mem_limit: str | None = None
     backend: str | None = None
@@ -340,15 +340,6 @@ class JudgeState:
         if info is None:
             raise KeyError("Invalid token")
         return dict(info)
-
-    def require_session(
-        self, token: str, run_id: str, task_id: str,
-    ) -> dict:
-        """Resolve a token and bind it to the route's run/task scope."""
-        info = self.resolve_token(token)
-        if info["run_id"] != run_id or info["task_id"] != task_id:
-            raise KeyError("Session token does not match run/task")
-        return info
 
     def consume_round(self, token: str, kind: str = "agent") -> tuple[str, str, str, int | None, str | None, int | None]:
         """Allocate the next round ID for a token. Returns (task_id, run_id, round_id, cpu, mem, remaining).
@@ -866,51 +857,11 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
     state = JudgeState(config)
     state.load_tasks()
 
-    def require_bearer_token(authorization: str | None) -> str:
-        scheme, _, token = (authorization or "").partition(" ")
-        if scheme.lower() != "bearer" or not token:
-            raise HTTPException(status_code=401, detail="Bearer token required")
-        return token
-
-    def require_game_session(
-        authorization: str | None, run_id: str, task_id: str,
-    ) -> str:
-        token = require_bearer_token(authorization)
-        try:
-            state.require_session(token, run_id, task_id)
-        except KeyError:
-            raise HTTPException(status_code=401, detail="Invalid session token")
-        return token
-
-    def require_game_scope(
-        session_id: str, run_id: str, task_id: str,
-    ) -> GameSessionState:
-        with state._game_lock:
-            sess = state.game_sessions.get(session_id)
-        if sess is None:
-            raise HTTPException(404, f"Game session not found: {session_id}")
-        if sess.run_id != run_id or sess.task_id != task_id:
-            raise HTTPException(404, f"Game session not found: {session_id}")
-        return sess
-
     @app.get("/api/v1/result/{submission_id}")
-    def get_result(
-        submission_id: str,
-        authorization: str | None = Header(default=None),
-    ) -> ResultResponse:
+    def get_result(submission_id: str) -> ResultResponse:
         """Get result of an async submission."""
         result = state.get_result(submission_id)
         if result is None:
-            raise HTTPException(status_code=404, detail="Submission not found")
-        token = require_bearer_token(authorization)
-        try:
-            info = state.resolve_token(token)
-        except KeyError:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        if (
-            result.get("run_id") != info["run_id"]
-            or result.get("task_id") != info["task_id"]
-        ):
             raise HTTPException(status_code=404, detail="Submission not found")
         return ResultResponse(
             submission_id=submission_id,
@@ -920,14 +871,9 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
         )
 
     @app.post("/api/v1/register")
-    def register(
-        req: RegisterRequest,
-        admin_secret: str | None = Header(
-            default=None, alias=SFORGE_ADMIN_SECRET_HEADER,
-        ),
-    ) -> RegisterResponse:
+    def register(req: RegisterRequest) -> RegisterResponse:
         """Register a session and get a token for submissions."""
-        if admin_secret != state.admin_secret:
+        if req.admin_secret != state.admin_secret:
             raise HTTPException(status_code=403, detail="Invalid admin secret")
         try:
             token = state.register_session(
@@ -950,19 +896,16 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
 
     @app.post("/api/v1/submit")
     def submit(
+        token: str = Form(...),
         archive: UploadFile = File(...),
         kind: str = Form("agent"),
-        authorization: str | None = Header(default=None),
-        admin_secret: str | None = Header(
-            default=None, alias=SFORGE_ADMIN_SECRET_HEADER,
-        ),
+        admin_secret: str = Form(""),
     ) -> SubmitResponse:
         """Submit an archive using a session token.
 
         The server resolves task_id, run_id, and assigns a round_id.
         kind=auto requires a valid admin_secret (host-side only).
         """
-        token = require_bearer_token(authorization)
         if kind not in ("agent", "auto"):
             raise HTTPException(status_code=400, detail="kind must be 'agent' or 'auto'")
         if kind == "auto" and admin_secret != state.admin_secret:
@@ -990,18 +933,12 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail=str(e))
 
     @app.get("/api/v1/history")
-    def history(
-        authorization: str | None = Header(default=None),
-        admin_secret: str | None = Header(
-            default=None, alias=SFORGE_ADMIN_SECRET_HEADER,
-        ),
-    ) -> dict:
+    def history(token: str = Query(...), admin_secret: str = Query("")) -> dict:
         """Get run history using a session token.
 
         Without admin_secret: returns only agent submissions (agent-visible view).
         With valid admin_secret: returns all entries including auto-eval (host-side view).
         """
-        token = require_bearer_token(authorization)
         try:
             info = state.resolve_token(token)
         except KeyError:
@@ -1032,12 +969,8 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
     # --- Game session routes ---
 
     @app.post("/api/v1/game/{run_id}/{task_id}/new")
-    def game_new(
-        run_id: str, task_id: str, req: GameNewRequest,
-        authorization: str | None = Header(default=None),
-    ) -> GameNewResponse:
+    def game_new(run_id: str, task_id: str, req: GameNewRequest) -> GameNewResponse:
         """Start a new game session in a dedicated container."""
-        require_game_session(authorization, run_id, task_id)
         try:
             sess, data = state.create_game_session(run_id, task_id)
         except ValueError as e:
@@ -1055,12 +988,7 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
         )
 
     @app.post("/api/v1/game/{run_id}/{task_id}/{session_id}/step")
-    def game_step(
-        run_id: str, task_id: str, session_id: str, req: GameStepRequest,
-        authorization: str | None = Header(default=None),
-    ) -> GameStepResponse:
-        require_game_session(authorization, run_id, task_id)
-        require_game_scope(session_id, run_id, task_id)
+    def game_step(run_id: str, task_id: str, session_id: str, req: GameStepRequest) -> GameStepResponse:
         try:
             data = state.game_step(session_id, req.action)
         except KeyError:
@@ -1078,12 +1006,7 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
         )
 
     @app.get("/api/v1/game/{run_id}/{task_id}/{session_id}/status")
-    def game_status(
-        run_id: str, task_id: str, session_id: str,
-        authorization: str | None = Header(default=None),
-    ) -> GameStatusResponse:
-        require_game_session(authorization, run_id, task_id)
-        require_game_scope(session_id, run_id, task_id)
+    def game_status(run_id: str, task_id: str, session_id: str) -> GameStatusResponse:
         try:
             data = state.game_status(session_id)
         except KeyError:
@@ -1098,12 +1021,7 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
         )
 
     @app.post("/api/v1/game/{run_id}/{task_id}/{session_id}/close")
-    def game_close(
-        run_id: str, task_id: str, session_id: str,
-        authorization: str | None = Header(default=None),
-    ) -> GameCloseResponse:
-        require_game_session(authorization, run_id, task_id)
-        require_game_scope(session_id, run_id, task_id)
+    def game_close(run_id: str, task_id: str, session_id: str) -> GameCloseResponse:
         try:
             data = state.close_game_session(session_id)
         except KeyError:
@@ -1117,11 +1035,7 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
         )
 
     @app.post("/api/v1/game/{run_id}/{task_id}/close-all")
-    def game_close_all(
-        run_id: str, task_id: str,
-        authorization: str | None = Header(default=None),
-    ) -> dict:
-        require_game_session(authorization, run_id, task_id)
+    def game_close_all(run_id: str, task_id: str) -> dict:
         count = state.close_all_game_sessions(run_id, task_id)
         return {"closed": count}
 

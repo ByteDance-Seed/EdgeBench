@@ -223,8 +223,9 @@ sforge run \
 
 ## E2B 后端
 
-E2B 后端使用 E2B Sandbox 运行 Work、Judge 和 Game 环境。不传 `--judge-url` 时，
-SForge 还会创建临时的 managed Judge Controller，用户不需要单独部署 Judge 服务。
+E2B 后端使用 E2B Sandbox 运行 Work、Judge 和 Game 环境。Judge Server 本身与其他后端
+一样部署在你自己的主机上：在 Sandbox 可达的机器上启动 `sforge serve`，并通过
+`--judge-url` 传入其地址。
 
 ### Docker 镜像与 E2B Template
 
@@ -238,10 +239,21 @@ SForge 维护者预先构建并发布，用户不需要执行任何 Template 准
 
 ### 运行任务
 
+在有公网可达地址的主机上启动 Judge Server（E2B Sandbox 里的 Agent 通过公网向它提交）：
+
 ```bash
 uv sync --extra e2b
 export E2B_API_KEY=...
+export SFORGE_ADMIN_SECRET=...   # serve 和 run 两台主机需使用同一个值
 
+sforge serve --host 0.0.0.0 --port 8080
+```
+
+然后运行 Agent，`--judge-url` 指向该主机：
+
+```bash
+export E2B_API_KEY=...
+export SFORGE_ADMIN_SECRET=...   # 与 serve 主机一致
 export SFORGE_AGENT_API_KEY=...
 export SFORGE_AGENT_API_BASE_URL=...
 export SFORGE_AGENT_MODEL=...
@@ -249,16 +261,14 @@ export SFORGE_AGENT_MODEL=...
 sforge run \
   --backend e2b \
   --task ad_placement_optimization \
-  --agent claude-code
+  --agent claude-code \
+  --judge-url http://YOUR_HOST:8080
 ```
 
-SForge 会预检 Work/Judge Template，创建 secured Controller，注册 task，按需创建
-Work/Judge/Game Sandbox，传递 gateway 凭证，收集结果并清理 Sandbox。只有使用独立部署的
-Judge Server 时才需要传 `--judge-url`。
-
-Work Sandbox 通过受保护的 E2B service gateway 访问 managed Controller；host 侧编排请求
-则通过 E2B command channel 访问 Controller 的 loopback 地址，避免不必要地绕行公网
-gateway。这个传输选择只用于 E2B，不改变 Docker 或 Kubernetes 的 Judge 路由。
+Judge Server 主机同样需要 `E2B_API_KEY`：e2b 运行注册后，Judge Server 会在 E2B 上
+创建 Judge 和 Game Sandbox（与 k8s 运行让它调度 judge pod 的机制对称）。Work Sandbox
+向 Judge Server 的公网地址提交；Judge Server 通过 E2B service gateway 访问 Game
+Sandbox。
 
 每个 E2B 评测实例只对应一个 task。传入多个 task ID 时，CLI 只是批量调度多个相互独立的
 评测，不会把多个 task 合并进同一个 Work 或 Judge 环境。本文验证采用每条
@@ -271,19 +281,15 @@ E2B 套餐限制是运行契约的一部分。Template 的 CPU 和内存会在�
 运行时的 `--work-*` 和 `--judge-*` 参数不能调整已有 E2B Template 的资源。
 
 Agent timeout 应明显短于当前套餐允许的最大 Sandbox 生命周期。Sandbox 生命周期还要覆盖
-Agent 安装、归档提取、等待 Judge 评测、读取结果和资源清理。managed Judge Controller 会在
-整条多任务命令期间持续运行，因此整个错峰或多波次批次都必须落在 Controller 允许的生命周期
-内，而不只是单个 task。比如套餐只允许一小时 Sandbox 时，可使用 30 分钟等更短的 Agent
-预算，并避免让同一个 managed Controller 因多波调度运行满一小时；也可以改用独立部署的
-Judge Server。
+Agent 安装、归档提取、等待 Judge 评测、读取结果和资源清理。
 
 还需要检查每个任务的 `judge.eval_timeout`。Judge Sandbox 同样受 team 最大生命周期限制；
 如果任务声明的评测超时长于该限制，那么当 evaluator 实际使用完整预算时，就无法保证评测
 完成。如果要求与榜单口径可比，不应静默缩短 evaluator timeout，而应使用生命周期足够长的
 套餐。
 
-任务是全并行运行的，E2B 总用量随所选任务数增长。容量规划要计入一个 managed Controller、
-临时 Judge Sandbox 和活跃 Game Sandbox，并为评测完成和资源清理的重叠阶段留出余量。
+任务是全并行运行的，E2B 总用量随所选任务数增长。容量规划要计入 Work Sandbox、临时
+Judge Sandbox 和活跃 Game Sandbox，并为评测完成和资源清理的重叠阶段留出余量。
 
 最终分数沿用 SForge 与后端无关的既有语义：只在已经完成的 agent submission 和
 auto-eval submission 中选取最佳结果。`final_archive.tar.gz` 是恢复快照，timeout 时不会被
@@ -294,7 +300,8 @@ auto-eval submission 中选取最佳结果。`final_archive.tar.gz` 是恢复快
 
 | 输入 | 需要场景 |
 | --- | --- |
-| `E2B_API_KEY` | E2B 运行 |
+| `E2B_API_KEY` | E2B 运行（`sforge run` 主机和 Judge Server 主机都需要） |
+| 公网可达的 `--judge-url` | 所有 E2B 运行 |
 | Agent API key、base URL 和模型 | 运行 Agent |
 
 宿主机的 `HTTP_PROXY` 和 `HTTPS_PROXY` 不会复制到 E2B Work、Judge 或 Game Sandbox。
@@ -306,8 +313,7 @@ auto-eval submission 中选取最佳结果。`final_archive.tar.gz` 是恢复快
 | 现象 | 可能原因 | 处理方式 |
 | --- | --- | --- |
 | 找不到 Template | 该任务镜像版本没有已发布的官方 Template，或任务使用了修改过的镜像 | 确认任务使用已发布的镜像版本，或用 `SFORGE_E2B_TEMPLATE_MAP` 指向自建 Template |
-| secured Judge 返回 403 | 缺少 traffic access token | 使用 managed 模式，或为外部 secured Judge 配置 `SFORGE_JUDGE_ACCESS_TOKEN` |
-| Agent 侧 Judge 请求偶发超时 | Work Sandbox 无法通过 E2B 公网 gateway 建立连接 | 让 Agent 重试提交、降低同时提交的突发并发，或使用独立 Judge Server；host 侧 managed-controller 请求已通过 E2B command channel 走 loopback |
+| Agent 侧 Judge 请求偶发超时 | Work Sandbox 无法通过公网访问 Judge Server | 确认 Judge 主机和端口公网可达后重试提交 |
 | task timeout 到达时出现 `Sandbox not found` | 在最终归档和清理前达到了 team 级 Sandbox 最大生命周期 | 缩短 Agent timeout、减少多波次批次总时长，或使用支持更长 Sandbox 生命周期的套餐 |
 | 运行结束后仍有 Sandbox | cleanup 失败或 Runner 被强制终止 | 检查 run 日志；平台最终按配置的 E2B TTL 回收 |
 

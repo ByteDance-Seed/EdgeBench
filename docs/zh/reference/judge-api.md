@@ -16,10 +16,7 @@ http://localhost:8080
 
 ## 认证机制
 
-Judge API 使用**基于 Token 的会话模型**。可信 Host 使用
-`X-SForge-Admin-Secret` Header 注册会话，返回的会话 Token 用于提交、结果轮询、历史和 Game
-接口。未显式配置时，SForge 会在本地生成权限为 `0600` 的 secret 文件。不得把 admin
-secret 暴露给 Work Sandbox 或 Agent。
+Judge API 使用**基于 Token 的会话模型**。在提交之前，客户端必须先注册会话以获取 Token。Token 编码了任务 ID、运行 ID 和自增的轮次计数器。
 
 ## 接口列表
 
@@ -71,15 +68,16 @@ Token 是一个 32 字符的十六进制字符串，内部维护任务 ID、运�
 
 ```http
 POST /api/v1/submit
-Authorization: Bearer <session-token>
 Content-Type: multipart/form-data
 
+token: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4
 archive: @solution.tar.gz
 kind: agent
 ```
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
+| `token` | string | 是 | 从 `/register` 获取的会话 Token |
 | `archive` | file | 是 | `.tar.gz` 格式的解决方案归档 |
 | `kind` | string | 否 | `"agent"`（默认）或 `"auto"`。决定递增哪个轮次计数器。 |
 
@@ -101,7 +99,6 @@ kind: agent
 
 ```http
 GET /api/v1/result/{submission_id}
-Authorization: Bearer <session-token>
 ```
 
 **响应（排队中/运行中）：**
@@ -158,12 +155,18 @@ Authorization: Bearer <session-token>
 
 ### 运行历史
 
-获取某次运行会话中 Agent 可见的提交历史和最佳分数。SForge 的 Host 请求会额外携带
-admin secret，以包含 auto-eval 记录。
+获取某次运行会话的完整提交历史，包括最佳分数的选定结果。
+
+**通过 Token 查询：**
 
 ```http
-GET /api/v1/history
-Authorization: Bearer <session-token>
+GET /api/v1/history?token=<token>
+```
+
+**通过运行 ID 查询：**
+
+```http
+GET /api/v1/runs/{run_id}/history?task_id=<task_id>
 ```
 
 **响应：**
@@ -199,15 +202,12 @@ Authorization: Bearer <session-token>
 
 ### 游戏接口
 
-对于 `game_mode: true` 的任务，Judge 服务器在专用容器中管理交互式游戏会话。所有
-Game 请求都必须携带 `Authorization: Bearer <session-token>`，且 Token 必须与 URL 中
-的 run 和 task 匹配。
+对于 `game_mode: true` 的任务，Judge 服务器在专用容器中管理交互式游戏会话。
 
 #### 创建新游戏
 
 ```http
 POST /api/v1/game/{run_id}/{task_id}/new
-Authorization: Bearer <session-token>
 Content-Type: application/json
 {}
 ```
@@ -230,7 +230,6 @@ Content-Type: application/json
 
 ```http
 POST /api/v1/game/{run_id}/{task_id}/{session_id}/step
-Authorization: Bearer <session-token>
 Content-Type: application/json
 
 {"action": "go north"}
@@ -254,7 +253,6 @@ Content-Type: application/json
 
 ```http
 GET /api/v1/game/{run_id}/{task_id}/{session_id}/status
-Authorization: Bearer <session-token>
 ```
 
 **响应：**
@@ -274,7 +272,6 @@ Authorization: Bearer <session-token>
 
 ```http
 POST /api/v1/game/{run_id}/{task_id}/{session_id}/close
-Authorization: Bearer <session-token>
 ```
 
 **响应：**
@@ -295,7 +292,6 @@ Authorization: Bearer <session-token>
 
 ```http
 POST /api/v1/game/{run_id}/{task_id}/close-all
-Authorization: Bearer <session-token>
 ```
 
 **响应：**
@@ -312,18 +308,16 @@ Authorization: Bearer <session-token>
 
 ```bash
 # 1. 注册会话
-export SFORGE_ADMIN_SECRET=...
 TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/register \
   -H "Content-Type: application/json" \
-  -H "X-SForge-Admin-Secret: $SFORGE_ADMIN_SECRET" \
-  -d '{"task_id":"ad_placement_optimization","run_id":"run-001"}' \
+  -d '{"task_id": "ad_placement_optimization", "run_id": "run-001"}' \
   | jq -r '.token')
 
 echo "Token: $TOKEN"
 
 # 2. 提交归档
 SUBMISSION_ID=$(curl -s -X POST http://localhost:8080/api/v1/submit \
-  -H "Authorization: Bearer $TOKEN" \
+  -F "token=$TOKEN" \
   -F "archive=@solution.tar.gz" \
   -F "kind=agent" \
   | jq -r '.submission_id')
@@ -331,24 +325,20 @@ SUBMISSION_ID=$(curl -s -X POST http://localhost:8080/api/v1/submit \
 echo "Submission: $SUBMISSION_ID"
 
 # 3. 轮询结果（重复直到 status 为 "completed" 或 "error"）
-curl -s -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:8080/api/v1/result/$SUBMISSION_ID" | jq .
+curl -s http://localhost:8080/api/v1/result/$SUBMISSION_ID | jq .
 
 # 4. 查看运行历史
-curl -s -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8080/api/v1/history | jq .
+curl -s "http://localhost:8080/api/v1/history?token=$TOKEN" | jq .
 ```
 
 ### 轮询循环
 
 ```bash
 while true; do
-  STATUS=$(curl -s -H "Authorization: Bearer $TOKEN" \
-    "http://localhost:8080/api/v1/result/$SUBMISSION_ID" | jq -r '.status')
+  STATUS=$(curl -s http://localhost:8080/api/v1/result/$SUBMISSION_ID | jq -r '.status')
   echo "Status: $STATUS"
   if [ "$STATUS" = "completed" ] || [ "$STATUS" = "error" ]; then
-    curl -s -H "Authorization: Bearer $TOKEN" \
-      "http://localhost:8080/api/v1/result/$SUBMISSION_ID" | jq .
+    curl -s http://localhost:8080/api/v1/result/$SUBMISSION_ID | jq .
     break
   fi
   sleep 5

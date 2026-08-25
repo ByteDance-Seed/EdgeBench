@@ -16,11 +16,7 @@ All endpoints are prefixed with `/api/v1`.
 
 ## Authentication
 
-The Judge API uses a **token-based session model**. The trusted host registers
-a session with the `X-SForge-Admin-Secret` header; the returned session token is then used
-for submissions, result polling, history, and Game routes. SForge generates a
-mode-`0600` local secret when the variable is not set. Do not expose the admin
-secret to Work Sandboxes or agents.
+The Judge API uses a **token-based session model**. Before submitting, clients must register a session to obtain a token. The token encodes the task ID, run ID, and auto-incrementing round counters.
 
 ## Endpoints
 
@@ -72,15 +68,16 @@ Submit a code archive for evaluation. The server resolves the task ID and run ID
 
 ```http
 POST /api/v1/submit
-Authorization: Bearer <session-token>
 Content-Type: multipart/form-data
 
+token: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4
 archive: @solution.tar.gz
 kind: agent
 ```
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
+| `token` | string | yes | Session token from `/register` |
 | `archive` | file | yes | `.tar.gz` archive of the solution |
 | `kind` | string | no | `"agent"` (default) or `"auto"`. Determines which round counter is incremented. |
 
@@ -102,7 +99,6 @@ Poll for the result of a submission.
 
 ```http
 GET /api/v1/result/{submission_id}
-Authorization: Bearer <session-token>
 ```
 
 **Response (queued/running):**
@@ -159,13 +155,18 @@ Authorization: Bearer <session-token>
 
 ### Run History
 
-Retrieve the agent-visible submission history for a run session, including
-the best score selection. Host-side SForge requests add the admin secret to
-include auto-eval entries.
+Retrieve the full submission history for a run session, including the best score selection.
+
+**By token:**
 
 ```http
-GET /api/v1/history
-Authorization: Bearer <session-token>
+GET /api/v1/history?token=<token>
+```
+
+**By run ID:**
+
+```http
+GET /api/v1/runs/{run_id}/history?task_id=<task_id>
 ```
 
 **Response:**
@@ -201,16 +202,12 @@ The `best_*` fields are computed using the task's configured selection policy (s
 
 ### Game Endpoints
 
-For tasks with `game_mode: true`, the Judge server manages interactive game
-sessions in dedicated containers. Every Game request requires
-`Authorization: Bearer <session-token>` and the token must match the URL's
-run and task.
+For tasks with `game_mode: true`, the Judge server manages interactive game sessions in dedicated containers.
 
 #### Start New Game
 
 ```http
 POST /api/v1/game/{run_id}/{task_id}/new
-Authorization: Bearer <session-token>
 Content-Type: application/json
 {}
 ```
@@ -233,7 +230,6 @@ Content-Type: application/json
 
 ```http
 POST /api/v1/game/{run_id}/{task_id}/{session_id}/step
-Authorization: Bearer <session-token>
 Content-Type: application/json
 
 {"action": "go north"}
@@ -257,7 +253,6 @@ Content-Type: application/json
 
 ```http
 GET /api/v1/game/{run_id}/{task_id}/{session_id}/status
-Authorization: Bearer <session-token>
 ```
 
 **Response:**
@@ -277,7 +272,6 @@ Authorization: Bearer <session-token>
 
 ```http
 POST /api/v1/game/{run_id}/{task_id}/{session_id}/close
-Authorization: Bearer <session-token>
 ```
 
 **Response:**
@@ -298,7 +292,6 @@ Close all active game sessions for a given run and task.
 
 ```http
 POST /api/v1/game/{run_id}/{task_id}/close-all
-Authorization: Bearer <session-token>
 ```
 
 **Response:**
@@ -315,18 +308,16 @@ Game sessions have a 10-minute idle timeout. Sessions are automatically archived
 
 ```bash
 # 1. Register a session
-export SFORGE_ADMIN_SECRET=...
 TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/register \
   -H "Content-Type: application/json" \
-  -H "X-SForge-Admin-Secret: $SFORGE_ADMIN_SECRET" \
-  -d '{"task_id":"ad_placement_optimization","run_id":"run-001"}' \
+  -d '{"task_id": "ad_placement_optimization", "run_id": "run-001"}' \
   | jq -r '.token')
 
 echo "Token: $TOKEN"
 
 # 2. Submit an archive
 SUBMISSION_ID=$(curl -s -X POST http://localhost:8080/api/v1/submit \
-  -H "Authorization: Bearer $TOKEN" \
+  -F "token=$TOKEN" \
   -F "archive=@solution.tar.gz" \
   -F "kind=agent" \
   | jq -r '.submission_id')
@@ -334,24 +325,20 @@ SUBMISSION_ID=$(curl -s -X POST http://localhost:8080/api/v1/submit \
 echo "Submission: $SUBMISSION_ID"
 
 # 3. Poll for result (repeat until status is "completed" or "error")
-curl -s -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:8080/api/v1/result/$SUBMISSION_ID" | jq .
+curl -s http://localhost:8080/api/v1/result/$SUBMISSION_ID | jq .
 
 # 4. Check run history
-curl -s -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8080/api/v1/history | jq .
+curl -s "http://localhost:8080/api/v1/history?token=$TOKEN" | jq .
 ```
 
 ### Poll loop
 
 ```bash
 while true; do
-  STATUS=$(curl -s -H "Authorization: Bearer $TOKEN" \
-    "http://localhost:8080/api/v1/result/$SUBMISSION_ID" | jq -r '.status')
+  STATUS=$(curl -s http://localhost:8080/api/v1/result/$SUBMISSION_ID | jq -r '.status')
   echo "Status: $STATUS"
   if [ "$STATUS" = "completed" ] || [ "$STATUS" = "error" ]; then
-    curl -s -H "Authorization: Bearer $TOKEN" \
-      "http://localhost:8080/api/v1/result/$SUBMISSION_ID" | jq .
+    curl -s http://localhost:8080/api/v1/result/$SUBMISSION_ID | jq .
     break
   fi
   sleep 5

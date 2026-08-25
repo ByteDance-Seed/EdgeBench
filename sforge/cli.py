@@ -26,6 +26,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 import docker
 
@@ -318,7 +319,6 @@ def _run_single_task(
         shutdown_event=shutdown_event,
         max_submissions=getattr(args, "max_submissions", None),
         submission_cooldown=getattr(args, "submission_cooldown", None),
-        host_judge_connection=getattr(args, "host_judge_connection", None),
     )
 
     print(f"\nAgent completed in {result.runtime_seconds:.1f}s")
@@ -546,7 +546,6 @@ def cmd_run(args):
         sys.exit(1)
 
     run_id = args.run_id or uuid.uuid4().hex[:12]
-    managed_controller = None
     multi = len(task_specs) > 1
     verbose = not args.silent and not multi
 
@@ -574,6 +573,19 @@ def cmd_run(args):
         )
     base_config.backend = backend_names.pop()
     backend = create_backend_from_config(base_config)
+    if backend.backend_name == "e2b":
+        unroutable = [
+            ta.judge_url for _, _, ta in task_runs
+            if urlparse(ta.judge_url).hostname == "host.docker.internal"
+        ]
+        if unroutable:
+            print(
+                "Error: the e2b backend needs a Judge Server the sandboxes "
+                "can reach. Start `sforge serve` on a routable host and pass "
+                "its address via --judge-url.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     # Resolve stagger: CLI flag wins over experiment YAML
     stagger = args.stagger
@@ -617,28 +629,6 @@ def cmd_run(args):
     summaries: list[dict] = []
 
     try:
-        managed_tasks = [
-            (task_config, task_args)
-            for _, task_config, task_args in task_runs
-            if backend.backend_name == "e2b"
-            and task_args.judge_url == "http://host.docker.internal:8080"
-        ]
-        if managed_tasks:
-            from sforge.harness.e2b_controller import ManagedE2BController
-
-            managed_controller = ManagedE2BController(
-                backend, base_config, run_id,
-            )
-            connection = managed_controller.start()
-            access_token = connection.headers.get(
-                "e2b-traffic-access-token"
-            )
-            for task_config, task_args in managed_tasks:
-                task_args.judge_url = connection.url
-                task_config.e2b_judge_access_token = access_token
-                task_args.host_judge_connection = managed_controller.host_connection
-            print(f"Managed E2B Judge controller: {connection.url}")
-
         for ts, task_config, task_args in task_runs:
             cfg_dict = _effective_config_dict(ts, task_args, task_config)
             unified_tasks[ts.task_id] = cfg_dict
@@ -688,19 +678,7 @@ def cmd_run(args):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         print("\nShutting down — stopping containers...")
     finally:
-        primary_error = sys.exc_info()[1]
         signal.signal(signal.SIGINT, old_sigint)
-        if managed_controller is not None:
-            try:
-                managed_controller.close()
-            except Exception as cleanup_error:
-                if primary_error is None:
-                    raise
-                print(
-                    "Managed E2B controller cleanup failed while preserving "
-                    f"the original run error: {cleanup_error}",
-                    file=sys.stderr,
-                )
 
     if multi:
         run_root = base_config.log_dir / "runs" / run_id

@@ -71,7 +71,6 @@ E2B 原生域名白名单直接放行。
 |------|------|
 | `SFORGE_JUDGE_EXTRA_ENV` | Judge 容器额外环境变量，格式：`"KEY1=VAL1,KEY2=VAL2"` |
 | `SFORGE_ADMIN_SECRET` | 可信 Host 用于注册 Judge 会话和 auto-eval 的凭证；未设置时在 `SFORGE_LOG_DIR` 下生成权限为 `0600` 的 secret 文件，不得注入 Work 容器。 |
-| `SFORGE_JUDGE_ACCESS_TOKEN` | 显式配置 secured Judge URL 时使用的 E2B traffic access token；managed 模式自动设置。 |
 
 ## 资源限制变量
 
