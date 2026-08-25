@@ -31,6 +31,9 @@ dependencies = [
     "huggingface-hub>=0.20",
 ]
 
+[project.optional-dependencies]
+e2b = ["e2b>=2.42.0"]
+
 [project.scripts]
 sforge = "sforge.cli:main"
 

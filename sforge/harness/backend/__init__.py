@@ -23,6 +23,7 @@ from sforge.harness.backend.base import (
     ContainerHandle,
     ExecResult,
     NetworkIsolationStrategy,
+    ServiceEndpoint,
     StreamingExecResult,
 )
 from sforge.harness.backend.factory import create_backend
@@ -32,6 +33,7 @@ __all__ = [
     "ContainerHandle",
     "ExecResult",
     "NetworkIsolationStrategy",
+    "ServiceEndpoint",
     "StreamingExecResult",
     "create_backend",
 ]

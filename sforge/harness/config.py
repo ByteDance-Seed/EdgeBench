@@ -69,7 +69,7 @@ class SForgeConfig:
     # Remote container registry
     registry: str | None = None
 
-    # Container backend: "docker" or "k8s"
+    # Container backend: "docker", "k8s" or "e2b"
     backend: str = "docker"
 
     # K8s backend settings
@@ -77,6 +77,12 @@ class SForgeConfig:
     k8s_node_selector: dict[str, str] = field(default_factory=dict)
     k8s_image_registry: str = ""
     k8s_kubeconfig: str | None = None
+
+    # e2b backend settings (endpoint/credentials come from the standard
+    # E2B_API_KEY / E2B_API_URL / E2B_DOMAIN env vars read by the e2b SDK)
+    e2b_template_map: dict[str, str] = field(default_factory=dict)
+    e2b_sandbox_ttl: int | None = None
+    e2b_judge_access_token: str | None = None
     # Paths
     log_dir: Path = field(default_factory=lambda: LOG_DIR)
     tasks_dir: Path = field(default_factory=lambda: TASKS_DIR)
@@ -108,6 +114,7 @@ def load_config(cli_overrides: dict | None = None) -> SForgeConfig:
         "k8s_namespace": ["SFORGE_K8S_NAMESPACE"],
         "k8s_image_registry": ["SFORGE_K8S_IMAGE_REGISTRY"],
         "k8s_kubeconfig": ["SFORGE_K8S_KUBECONFIG"],
+        "e2b_judge_access_token": ["SFORGE_JUDGE_ACCESS_TOKEN"],
         "work_cpu_limit": ["SFORGE_WORK_CPU_LIMIT"],
         "work_mem_limit": ["SFORGE_WORK_MEM_LIMIT"],
         "log_dir": ["SFORGE_LOG_DIR"],
@@ -168,10 +175,19 @@ def load_config(cli_overrides: dict | None = None) -> SForgeConfig:
                 k, v = item.split("=", 1)
                 config.k8s_node_selector[k.strip()] = v.strip()
 
+    # SFORGE_E2B_TEMPLATE_MAP: "image_key=template,..." or a JSON file path
+    if os.environ.get("SFORGE_E2B_TEMPLATE_MAP"):
+        from sforge.harness.backend.e2b_backend import template_map_from_env
+        config.e2b_template_map = template_map_from_env()
+    e2b_ttl = os.environ.get("SFORGE_E2B_SANDBOX_TTL")
+    if e2b_ttl:
+        config.e2b_sandbox_ttl = int(e2b_ttl)
     # Override from CLI flags
     if cli_overrides:
         for k, v in cli_overrides.items():
             if v is not None and hasattr(config, k):
+                if k in ("log_dir", "tasks_dir"):
+                    v = Path(v)
                 setattr(config, k, v)
 
     return config
@@ -267,6 +283,26 @@ def get_container_env(config: SForgeConfig, include_judge_extra: bool = False) -
     return env
 
 
+def sanitize_e2b_proxy_env(
+    env: dict[str, str], *, internet: bool = True,
+) -> None:
+    """Remove host-only proxies before sending an environment to E2B.
+
+    Generic ``HTTP_PROXY``/``HTTPS_PROXY`` values are commonly inherited from
+    the machine running SForge and may point at private hosts that a remote
+    Sandbox cannot reach. Only the explicit SForge variants opt a proxy into
+    E2B; isolated Work Sandboxes never receive one.
+    """
+    proxy_groups = (
+        ("SFORGE_HTTP_PROXY", "http_proxy", "HTTP_PROXY"),
+        ("SFORGE_HTTPS_PROXY", "https_proxy", "HTTPS_PROXY"),
+    )
+    for explicit_name, *runtime_names in proxy_groups:
+        if not internet or not os.environ.get(explicit_name):
+            for name in runtime_names:
+                env.pop(name, None)
+
+
 def get_container_resource_kwargs(
     config_cpu_limit: int | None,
     config_mem_limit: str | None,
@@ -298,4 +334,6 @@ def create_backend_from_config(config: SForgeConfig, docker_client=None):
         k8s_node_selector=config.k8s_node_selector,
         k8s_image_registry=config.k8s_image_registry,
         k8s_kubeconfig=config.k8s_kubeconfig,
+        e2b_template_map=config.e2b_template_map or None,
+        e2b_sandbox_ttl=config.e2b_sandbox_ttl,
     )

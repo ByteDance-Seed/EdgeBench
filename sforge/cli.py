@@ -20,6 +20,7 @@ import argparse
 import concurrent.futures
 import copy
 import json
+import os
 import signal
 import sys
 import threading
@@ -28,19 +29,18 @@ from pathlib import Path
 
 import docker
 
+from sforge.harness.benchmark import load_benchmark
 from sforge.harness.config import SForgeConfig, create_backend_from_config, load_config
 from sforge.harness.constants import DEFAULT_EVAL_INTERVAL
 from sforge.harness.docker_build import (
     build_all_images,
-    build_work_image,
-    build_judge_image,
     pull_all_images,
     push_all_images,
 )
-from sforge.harness.docker_utils import cleanup_container
 from sforge.harness.run_evaluation import judge_submission
-from sforge.harness.benchmark import load_benchmark
-from sforge.harness.task_spec import TaskSpec, make_task_spec, load_all_tasks
+from sforge.harness.task_spec import TaskSpec, load_all_tasks, make_task_spec
+
+E2B_DEFAULT_MAX_WORKERS = 4
 
 
 def _resolve_task(args, config: SForgeConfig) -> TaskSpec:
@@ -91,6 +91,116 @@ def _make_config(args) -> SForgeConfig:
     return load_config(overrides)
 
 
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be greater than zero")
+    return parsed
+
+
+def _run_max_workers(
+    backend_name: str, task_count: int, requested: int | None,
+) -> int:
+    if requested is not None:
+        return min(task_count, requested)
+    if backend_name == "e2b":
+        return min(task_count, E2B_DEFAULT_MAX_WORKERS)
+    return task_count
+
+
+def _e2b_registry_credentials(portable: bool) -> tuple[str | None, str | None]:
+    prefix = "SFORGE_PORTABLE_REGISTRY" if portable else "SFORGE_REGISTRY"
+    return os.environ.get(f"{prefix}_USERNAME"), os.environ.get(
+        f"{prefix}_PASSWORD"
+    )
+
+
+def _build_e2b_task_template(
+    task_spec: TaskSpec,
+    role: str,
+    source_registry: str,
+    docker_client,
+    args,
+) -> tuple[object, dict]:
+    """Build one task role, retrying through a portable source if needed."""
+    import tempfile
+
+    from e2b import default_build_logger
+
+    from sforge.harness.e2b_templates import (
+        AptSourceError,
+        build_e2b_template,
+        make_template_manifest,
+        stage_runtime_artifacts,
+    )
+
+    cpu = args.work_cpu if role == "work" else args.judge_cpu
+    memory = args.work_memory_mb if role == "work" else args.judge_memory_mb
+    force_portable = False
+
+    for stage_attempt in range(2):
+        manifest = make_template_manifest(
+            task_spec,
+            role,
+            source_registry,
+            cpu_count=cpu,
+            memory_mb=memory,
+        )
+        with tempfile.TemporaryDirectory(
+            prefix=f"sforge-e2b-{task_spec.task_id}-{role}-"
+        ) as context_dir:
+            context_path = Path(context_dir)
+            source_username, source_password = _e2b_registry_credentials(False)
+            portable_username, portable_password = _e2b_registry_credentials(True)
+            manifest, runtime_sources, portable = stage_runtime_artifacts(
+                manifest,
+                docker_client,
+                context_path,
+                pull_attempts=args.attempts,
+                portable_registry=args.portable_registry,
+                source_registry_username=source_username,
+                source_registry_password=source_password,
+                portable_registry_username=portable_username,
+                portable_registry_password=portable_password,
+                force_portable=force_portable,
+            )
+            print(
+                f"[{task_spec.task_id}/{role}] {manifest.source_image} "
+                f"-> {manifest.reference}"
+            )
+            username, password = (
+                (portable_username, portable_password)
+                if portable
+                else (source_username, source_password)
+            )
+            try:
+                result = build_e2b_template(
+                    manifest,
+                    attempts=args.attempts,
+                    build_timeout=args.build_timeout,
+                    force=args.force,
+                    on_build_logs=(
+                        None if args.silent else default_build_logger()
+                    ),
+                    registry_username=username,
+                    registry_password=password,
+                    context_dir=context_path,
+                    runtime_sources=runtime_sources,
+                )
+            except AptSourceError:
+                if stage_attempt or not args.portable_registry or portable:
+                    raise
+                print(
+                    f"[{task_spec.task_id}/{role}] retrying through a portable "
+                    "source image after E2B could not reach its APT source"
+                )
+                force_portable = True
+                continue
+            return manifest, result
+
+    raise RuntimeError("E2B Template build exhausted portable-image retries")
+
+
 # --- Commands ---
 
 
@@ -137,6 +247,57 @@ def cmd_build(args):
                     print(f"  [{ts.task_id}] FAILED: {e}", file=sys.stderr)
 
     print("Done.")
+
+
+def cmd_e2b_template(args):
+    """Build deterministic official E2B Templates from task images."""
+    config = _make_config(args)
+    task_specs = _resolve_tasks(args, config)
+    source_registry = args.source_registry or config.registry
+    if not source_registry:
+        print(
+            "Error: --source-registry or SFORGE_REGISTRY is required; E2B "
+            "must be able to pull immutable Work/Judge images",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    from sforge.harness.e2b_templates import write_template_manifest
+
+    docker_client = docker.from_env()
+    roles = [args.role] if args.role != "both" else ["work", "judge"]
+    failures = []
+    for task_spec in task_specs:
+        task_failed = False
+        for role in roles:
+            if task_failed:
+                print(
+                    f"[{task_spec.task_id}/{role}] SKIPPED: an earlier role "
+                    "failed for this task",
+                    file=sys.stderr,
+                )
+                continue
+            try:
+                manifest, result = _build_e2b_task_template(
+                    task_spec, role, source_registry, docker_client, args,
+                )
+                path = write_template_manifest(
+                    manifest, result,
+                    config.log_dir / "e2b_templates" / task_spec.task_id,
+                )
+                print(
+                    f"  {result['status']}: build={result.get('build_id')} "
+                    f"manifest={path}"
+                )
+            except Exception as exc:
+                failures.append((task_spec.task_id, role, str(exc)))
+                task_failed = True
+                print(
+                    f"[{task_spec.task_id}/{role}] FAILED: {exc}",
+                    file=sys.stderr,
+                )
+    if failures:
+        raise SystemExit(1)
 
 
 def cmd_pull(args):
@@ -319,6 +480,7 @@ def _run_single_task(
         shutdown_event=shutdown_event,
         max_submissions=getattr(args, "max_submissions", None),
         submission_cooldown=getattr(args, "submission_cooldown", None),
+        host_judge_connection=getattr(args, "host_judge_connection", None),
     )
 
     print(f"\nAgent completed in {result.runtime_seconds:.1f}s")
@@ -327,13 +489,15 @@ def _run_single_task(
         print(f"  Game sessions:    {result.total_rounds}")
         if result.best_score is not None:
             print(f"  Best score:       {result.best_score:.0f}")
+        print(f"  Game history:     {run_log_dir / 'game_history.json'}")
     else:
         print(f"  Total rounds:     {result.total_rounds}")
         print(f"  Best pass rate:   {result.best_pass_rate:.2%}")
         if result.best_score is not None:
             print(f"  Best score:       {result.best_score:.0f}")
         print(f"  Best round:       {result.best_round}")
-    print(f"  Final archive:    {run_log_dir / 'final_archive.tar.gz'}")
+    if not task_spec.game_mode:
+        print(f"  Final archive:    {run_log_dir / 'final_archive.tar.gz'}")
 
     combined = {
         "agent": agent.name,
@@ -498,9 +662,17 @@ def _effective_config_dict(
     if config.agent_api_base_url:
         d["api_base_url"] = config.agent_api_base_url
     if config.agent_api_key:
-        d["api_key"] = config.agent_api_key[:8] + "..."
+        d["api_key"] = "<redacted>"
     if config.agent_extra_env:
-        d["extra_env"] = config.agent_extra_env
+        sensitive_markers = ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL")
+        d["extra_env"] = {
+            key: (
+                "<redacted>"
+                if any(marker in key.upper() for marker in sensitive_markers)
+                else value
+            )
+            for key, value in config.agent_extra_env.items()
+        }
     return d
 
 
@@ -520,7 +692,6 @@ def cmd_run(args):
 
     # Apply experiment-level backend/judge_url defaults before creating backend
     if experiment:
-        from sforge.harness.experiment import resolve_task_overrides
         exp_defaults = experiment.defaults
         if exp_defaults.backend and base_config.backend == "docker" and getattr(args, "backend", None) is None:
             base_config.backend = exp_defaults.backend
@@ -536,9 +707,8 @@ def cmd_run(args):
         print("Error: --task or --experiment is required")
         sys.exit(1)
 
-    backend = create_backend_from_config(base_config)
-
     run_id = args.run_id or uuid.uuid4().hex[:12]
+    managed_controller = None
     multi = len(task_specs) > 1
     verbose = not args.silent and not multi
 
@@ -558,22 +728,14 @@ def cmd_run(args):
         )
         task_runs.append((ts, task_config, task_args))
 
-        cfg_dict = _effective_config_dict(ts, task_args, task_config)
-        unified_tasks[ts.task_id] = cfg_dict
-
-        task_log_dir = run_root / ts.task_id
-        task_log_dir.mkdir(parents=True, exist_ok=True)
-        (task_log_dir / "run_config.json").write_text(
-            json.dumps(cfg_dict, indent=2, ensure_ascii=False)
+    backend_names = {task_config.backend for _, task_config, _ in task_runs}
+    if len(backend_names) != 1:
+        raise ValueError(
+            "A run must use one container backend; resolved backends: "
+            + ", ".join(sorted(backend_names))
         )
-
-    unified = {
-        "run_id": run_id,
-        "experiment": args.experiment or None,
-        "stagger": args.stagger or (experiment.stagger if experiment else None),
-        "tasks": unified_tasks,
-    }
-    (run_root / "run_config.json").write_text(json.dumps(unified, indent=2, ensure_ascii=False))
+    base_config.backend = backend_names.pop()
+    backend = create_backend_from_config(base_config)
 
     # Resolve stagger: CLI flag wins over experiment YAML
     stagger = args.stagger
@@ -590,7 +752,12 @@ def cmd_run(args):
         if stagger:
             print(f"  Tasks:   {', '.join(t.task_id for t in task_specs)} (staggered over {stagger}s, {stagger_delay:.1f}s apart)")
         else:
-            print(f"  Tasks:   {', '.join(t.task_id for t in task_specs)} (all in parallel)")
+            print(f"  Tasks:   {', '.join(t.task_id for t in task_specs)} (parallel)")
+        max_workers = _run_max_workers(
+            backend.backend_name, len(task_runs),
+            getattr(args, "max_workers", None),
+        )
+        print(f"  Workers: {max_workers}")
         print()
 
     shutdown_event = threading.Event()
@@ -617,8 +784,54 @@ def cmd_run(args):
     summaries: list[dict] = []
 
     try:
+        managed_tasks = [
+            (task_config, task_args)
+            for _, task_config, task_args in task_runs
+            if backend.backend_name == "e2b"
+            and task_args.judge_url == "http://host.docker.internal:8080"
+        ]
+        if managed_tasks:
+            from sforge.harness.e2b_controller import ManagedE2BController
+
+            managed_controller = ManagedE2BController(
+                backend, base_config, run_id,
+            )
+            connection = managed_controller.start()
+            access_token = connection.headers.get(
+                "e2b-traffic-access-token"
+            )
+            for task_config, task_args in managed_tasks:
+                task_args.judge_url = connection.url
+                task_config.e2b_judge_access_token = access_token
+                task_args.host_judge_connection = managed_controller.host_connection
+            print(f"Managed E2B Judge controller: {connection.url}")
+
+        for ts, task_config, task_args in task_runs:
+            cfg_dict = _effective_config_dict(ts, task_args, task_config)
+            unified_tasks[ts.task_id] = cfg_dict
+            task_log_dir = run_root / ts.task_id
+            task_log_dir.mkdir(parents=True, exist_ok=True)
+            (task_log_dir / "run_config.json").write_text(
+                json.dumps(cfg_dict, indent=2, ensure_ascii=False)
+            )
+        unified = {
+            "run_id": run_id,
+            "experiment": args.experiment or None,
+            "stagger": args.stagger or (
+                experiment.stagger if experiment else None
+            ),
+            "tasks": unified_tasks,
+        }
+        (run_root / "run_config.json").write_text(
+            json.dumps(unified, indent=2, ensure_ascii=False)
+        )
+
         if multi:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=len(task_runs)) as ex:
+            max_workers = _run_max_workers(
+                backend.backend_name, len(task_runs),
+                getattr(args, "max_workers", None),
+            )
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
                 futures = []
                 for i, (ts, tc, ta) in enumerate(task_runs):
                     if i > 0 and stagger_delay > 0:
@@ -646,7 +859,19 @@ def cmd_run(args):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         print("\nShutting down — stopping containers...")
     finally:
+        primary_error = sys.exc_info()[1]
         signal.signal(signal.SIGINT, old_sigint)
+        if managed_controller is not None:
+            try:
+                managed_controller.close()
+            except Exception as cleanup_error:
+                if primary_error is None:
+                    raise
+                print(
+                    "Managed E2B controller cleanup failed while preserving "
+                    f"the original run error: {cleanup_error}",
+                    file=sys.stderr,
+                )
 
     if multi:
         run_root = base_config.log_dir / "runs" / run_id
@@ -671,6 +896,8 @@ def cmd_run(args):
                 mark = "-"
             print(f"  {tid:<30} {mark}")
         print(f"\nSummary saved: {summary_path}")
+        if any("error" in summary for summary in summaries):
+            raise SystemExit(1)
 
 
 def cmd_eval(args):
@@ -743,8 +970,9 @@ def cmd_serve(args):
     """Start the judge HTTP server."""
     config = _make_config(args)
 
-    from sforge.harness.judge_server import create_app
     import uvicorn
+
+    from sforge.harness.judge_server import create_app
 
     app = create_app(config)
     print(f"Starting SForge judge server on port {args.port}")
@@ -787,8 +1015,9 @@ def cmd_proxy(args):
 
 def cmd_visualizer(args):
     """Start the run-results visualizer web UI."""
-    from sforge.visualizer.server import create_app as create_viz_app
     import uvicorn
+
+    from sforge.visualizer.server import create_app as create_viz_app
 
     config = _make_config(args)
     runs_dir = Path(args.runs_dir).resolve()
@@ -842,6 +1071,7 @@ def cmd_list(args):
 def cmd_fetch_tasks(args):
     """Download benchmark task definitions from HuggingFace Hub."""
     from huggingface_hub import snapshot_download
+
     from sforge.harness.constants import BENCHMARK_REGISTRY, DEFAULT_BENCHMARK
 
     benchmark = args.benchmark or DEFAULT_BENCHMARK
@@ -907,6 +1137,40 @@ def main():
                          help="Force rebuild ALL images including base")
     p_build.set_defaults(func=cmd_build)
 
+    # e2b-template
+    p_e2b_template = subparsers.add_parser(
+        "e2b-template",
+        help="Build official E2B Templates from immutable task images",
+    )
+    p_e2b_group = p_e2b_template.add_mutually_exclusive_group(required=True)
+    p_e2b_group.add_argument("--task", nargs="+")
+    p_e2b_group.add_argument("--all", action="store_true", default=False)
+    p_e2b_template.add_argument(
+        "--source-registry", default=None,
+        help="Registry prefix containing the Work/Judge images",
+    )
+    p_e2b_template.add_argument(
+        "--portable-registry", default=None,
+        help=(
+            "Registry prefix for sanitized derivatives of images that contain "
+            "APT sources unreachable from the official E2B build network"
+        ),
+    )
+    p_e2b_template.add_argument(
+        "--role", choices=["work", "judge", "both"], default="both",
+    )
+    p_e2b_template.add_argument("--work-cpu", type=_positive_int, default=None)
+    p_e2b_template.add_argument("--work-memory-mb", type=_positive_int, default=None)
+    p_e2b_template.add_argument("--judge-cpu", type=_positive_int, default=None)
+    p_e2b_template.add_argument("--judge-memory-mb", type=_positive_int, default=None)
+    p_e2b_template.add_argument("--attempts", type=_positive_int, default=3)
+    p_e2b_template.add_argument(
+        "--build-timeout", type=_positive_int, default=600,
+        help="Maximum seconds to wait for each E2B Template build",
+    )
+    p_e2b_template.add_argument("--force", action="store_true", default=False)
+    p_e2b_template.set_defaults(func=cmd_e2b_template)
+
     # pull
     p_pull = subparsers.add_parser("pull", help="Pull pre-built images from remote registry")
     p_pull_group = p_pull.add_mutually_exclusive_group(required=True)
@@ -931,11 +1195,12 @@ def main():
 
     # run
     p_run = subparsers.add_parser("run", help="Run an agent on one or more tasks")
-    p_run.add_argument("--backend", choices=["docker", "k8s"], default=None,
+    p_run.add_argument("--backend", choices=["docker", "k8s", "e2b"], default=None,
                        help="Container backend (default from SFORGE_BACKEND or 'docker')")
     p_run.add_argument("--task", default=None, nargs="+",
                        help="One or more task IDs (e.g. --task ahc056 ahc057). "
-                            "Multiple tasks are run fully in parallel.")
+                            "Multiple tasks are run in parallel, subject to "
+                            "--max-workers.")
     p_run.add_argument("--experiment", default=None,
                        help="Path to experiment YAML config file (model config + per-task overrides)")
     p_run.add_argument("--agent", default=None, help="Agent name (claude-code, aider, codex)")
@@ -954,6 +1219,13 @@ def main():
                        help="Minimum seconds between agent submissions (default: no cooldown)")
     p_run.add_argument("--stagger", type=int, default=None, dest="stagger",
                        help="Spread task launches evenly over N seconds (e.g. --stagger 300)")
+    p_run.add_argument(
+        "--max-workers", type=_positive_int, default=None,
+        help=(
+            "Maximum parallel tasks (default: all tasks for Docker/Kubernetes; "
+            f"{E2B_DEFAULT_MAX_WORKERS} for E2B)"
+        ),
+    )
     p_run.add_argument("--judge-url", default="http://host.docker.internal:8080", help="Judge server URL")
     p_run.add_argument("--run-id", default=None, help="Run ID for tracking")
     net_group = p_run.add_mutually_exclusive_group()
@@ -980,7 +1252,7 @@ def main():
 
     # eval
     p_eval = subparsers.add_parser("eval", help="Evaluate an archive")
-    p_eval.add_argument("--backend", choices=["docker", "k8s"], default=None,
+    p_eval.add_argument("--backend", choices=["docker", "k8s", "e2b"], default=None,
                         help="Container backend (default from SFORGE_BACKEND or 'docker')")
     p_eval.add_argument("--task", required=True, help="Task ID")
     p_eval.add_argument("--archive", required=True, help="Path to .tar.gz archive (or - for stdin)")

@@ -110,6 +110,13 @@ class ClaudeCodeAgent(Agent):
             local_settings,
             PurePosixPath("/home/agent/.claude/settings.json"),
         )
+        result = backend.exec_run(
+            handle, "chown -R agent:agent /home/agent/.claude", user="root",
+        )
+        if result.exit_code != 0:
+            raise RuntimeError(
+                f"Failed to set Claude Code config ownership: {result.output}"
+            )
         logger.info("Configured Claude Code settings with hooks")
 
 

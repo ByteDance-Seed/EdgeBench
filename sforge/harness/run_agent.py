@@ -30,12 +30,14 @@ from __future__ import annotations
 
 import io
 import json
-import signal
 import shlex
+import signal
+import sys
 import tarfile as _tarfile
 import threading
 import time
 import traceback
+import uuid
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlparse
@@ -44,8 +46,8 @@ import requests
 
 from sforge.harness.agent import Agent
 from sforge.harness.backend import ContainerBackend, ContainerHandle
-from sforge.harness.config import SForgeConfig
-from sforge.harness.constants import ADMIN_SECRET
+from sforge.harness.config import SForgeConfig, sanitize_e2b_proxy_env
+from sforge.harness.constants import get_admin_secret
 from sforge.harness.docker_build import (
     close_logger,
     setup_logger,
@@ -54,6 +56,11 @@ from sforge.harness.evolve_scripts import (
     generate_evolve_prompt,
     generate_game_prompt,
     generate_submit_script,
+)
+from sforge.harness.judge_client import (
+    SFORGE_ADMIN_SECRET_HEADER,
+    JudgeConnection,
+    merge_no_proxy,
 )
 from sforge.harness.task_spec import TaskSpec
 
@@ -135,6 +142,21 @@ def _build_agent_env(
 
     return env
 
+
+def _e2b_install_env(env: dict[str, str], agent: Agent) -> dict[str, str]:
+    """Keep only non-secret values required while installing the agent."""
+    allowed = {
+        "http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY",
+        "no_proxy", "NO_PROXY", "SFORGE_NODEJS_MIRROR_URL",
+        "npm_config_registry",
+    }
+    if agent.api_base_env:
+        allowed.add(agent.api_base_env)
+    if agent.model_env:
+        allowed.add(agent.model_env)
+    return {key: value for key, value in env.items() if key in allowed}
+
+
 # ---------------------------------------------------------------------------
 # Container setup helpers
 # ---------------------------------------------------------------------------
@@ -172,21 +194,66 @@ def _extract_archive_from_container(
     backend: ContainerBackend,
     handle: ContainerHandle,
     task_spec: TaskSpec,
+    *,
+    shutdown_event: threading.Event | None = None,
 ) -> bytes:
     """Extract the current submission archive from a running work container."""
-    patch_dir = task_spec.cwd
-    submit_paths = " ".join(task_spec.submit_paths)
-    excludes = " ".join(f"--exclude={e}" for e in task_spec.submit_exclude)
-    tar_cmd = (
-        f"cd {patch_dir} && tar czf /tmp/final.tar.gz "
-        f"--exclude=.git {excludes} {submit_paths}"
+    remote_archive = PurePosixPath(
+        f"/tmp/.sforge-submission-{uuid.uuid4().hex}.tar.gz"
     )
-    backend.exec_run(handle, ["/bin/bash", "-c", tar_cmd])
-    raw = backend.copy_from_container(handle, PurePosixPath("/tmp/final.tar.gz"))
-    outer = _tarfile.open(fileobj=io.BytesIO(raw))
-    member = outer.getmembers()[0]
-    archive = outer.extractfile(member).read()
-    outer.close()
+    path_checks = "\n".join(
+        "if [[ -e {path} || -L {path} ]]; then "
+        "submit_paths+=({path}); fi".format(path=shlex.quote(path))
+        for path in task_spec.submit_paths
+    )
+    excludes = " ".join(
+        shlex.quote(f"--exclude={pattern}")
+        for pattern in task_spec.submit_exclude
+    )
+    tar_cmd = f"""
+cd -- {shlex.quote(task_spec.cwd)} || exit $?
+submit_paths=()
+{path_checks}
+if (( ${{#submit_paths[@]}} )); then
+    tar czf {shlex.quote(str(remote_archive))} --exclude=.git {excludes} -- "${{submit_paths[@]}}"
+else
+    tar czf {shlex.quote(str(remote_archive))} --files-from /dev/null
+fi
+"""
+    result = backend.exec_run_with_exit_code(
+        handle, ["/bin/bash", "-c", tar_cmd], timeout=300,
+        user="agent",
+    )
+    if result.timed_out:
+        raise RuntimeError("Timed out while creating the submission archive")
+    if result.exit_code != 0:
+        raise RuntimeError(
+            "Could not create the submission archive: " + result.output[-4000:]
+        )
+    try:
+        if backend.backend_name == "e2b":
+            raw = backend.copy_from_container(
+                handle, remote_archive, shutdown_event=shutdown_event,
+            )
+        else:
+            raw = backend.copy_from_container(handle, remote_archive)
+    finally:
+        try:
+            backend.exec_run(
+                handle, ["rm", "-f", str(remote_archive)], user="root",
+            )
+        except Exception:
+            pass
+    with _tarfile.open(fileobj=io.BytesIO(raw)) as outer:
+        members = [member for member in outer.getmembers() if member.isfile()]
+        if len(members) != 1:
+            raise RuntimeError(
+                f"Unexpected archive wrapper: expected 1 file, got {len(members)}"
+            )
+        source = outer.extractfile(members[0])
+        if source is None:
+            raise RuntimeError("Could not read the submission archive wrapper")
+        archive = source.read()
     return archive
 
 
@@ -194,12 +261,15 @@ def _auto_eval_loop(
     backend: ContainerBackend,
     handle: ContainerHandle,
     task_spec: TaskSpec,
-    host_judge_url: str,
+    host_judge: JudgeConnection,
     session_token: str,
     eval_interval: int,
     stop_event: threading.Event,
     logger,
     log_dir: Path,
+    admin_secret: str,
+    latest_archive: list[bytes],
+    transfer_cancel: threading.Event,
 ) -> None:
     """Host-side auto-eval: periodically extract code and submit to judge.
 
@@ -212,16 +282,23 @@ def _auto_eval_loop(
         if stop_event.is_set():
             break
         try:
-            archive = _extract_archive_from_container(backend, handle, task_spec)
-            resp = requests.post(
-                f"{host_judge_url}/api/v1/submit",
+            archive = _extract_archive_from_container(
+                backend, handle, task_spec, shutdown_event=transfer_cancel,
+            )
+            latest_archive[:] = [archive]
+            if stop_event.is_set() or transfer_cancel.is_set():
+                break
+            resp = host_judge.request(
+                "POST", "/api/v1/submit",
                 data={
-                    "token": session_token,
                     "kind": "auto",
-                    "admin_secret": ADMIN_SECRET,
                 },
                 files={"archive": ("archive.tar.gz", archive, "application/gzip")},
                 timeout=120,
+                headers={
+                    "Authorization": f"Bearer {session_token}",
+                    SFORGE_ADMIN_SECRET_HEADER: admin_secret,
+                },
             )
             resp.raise_for_status()
             data = resp.json()
@@ -236,6 +313,86 @@ def _auto_eval_loop(
             except Exception:
                 pass
             logger.debug("Auto-eval tick failed: %s", e)
+
+
+def _stop_auto_eval_thread(
+    stop_event: threading.Event | None,
+    thread: threading.Thread | None,
+    transfer_cancel: threading.Event | None,
+    logger,
+    *,
+    timeout: int = 30,
+    shutdown_event: threading.Event | None = None,
+) -> bool:
+    if stop_event is None or thread is None:
+        return True
+    stop_event.set()
+    deadline = time.monotonic() + timeout
+    while thread.is_alive() and time.monotonic() < deadline:
+        if shutdown_event is not None and shutdown_event.is_set():
+            break
+        thread.join(min(1, max(0, deadline - time.monotonic())))
+    if not thread.is_alive():
+        return True
+    logger.warning(
+        "Auto-eval did not finish within %ds; cancelling its transfer",
+        timeout,
+    )
+    if transfer_cancel is not None:
+        transfer_cancel.set()
+    thread.join(20)
+    if thread.is_alive():
+        logger.warning(
+            "Auto-eval thread is still stopping; continuing container cleanup"
+        )
+        return False
+    return True
+
+
+def _drain_pending_evaluations(
+    host_judge: JudgeConnection,
+    session_token: str,
+    admin_secret: str,
+    logger,
+    *,
+    shutdown_event: threading.Event | None = None,
+    timeout: int = 900,
+    poll_interval: int = 15,
+) -> None:
+    """Wait for submitted evaluations, while remaining interruptible."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if shutdown_event is not None and shutdown_event.is_set():
+            logger.info("Judge drain interrupted; continuing cleanup")
+            return
+        try:
+            history = host_judge.request(
+                "GET", "/api/v1/history",
+                timeout=10,
+                headers={
+                    "Authorization": f"Bearer {session_token}",
+                    SFORGE_ADMIN_SECRET_HEADER: admin_secret,
+                },
+            ).json()
+            pending = [
+                entry for entry in history.get("entries", [])
+                if entry.get("status") in ("running", "queued")
+            ]
+            if not pending:
+                return
+            logger.info(f"Draining {len(pending)} pending judge evals...")
+        except Exception:
+            return
+        wait_seconds = min(poll_interval, max(0, deadline - time.monotonic()))
+        if shutdown_event is None:
+            time.sleep(wait_seconds)
+        elif shutdown_event.wait(wait_seconds):
+            logger.info("Judge drain interrupted; continuing cleanup")
+            return
+    logger.warning(
+        f"Drain timed out after {timeout / 60:g} min; "
+        "some reports may be missing."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -261,6 +418,7 @@ def run_agent(
     shutdown_event: threading.Event | None = None,
     max_submissions: int | None = None,
     submission_cooldown: int | None = None,
+    host_judge_connection: JudgeConnection | None = None,
 ) -> RunResult:
     """Run an agent on a task with iterative evaluation.
 
@@ -282,22 +440,37 @@ def run_agent(
         verbose=verbose,
     )
 
-    # judge_url is for container use; derive a host-local URL for registration/polling
+    # judge_url is the Sandbox-facing URL. Docker's host alias is the only
+    # address that needs a host-side rewrite; E2B gateway URLs are routable
+    # from both the host and the Sandbox.
     parsed_judge = urlparse(judge_url)
     if parsed_judge.hostname == "host.docker.internal":
         host_judge_url = judge_url.replace("host.docker.internal", "127.0.0.1")
     elif backend.backend_name == "k8s":
-        # judge_url points to VPC IP (for pods); host talks to judge server locally
         host_judge_url = f"http://127.0.0.1:{parsed_judge.port or 8080}"
     else:
         host_judge_url = judge_url
+    remote_judge = JudgeConnection.from_e2b_traffic_token(
+        judge_url, config.e2b_judge_access_token,
+    )
+    host_judge = host_judge_connection or (
+        JudgeConnection.from_e2b_traffic_token(
+            host_judge_url,
+            config.e2b_judge_access_token,
+        )
+    )
 
     handle = None
     net_isolation = None
-    api_proxy = None
+    auto_eval_stop = None
+    auto_eval_thread = None
+    auto_eval_transfer_cancel = None
+    latest_auto_archive: list[bytes] = []
     install_parts: list[str] = []
+    admin_secret = ""
 
     try:
+        admin_secret = get_admin_secret(config.log_dir)
         # 0. Clean up stale iptables chains from previous runs that were killed
         if backend.backend_name == "docker":
             from sforge.harness.network_isolation import cleanup_stale_chains
@@ -306,13 +479,22 @@ def run_agent(
         # 1. Check images exist (must run `sforge build` first)
         for image_key in (task_spec.work_image_key, task_spec.judge_image_key):
             if not backend.image_exists(image_key):
+                if backend.backend_name == "e2b":
+                    raise RuntimeError(
+                        f"E2B Template for {image_key!r} was not found. Build it with: "
+                        f"sforge e2b-template --task {task_spec.task_id} "
+                        "--source-registry <registry>"
+                    )
                 raise RuntimeError(
                     f"Image '{image_key}' not found. Run `sforge pull --task {task_spec.task_id}` to fetch from registry, or `sforge build --task {task_spec.task_id}` to build locally."
                 )
         logger.info("Images ready")
 
         # 1b. Register session with judge server
-        reg_body: dict = {"task_id": task_spec.task_id, "run_id": run_id, "admin_secret": ADMIN_SECRET}
+        reg_body: dict = {
+            "task_id": task_spec.task_id,
+            "run_id": run_id,
+        }
         if config.judge_cpu_limit is not None:
             reg_body["judge_cpu_limit"] = config.judge_cpu_limit
         if config.judge_mem_limit is not None:
@@ -321,7 +503,7 @@ def run_agent(
             reg_body["max_agent_submissions"] = max_submissions
         if submission_cooldown is not None:
             reg_body["submission_cooldown"] = submission_cooldown
-        if backend.backend_name != "docker":
+        if backend.backend_name == "k8s":
             reg_body["backend"] = backend.backend_name
             reg_body["k8s_image_registry"] = config.k8s_image_registry
             reg_body["k8s_namespace"] = config.k8s_namespace
@@ -329,11 +511,18 @@ def run_agent(
                 reg_body["k8s_node_selector"] = config.k8s_node_selector
             if config.k8s_kubeconfig:
                 reg_body["k8s_kubeconfig"] = config.k8s_kubeconfig
+        elif backend.backend_name == "e2b":
+            reg_body.update({
+                "backend": "e2b",
+                "e2b_template_map": config.e2b_template_map,
+                "e2b_sandbox_ttl": config.e2b_sandbox_ttl,
+            })
         for _reg_attempt in range(1, 6):
             try:
-                reg_resp = requests.post(
-                    f"{host_judge_url}/api/v1/register",
+                reg_resp = host_judge.request(
+                    "POST", "/api/v1/register",
                     json=reg_body,
+                    headers={SFORGE_ADMIN_SECRET_HEADER: admin_secret},
                     timeout=10,
                 )
                 reg_resp.raise_for_status()
@@ -353,7 +542,9 @@ def run_agent(
         backend.remove_container_by_name(container_name)
 
         env = _build_agent_env(agent, model)
-        env["SFORGE_JUDGE_URL"] = judge_url
+        if backend.backend_name == "e2b":
+            sanitize_e2b_proxy_env(env, internet=internet)
+        env.update(remote_judge.agent_env())
         env["SFORGE_TOKEN"] = session_token
         env["SFORGE_PATCH_DIR"] = task_spec.cwd
         env["SFORGE_SUBMIT_PATHS"] = " ".join(task_spec.submit_paths)
@@ -371,19 +562,19 @@ def run_agent(
         # Ensure judge server URL bypasses proxy
         judge_host = urlparse(judge_url).hostname or ""
         for key in ("NO_PROXY", "no_proxy"):
-            existing = env.get(key, "")
-            if judge_host and judge_host not in existing:
-                env[key] = f"{existing},{judge_host}" if existing else judge_host
+            env[key] = merge_no_proxy(env.get(key, ""), judge_host)
 
         # Network isolation: preflight + extra_hosts pre-resolve
         container_extra_hosts = {"host.docker.internal": "host-gateway"}
         container_cap_drop: list[str] = []
 
-        if not internet:
+        if not internet and backend.backend_name == "docker":
+            # Docker-only preflight: isolation runs as host iptables rules, so
+            # it needs sudo and conflicts with host proxy env leaking into the
+            # container. Remote backends (k8s, e2b) isolate inside the cluster/
+            # provider and are unaffected by either.
             from sforge.harness.network_isolation import (
                 check_iptables_permission,
-                is_ip_address,
-                resolve_hostname,
             )
 
             if config.http_proxy or config.https_proxy:
@@ -401,10 +592,21 @@ def run_agent(
                     "Ensure passwordless sudo is configured for iptables."
                 )
 
+        if not internet:
+            from sforge.harness.network_isolation import (
+                is_ip_address,
+                resolve_hostname,
+            )
+
             api_url = config.agent_api_base_url or agent.default_api_base_url
             if api_url:
                 api_host = urlparse(api_url).hostname or ""
-                if api_host and api_host != "host.docker.internal" and not is_ip_address(api_host):
+                if (
+                    backend.backend_name != "e2b"
+                    and api_host
+                    and api_host != "host.docker.internal"
+                    and not is_ip_address(api_host)
+                ):
                     resolved_ips = resolve_hostname(api_host, logger)
                     if resolved_ips:
                         container_extra_hosts[api_host] = resolved_ips[0]
@@ -418,7 +620,10 @@ def run_agent(
         handle = backend.create_container(
             task_spec.work_image_key,
             container_name,
-            environment=env,
+            environment=(
+                _e2b_install_env(env, agent)
+                if backend.backend_name == "e2b" else env
+            ),
             extra_hosts=container_extra_hosts,
             cap_drop=container_cap_drop or None,
             cpu_limit=cpu,
@@ -453,7 +658,6 @@ def run_agent(
         #    the stop hook — otherwise the agent exits naturally as soon as
         #    the model decides it's "done", losing the full timeout budget.
         effective_eval_interval = 0 if disable_auto_eval else eval_interval
-        auto_eval_stop = None
         if not task_spec.game_mode:
             _install_tools(
                 backend,
@@ -468,12 +672,15 @@ def run_agent(
             # Start host-side auto-eval thread (if enabled)
             if effective_eval_interval > 0:
                 auto_eval_stop = threading.Event()
+                auto_eval_transfer_cancel = threading.Event()
                 auto_eval_thread = threading.Thread(
                     target=_auto_eval_loop,
                     args=(
-                        backend, handle, task_spec, host_judge_url,
+                        backend, handle, task_spec, host_judge,
                         session_token, effective_eval_interval,
                         auto_eval_stop, logger, log_dir,
+                        admin_secret,
+                        latest_auto_archive, auto_eval_transfer_cancel,
                     ),
                     daemon=True,
                 )
@@ -485,7 +692,6 @@ def run_agent(
         # 4b. Apply network isolation (after install + tools, before agent)
         if not internet:
             from sforge.harness.network_isolation import (
-                AllowedEndpoint,
                 build_allowed_endpoints,
             )
 
@@ -498,6 +704,7 @@ def run_agent(
             effective_api_url = config.agent_api_base_url or agent.default_api_base_url
             endpoints = build_allowed_endpoints(
                 judge_url, effective_api_url, gateway_ip, logger,
+                resolve_hostnames=backend.backend_name != "e2b",
             )
             net_isolation = backend.create_network_isolation(handle, endpoints, logger)
             net_isolation.apply()
@@ -596,36 +803,66 @@ def run_agent(
 
         # 7. Stop auto-eval thread before extracting final archive
         if auto_eval_stop is not None:
-            auto_eval_stop.set()
+            _stop_auto_eval_thread(
+                auto_eval_stop, auto_eval_thread, auto_eval_transfer_cancel,
+                logger, timeout=180, shutdown_event=shutdown_event,
+            )
             logger.info("Auto-eval thread stopped")
 
-        # 8. Extract final archive (tar of submit_paths)
-        try:
-            final_archive = _extract_archive_from_container(backend, handle, task_spec)
-            (log_dir / "final_archive.tar.gz").write_bytes(final_archive)
-            logger.info(f"Final archive: {len(final_archive)} bytes")
-        except Exception as e:
-            logger.warning(f"Failed to extract final archive (container may have stopped): {e}")
-            final_archive = b""
+        # 8. Extract final archive for code tasks. Game tasks have no submit
+        # paths; their authoritative output is the Judge Server game history.
+        final_archive = b""
+        if not task_spec.game_mode:
+            try:
+                interrupted = (
+                    shutdown_event is not None and shutdown_event.is_set()
+                )
+                if interrupted:
+                    final_archive = (
+                        latest_auto_archive[-1] if latest_auto_archive else b""
+                    )
+                else:
+                    final_archive = _extract_archive_from_container(
+                        backend, handle, task_spec,
+                    )
+                (log_dir / "final_archive.tar.gz").write_bytes(final_archive)
+                logger.info(f"Final archive: {len(final_archive)} bytes")
+            except Exception as exc:
+                if backend.backend_name == "e2b":
+                    raise
+                # Preserve the pre-E2B Docker/Kubernetes behavior.
+                logger.warning(
+                    "Failed to extract final archive "
+                    f"(container may have stopped): {exc}"
+                )
+                final_archive = b""
 
         # 8. Collect results
         if task_spec.game_mode:
             try:
-                requests.post(
-                    f"{host_judge_url}/api/v1/game/{run_id}/{task_spec.task_id}/close-all",
+                close_response = host_judge.request(
+                    "POST",
+                    f"/api/v1/game/{run_id}/{task_spec.task_id}/close-all",
                     timeout=30,
+                    headers={"Authorization": f"Bearer {session_token}"},
                 )
+                close_response.raise_for_status()
             except Exception:
+                # Keep the pre-E2B best-effort semantics. The managed
+                # controller still exports any game artifacts during cleanup.
                 logger.warning("Failed to close active game sessions")
 
             try:
-                history_resp = requests.get(
-                    f"{host_judge_url}/api/v1/history?token={session_token}",
+                history_resp = host_judge.request(
+                    "GET", "/api/v1/history",
                     timeout=10,
+                    headers={"Authorization": f"Bearer {session_token}"},
                 )
                 history_resp.raise_for_status()
                 history = history_resp.json()
             except Exception:
+                # Docker and Kubernetes historically completed the run with
+                # an empty result when the Judge history was unavailable.
                 logger.warning("Failed to fetch run history from judge server")
                 history = {"run_id": run_id, "best_score": None, "entries": []}
 
@@ -689,34 +926,27 @@ def run_agent(
                 pass
 
             # Drain pending judge evaluations before querying final results
-            drain_deadline = time.time() + 900
-            while time.time() < drain_deadline:
-                try:
-                    h = requests.get(
-                        f"{host_judge_url}/api/v1/history",
-                        params={"token": session_token, "admin_secret": ADMIN_SECRET},
-                        timeout=10,
-                    ).json()
-                    pending = [e for e in h.get("entries", []) if e.get("status") in ("running", "queued")]
-                    if not pending:
-                        break
-                    logger.info(f"Draining {len(pending)} pending judge evals...")
-                except Exception:
-                    break
-                time.sleep(15)
-            else:
-                logger.warning("Drain timed out after 15 min; some reports may be missing.")
+            _drain_pending_evaluations(
+                host_judge, session_token, admin_secret, logger,
+                shutdown_event=shutdown_event,
+            )
 
             # Query Judge Server for authoritative results (with admin_secret to get full history)
             try:
-                history_resp = requests.get(
-                    f"{host_judge_url}/api/v1/history",
-                    params={"token": session_token, "admin_secret": ADMIN_SECRET},
+                history_resp = host_judge.request(
+                    "GET", "/api/v1/history",
                     timeout=10,
+                    headers={
+                        "Authorization": f"Bearer {session_token}",
+                        SFORGE_ADMIN_SECRET_HEADER: admin_secret,
+                    },
                 )
                 history_resp.raise_for_status()
                 history = history_resp.json()
             except Exception:
+                # Preserve the original Docker/Kubernetes behavior: a
+                # transient history failure must not turn an otherwise
+                # completed agent run into a task-level infrastructure error.
                 logger.warning("Failed to fetch run history from judge server")
                 history = {
                     "run_id": run_id, "best_score": None,
@@ -766,13 +996,23 @@ def run_agent(
 
         # Stop auto-eval thread
         if auto_eval_stop is not None:
-            auto_eval_stop.set()
+            _stop_auto_eval_thread(
+                auto_eval_stop, auto_eval_thread, auto_eval_transfer_cancel,
+                logger, shutdown_event=shutdown_event,
+            )
 
         # Try to extract archive from the container before it's destroyed
         interrupted_archive = b""
         try:
-            if handle is not None:
-                interrupted_archive = _extract_archive_from_container(backend, handle, task_spec)
+            if handle is not None and not task_spec.game_mode:
+                interrupted_archive = (
+                    latest_auto_archive[-1]
+                    if latest_auto_archive
+                    else _extract_archive_from_container(
+                        backend, handle, task_spec,
+                        shutdown_event=shutdown_event,
+                    )
+                )
                 (log_dir / "final_archive.tar.gz").write_bytes(interrupted_archive)
                 logger.info(f"Final archive (interrupted): {len(interrupted_archive)} bytes")
         except Exception:
@@ -780,10 +1020,13 @@ def run_agent(
 
         # Query judge server for results accumulated before interruption (full history)
         try:
-            history_resp = requests.get(
-                f"{host_judge_url}/api/v1/history",
-                params={"token": session_token, "admin_secret": ADMIN_SECRET},
+            history_resp = host_judge.request(
+                "GET", "/api/v1/history",
                 timeout=10,
+                headers={
+                    "Authorization": f"Bearer {session_token}",
+                    SFORGE_ADMIN_SECRET_HEADER: admin_secret,
+                },
             )
             history_resp.raise_for_status()
             history = history_resp.json()
@@ -827,17 +1070,25 @@ def run_agent(
         )
     except Exception as e:
         logger.error(f"Error: {e}\n{traceback.format_exc()}")
+        if backend.backend_name == "e2b":
+            # E2B transport or lifecycle failures must remain visible to the
+            # caller instead of being reported as a successful zero score.
+            raise
 
+        # Preserve the pre-E2B Docker/Kubernetes behavior.
         try:
-            history_resp = requests.get(
-                f"{host_judge_url}/api/v1/history?token={session_token}",
+            history_resp = host_judge.request(
+                "GET", "/api/v1/history",
                 timeout=10,
+                headers={"Authorization": f"Bearer {session_token}"},
             )
             history_resp.raise_for_status()
             history = history_resp.json()
             best_pass_rate = history.get("best_pass_rate", 0.0)
             best_score_raw = history.get("best_score")
-            best_score = float(best_score_raw) if best_score_raw is not None else None
+            best_score = (
+                float(best_score_raw) if best_score_raw is not None else None
+            )
             best_round = history.get("best_round", "")
             agent_subs = history.get("agent_submissions", 0)
             auto_subs = history.get("auto_submissions", 0)
@@ -860,17 +1111,35 @@ def run_agent(
             resume_count=locals().get("resume_count", 0),
         )
     finally:
+        primary_error = sys.exc_info()[1]
+        if auto_eval_stop is not None:
+            auto_eval_stop.set()
+        if auto_eval_transfer_cancel is not None:
+            auto_eval_transfer_cancel.set()
         if net_isolation is not None:
             try:
                 net_isolation.cleanup()
             except Exception as exc:
                 if logger:
                     logger.warning(f"Failed to cleanup network isolation: {exc}")
-        if threading.current_thread() is threading.main_thread():
-            prev_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
+        main_thread = threading.current_thread() is threading.main_thread()
+        previous_handler = None
+        if main_thread:
+            previous_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
             print("\nStopping container, please wait... (Ctrl+C disabled during cleanup)")
+        cleanup_error = None
+        try:
             backend.cleanup_container(handle, logger)
-            signal.signal(signal.SIGINT, prev_handler)
-        else:
-            backend.cleanup_container(handle, logger)
-        close_logger(logger)
+        except Exception as exc:
+            cleanup_error = exc
+            if primary_error is not None:
+                logger.exception(
+                    "Work container cleanup failed while preserving the "
+                    "original run error"
+                )
+        finally:
+            if previous_handler is not None:
+                signal.signal(signal.SIGINT, previous_handler)
+            close_logger(logger)
+        if cleanup_error is not None and primary_error is None:
+            raise cleanup_error

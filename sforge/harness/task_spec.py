@@ -21,11 +21,13 @@ from pathlib import Path
 
 from sforge.harness.benchmark import BenchmarkMeta
 from sforge.harness.constants import (
-    SForgeTask,
-    START_TEST_OUTPUT,
     END_TEST_OUTPUT,
+    START_TEST_OUTPUT,
+    SForgeTask,
 )
 from sforge.harness.score_rescale import RescaleSpec, parse_rescale_spec
+
+IMAGE_RECIPE_VERSION = 2
 
 
 @dataclass
@@ -54,7 +56,11 @@ class JudgeSpec:
 
 
 def _compute_base_image_hash(base_image_key: str, base_image_spec: dict) -> str:
-    data = json.dumps({"key": base_image_key, "spec": base_image_spec}, sort_keys=True)
+    data = json.dumps({
+        "recipe_version": IMAGE_RECIPE_VERSION,
+        "key": base_image_key,
+        "spec": base_image_spec,
+    }, sort_keys=True)
     return hashlib.sha256(data.encode()).hexdigest()
 
 
@@ -100,6 +106,7 @@ class TaskSpec:
                 f"Task '{self.task_id}': cannot compute work image hash without setup_cmds"
             )
         data = json.dumps({
+            "recipe_version": IMAGE_RECIPE_VERSION,
             "base_hash": self.base_image_hash,
             "platform": self.platform,
             "cwd": self.cwd,
@@ -114,6 +121,7 @@ class TaskSpec:
                 f"Task '{self.task_id}': cannot compute judge image hash without setup_cmds"
             )
         data = json.dumps({
+            "recipe_version": IMAGE_RECIPE_VERSION,
             "base_hash": self.base_image_hash,
             "platform": self.platform,
             "cwd": self.cwd,

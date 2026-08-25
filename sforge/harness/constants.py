@@ -14,8 +14,12 @@
 
 from __future__ import annotations
 
+import fcntl
 import os
+import secrets
+import stat
 from pathlib import Path
+
 from typing_extensions import NotRequired, TypedDict
 
 # --- Paths ---
@@ -39,10 +43,33 @@ DEFAULT_BENCHMARK = "edgebench"
 # --- Defaults ---
 DEFAULT_EVAL_INTERVAL = 300  # seconds
 
-# --- Admin secret for judge server registration ---
-# Only known to host-side processes (run_agent.py, judge_server.py).
-# Never injected into agent containers.
-ADMIN_SECRET = "sEb3nCh!aDm1n#2026-x9Kp7qW4mZq"
+
+def get_admin_secret(log_dir: Path | None = None) -> str:
+    """Load or create the host/controller secret without import side effects."""
+    configured = os.environ.get("SFORGE_ADMIN_SECRET")
+    if configured:
+        return configured
+    path = (log_dir or LOG_DIR) / ".judge-admin-secret"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    flags = os.O_RDWR | os.O_CREAT
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(path, flags, 0o600)
+    with os.fdopen(fd, "r+") as secret_file:
+        fcntl.flock(secret_file.fileno(), fcntl.LOCK_EX)
+        mode = os.fstat(secret_file.fileno()).st_mode
+        if not stat.S_ISREG(mode):
+            raise RuntimeError(f"Judge admin secret is not a regular file: {path}")
+        os.fchmod(secret_file.fileno(), 0o600)
+        secret = secret_file.read().strip()
+        if not secret:
+            secret = secrets.token_urlsafe(32)
+            secret_file.seek(0)
+            secret_file.write(secret)
+            secret_file.truncate()
+            secret_file.flush()
+            os.fsync(secret_file.fileno())
+        return secret
 
 # --- Docker ---
 DOCKER_USER = "root"
