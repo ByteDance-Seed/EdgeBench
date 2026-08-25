@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 
-import fcntl
 import os
 import secrets
 import stat
@@ -54,6 +53,8 @@ def get_admin_secret(log_dir: Path | None = None) -> str:
     flags = os.O_RDWR | os.O_CREAT
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
+    import fcntl  # POSIX-only; imported lazily so Windows can still import the package
+
     fd = os.open(path, flags, 0o600)
     with os.fdopen(fd, "r+") as secret_file:
         fcntl.flock(secret_file.fileno(), fcntl.LOCK_EX)

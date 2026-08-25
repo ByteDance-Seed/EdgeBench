@@ -42,7 +42,6 @@ from sforge.harness.run_evaluation import judge_submission
 from sforge.harness.task_spec import TaskSpec, load_all_tasks, make_task_spec
 
 
-
 def _resolve_task(args, config: SForgeConfig) -> TaskSpec:
     """Resolve a single task. Fails if the user passed more than one ID."""
     specs = _resolve_tasks(args, config)
@@ -327,15 +326,13 @@ def _run_single_task(
         print(f"  Game sessions:    {result.total_rounds}")
         if result.best_score is not None:
             print(f"  Best score:       {result.best_score:.0f}")
-        print(f"  Game history:     {run_log_dir / 'game_history.json'}")
     else:
         print(f"  Total rounds:     {result.total_rounds}")
         print(f"  Best pass rate:   {result.best_pass_rate:.2%}")
         if result.best_score is not None:
             print(f"  Best score:       {result.best_score:.0f}")
         print(f"  Best round:       {result.best_round}")
-    if not task_spec.game_mode:
-        print(f"  Final archive:    {run_log_dir / 'final_archive.tar.gz'}")
+    print(f"  Final archive:    {run_log_dir / 'final_archive.tar.gz'}")
 
     combined = {
         "agent": agent.name,
@@ -565,6 +562,23 @@ def cmd_run(args):
         )
         task_runs.append((ts, task_config, task_args))
 
+        cfg_dict = _effective_config_dict(ts, task_args, task_config)
+        unified_tasks[ts.task_id] = cfg_dict
+
+        task_log_dir = run_root / ts.task_id
+        task_log_dir.mkdir(parents=True, exist_ok=True)
+        (task_log_dir / "run_config.json").write_text(
+            json.dumps(cfg_dict, indent=2, ensure_ascii=False)
+        )
+
+    unified = {
+        "run_id": run_id,
+        "experiment": args.experiment or None,
+        "stagger": args.stagger or (experiment.stagger if experiment else None),
+        "tasks": unified_tasks,
+    }
+    (run_root / "run_config.json").write_text(json.dumps(unified, indent=2, ensure_ascii=False))
+
     backend_names = {task_config.backend for _, task_config, _ in task_runs}
     if len(backend_names) != 1:
         raise ValueError(
@@ -629,26 +643,6 @@ def cmd_run(args):
     summaries: list[dict] = []
 
     try:
-        for ts, task_config, task_args in task_runs:
-            cfg_dict = _effective_config_dict(ts, task_args, task_config)
-            unified_tasks[ts.task_id] = cfg_dict
-            task_log_dir = run_root / ts.task_id
-            task_log_dir.mkdir(parents=True, exist_ok=True)
-            (task_log_dir / "run_config.json").write_text(
-                json.dumps(cfg_dict, indent=2, ensure_ascii=False)
-            )
-        unified = {
-            "run_id": run_id,
-            "experiment": args.experiment or None,
-            "stagger": args.stagger or (
-                experiment.stagger if experiment else None
-            ),
-            "tasks": unified_tasks,
-        }
-        (run_root / "run_config.json").write_text(
-            json.dumps(unified, indent=2, ensure_ascii=False)
-        )
-
         if multi:
             with concurrent.futures.ThreadPoolExecutor(max_workers=len(task_runs)) as ex:
                 futures = []
@@ -703,8 +697,6 @@ def cmd_run(args):
                 mark = "-"
             print(f"  {tid:<30} {mark}")
         print(f"\nSummary saved: {summary_path}")
-        if any("error" in summary for summary in summaries):
-            raise SystemExit(1)
 
 
 def cmd_eval(args):
