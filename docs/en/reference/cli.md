@@ -145,7 +145,6 @@ sforge run --experiment experiment.yaml
 | `--judge-url` | `http://host.docker.internal:8080` | Judge server URL as seen from inside the container |
 | `--backend` | `docker` | Container backend (`docker`, `k8s`, or `e2b`) |
 | `--stagger` | --- | Spread task launches evenly over N seconds (e.g., `--stagger 300`) |
-| `--max-workers` | backend-specific | Maximum number of independent task runs scheduled at once. Defaults to all selected tasks for Docker/Kubernetes and 4 for E2B. |
 | `--max-submissions` | --- | Maximum number of agent submissions per run |
 | `--submission-cooldown` | --- | Minimum seconds between agent submissions |
 | `--work-cpu-limit` | --- | Number of CPUs for work containers |

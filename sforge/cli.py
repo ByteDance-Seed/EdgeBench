@@ -40,7 +40,6 @@ from sforge.harness.docker_build import (
 from sforge.harness.run_evaluation import judge_submission
 from sforge.harness.task_spec import TaskSpec, load_all_tasks, make_task_spec
 
-E2B_DEFAULT_MAX_WORKERS = 4
 
 
 def _resolve_task(args, config: SForgeConfig) -> TaskSpec:
@@ -89,23 +88,6 @@ def _make_config(args) -> SForgeConfig:
         if val is not None:
             overrides[key] = val
     return load_config(overrides)
-
-
-def _positive_int(value: str) -> int:
-    parsed = int(value)
-    if parsed <= 0:
-        raise argparse.ArgumentTypeError("must be greater than zero")
-    return parsed
-
-
-def _run_max_workers(
-    backend_name: str, task_count: int, requested: int | None,
-) -> int:
-    if requested is not None:
-        return min(task_count, requested)
-    if backend_name == "e2b":
-        return min(task_count, E2B_DEFAULT_MAX_WORKERS)
-    return task_count
 
 
 # --- Commands ---
@@ -608,12 +590,7 @@ def cmd_run(args):
         if stagger:
             print(f"  Tasks:   {', '.join(t.task_id for t in task_specs)} (staggered over {stagger}s, {stagger_delay:.1f}s apart)")
         else:
-            print(f"  Tasks:   {', '.join(t.task_id for t in task_specs)} (parallel)")
-        max_workers = _run_max_workers(
-            backend.backend_name, len(task_runs),
-            getattr(args, "max_workers", None),
-        )
-        print(f"  Workers: {max_workers}")
+            print(f"  Tasks:   {', '.join(t.task_id for t in task_specs)} (all in parallel)")
         print()
 
     shutdown_event = threading.Event()
@@ -683,11 +660,7 @@ def cmd_run(args):
         )
 
         if multi:
-            max_workers = _run_max_workers(
-                backend.backend_name, len(task_runs),
-                getattr(args, "max_workers", None),
-            )
-            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(task_runs)) as ex:
                 futures = []
                 for i, (ts, tc, ta) in enumerate(task_runs):
                     if i > 0 and stagger_delay > 0:
@@ -1021,8 +994,7 @@ def main():
                        help="Container backend (default from SFORGE_BACKEND or 'docker')")
     p_run.add_argument("--task", default=None, nargs="+",
                        help="One or more task IDs (e.g. --task ahc056 ahc057). "
-                            "Multiple tasks are run in parallel, subject to "
-                            "--max-workers.")
+                            "Multiple tasks are run fully in parallel.")
     p_run.add_argument("--experiment", default=None,
                        help="Path to experiment YAML config file (model config + per-task overrides)")
     p_run.add_argument("--agent", default=None, help="Agent name (claude-code, aider, codex)")
@@ -1041,13 +1013,6 @@ def main():
                        help="Minimum seconds between agent submissions (default: no cooldown)")
     p_run.add_argument("--stagger", type=int, default=None, dest="stagger",
                        help="Spread task launches evenly over N seconds (e.g. --stagger 300)")
-    p_run.add_argument(
-        "--max-workers", type=_positive_int, default=None,
-        help=(
-            "Maximum parallel tasks (default: all tasks for Docker/Kubernetes; "
-            f"{E2B_DEFAULT_MAX_WORKERS} for E2B)"
-        ),
-    )
     p_run.add_argument("--judge-url", default="http://host.docker.internal:8080", help="Judge server URL")
     p_run.add_argument("--run-id", default=None, help="Run ID for tracking")
     net_group = p_run.add_mutually_exclusive_group()

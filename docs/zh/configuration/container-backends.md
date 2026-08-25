@@ -282,9 +282,8 @@ Judge Server。
 完成。如果要求与榜单口径可比，不应静默缩短 evaluator timeout，而应使用生命周期足够长的
 套餐。
 
-`--max-workers` 只限制并行 Work Sandbox 数量，不等于 E2B 总实例数。容量规划还要计入一个
-managed Controller、临时 Judge Sandbox 和活跃 Game Sandbox，并为评测完成和资源清理的
-重叠阶段留出余量。
+任务是全并行运行的，E2B 总用量随所选任务数增长。容量规划要计入一个 managed Controller、
+临时 Judge Sandbox 和活跃 Game Sandbox，并为评测完成和资源清理的重叠阶段留出余量。
 
 最终分数沿用 SForge 与后端无关的既有语义：只在已经完成的 agent submission 和
 auto-eval submission 中选取最佳结果。`final_archive.tar.gz` 是恢复快照，timeout 时不会被

@@ -144,7 +144,6 @@ sforge run --experiment experiment.yaml
 | `--judge-url` | `http://host.docker.internal:8080` | 容器内部看到的 Judge 服务器 URL |
 | `--backend` | `docker` | 容器后端（`docker`、`k8s` 或 `e2b`） |
 | `--stagger` | --- | 将任务启动均匀分散在 N 秒内（如 `--stagger 300`） |
-| `--max-workers` | 取决于后端 | 同时调度的独立 task 数量上限。Docker/Kubernetes 默认为全部所选任务，E2B 默认为 4。 |
 | `--max-submissions` | --- | 每次运行的最大 Agent 提交次数 |
 | `--submission-cooldown` | --- | Agent 两次提交之间的最小间隔（秒） |
 | `--work-cpu-limit` | --- | Work 容器的 CPU 数量限制 |

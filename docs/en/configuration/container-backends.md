@@ -297,10 +297,10 @@ longer than that limit cannot be guaranteed to finish when the evaluator uses
 its full budget. Do not silently lower the evaluator timeout if leaderboard
 comparability matters; use a plan with a sufficient lifetime instead.
 
-`--max-workers` limits concurrent Work Sandboxes, not total E2B usage. Budget
-for one managed Controller, the Work Sandboxes, temporary Judge Sandboxes, and
-active Game Sandboxes. Leave capacity for overlap while evaluations finish and
-resources are cleaned up.
+Tasks run fully in parallel, so total E2B usage scales with the number of
+selected tasks. Budget for one managed Controller, the Work Sandboxes,
+temporary Judge Sandboxes, and active Game Sandboxes, and leave capacity for
+overlap while evaluations finish and resources are cleaned up.
 
 The final score retains SForge's backend-independent semantics: it is the best
 result among completed agent and auto-eval submissions. `final_archive.tar.gz`
