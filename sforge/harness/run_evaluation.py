@@ -187,7 +187,10 @@ def judge_submission(
             # List archive contents
             list_result = backend.exec_run(
                 handle,
-                f"tar tzf {tar_path}",
+                # --quoting-style=literal: GNU tar octal-escapes non-ASCII
+                # names in listings under some locales, which breaks the
+                # submit_paths match for CJK filenames
+                f"tar --quoting-style=literal -tzf {tar_path}",
                 workdir=task_spec.cwd,
                 user=DOCKER_USER,
             )
