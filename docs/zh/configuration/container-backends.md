@@ -228,70 +228,20 @@ SForge 还会创建临时的 managed Judge Controller，用户不需要单独部
 
 ### Docker 镜像与 E2B Template
 
-[`seededge`](https://hub.docker.com/u/seededge) 已经发布 EdgeBench 的预构建镜像。这些镜像
-可以直接作为 E2B Template 的源镜像；对于没有修改过的公开任务，不需要执行
-`sforge build`、`sforge pull` 或 `sforge push`。
+Docker 镜像和 E2B Template 是两种不同的运行对象：E2B Sandbox 从 Template 启动，
+不能直接传入 Docker image 引用。已发布 EdgeBench 任务的官方 E2B Template 由
+SForge 维护者预先构建并发布，用户不需要执行任何 Template 准备步骤。
+`sforge run --backend e2b` 会自动推导每个任务镜像对应的 Template 引用
+（`edgebench.work.foo_bar:abc123` -> `edgebench-work-foo-bar:abc123`）。只有需要
+覆盖该映射时（例如为修改过的任务运行自建 Template）才设置
+`SFORGE_E2B_TEMPLATE_MAP`。
 
-Docker 镜像和 E2B Template 是两种不同的运行对象。`Template.from_image()` 将 Docker
-镜像导入 E2B Template；`Sandbox.create()` 使用生成的 Template 名称或 ID 启动 Sandbox，
-不能直接传入 Docker image 引用。SForge 会自动完成转换：
-
-```text
-seededge Docker 镜像
-  -> sforge e2b-template
-  -> 用户 E2B team 中的 Template
-  -> sforge run --backend e2b
-  -> E2B Sandbox
-```
-
-每个任务在一个 E2B team 中首次使用或镜像发生变化时需要准备 Template。输入一致时会
-复用已有 Template；日常 `sforge run` 不会重新构建。
-
-### 准备 Template
+### 运行任务
 
 ```bash
 uv sync --extra e2b
 export E2B_API_KEY=...
 
-sforge fetch-tasks edgebench
-sforge e2b-template \
-  --task ad_placement_optimization \
-  --source-registry seededge
-```
-
-准备所有已下载任务时，将 `--task` 换成 `--all`。SForge 会自动推导两个镜像引用、固定
-不可变 digest、恢复非敏感 OCI 环境变量、快照镜像初始的 `/tmp`、构建 Work/Judge Template、
-等待明确终态、重试暂态错误、记录版本化 manifest，并复用匹配的已有构建。用户不需要
-编写 E2B Dockerfile，也不需要手工上传镜像层。
-
-当前实现要求在 Linux amd64 主机上运行，并且本机 Docker daemon 可用，但不会重新构建
-已发布镜像。官方任务镜像早于 E2B，会在 `/tmp` 下预置评测辅助文件：命令直接引用的包装
-脚本，以及包装脚本运行时读取的其他文件。Docker 与 Kubernetes 直接从镜像启动，这些文件
-天然存在；而 E2B 每个 Sandbox 都会重置 `/tmp`。因此当某个 role 的命令引用 `/tmp` 时，
-SForge 会快照整个镜像 `/tmp`（连同仅被间接引用的辅助文件一起保存），存入 Template，并在
-Sandbox 启动时恢复，使评测器看到与其他后端一致的文件。此过程不修改官方镜像、评测器或
-评分逻辑。源 Registry 还需要能被 E2B 构建服务访问。
-
-### 可移植镜像回退
-
-少数版本的镜像包含 E2B 构建网络无法访问的 APT 源。这时需要提供一个可写 Registry：
-
-```bash
-export SFORGE_PORTABLE_REGISTRY_USERNAME=...
-export SFORGE_PORTABLE_REGISTRY_PASSWORD=...
-
-sforge e2b-template \
-  --task TASK \
-  --source-registry seededge \
-  --portable-registry registry.example.com/project
-```
-
-只有 E2B 返回 APT provisioning 失败时，SForge 才会创建版本化 portable derivative。
-该回退需要 Registry 写权限，但不会在每次评测时重复构建。
-
-### 运行任务
-
-```bash
 export SFORGE_AGENT_API_KEY=...
 export SFORGE_AGENT_API_BASE_URL=...
 export SFORGE_AGENT_MODEL=...
@@ -345,13 +295,8 @@ auto-eval submission 中选取最佳结果。`final_archive.tar.gz` 是恢复快
 
 | 输入 | 需要场景 |
 | --- | --- |
-| `E2B_API_KEY` | Template 准备和 E2B 运行 |
+| `E2B_API_KEY` | E2B 运行 |
 | Agent API key、base URL 和模型 | 运行 Agent |
-| Linux amd64 主机和本机 Docker daemon | 使用当前实现准备 Template |
-| `--source-registry seededge` | 使用已发布的 EdgeBench 镜像 |
-| 源 Registry 凭证 | 仅使用私有源 Registry 时 |
-| `--portable-registry` 及其凭证 | 仅需要 APT 可移植性回退时 |
-| CPU/内存覆盖参数 | 仅 task 默认值不合适时；E2B 资源固化在 Template 中 |
 
 宿主机的 `HTTP_PROXY` 和 `HTTPS_PROXY` 不会复制到 E2B Work、Judge 或 Game Sandbox。
 只有用户显式配置 `SFORGE_HTTP_PROXY` 或 `SFORGE_HTTPS_PROXY` 时，远端可访问的代理才会
@@ -361,15 +306,10 @@ auto-eval submission 中选取最佳结果。`final_archive.tar.gz` 是恢复快
 
 | 现象 | 可能原因 | 处理方式 |
 | --- | --- | --- |
-| 找不到 Template | 当前 E2B team 尚未转换该镜像，或输入已经变化 | 对该 task 执行 `sforge e2b-template` |
-| E2B 无法拉取 `seededge` 镜像 | Registry 网络故障或精确 tag 不存在 | 核对 task 定义后重试 |
-| Template provisioning 无法访问 APT 源 | 源镜像包含不可达 mirror | 提供 `--portable-registry` 和凭证 |
-| Template 构建返回 internal error，或超过客户端等待时间后仍为 `building` | E2B 构建服务暂态故障；SDK 没有单次构建取消 API | 重试前先检查目标 tag 是否已经可启动，再只重试失败的 role；避免同时触发大量冷构建 |
-| `/tmp` 下的 evaluator 缺失 | Template 未通过 SForge 构建，缺少镜像 `/tmp` 快照 | 用 `sforge e2b-template` 重建；SForge 会快照整个镜像 `/tmp` 并在 Sandbox 启动时恢复 |
+| 找不到 Template | 该任务镜像版本没有已发布的官方 Template，或任务使用了修改过的镜像 | 确认任务使用已发布的镜像版本，或用 `SFORGE_E2B_TEMPLATE_MAP` 指向自建 Template |
 | secured Judge 返回 403 | 缺少 traffic access token | 使用 managed 模式，或为外部 secured Judge 配置 `SFORGE_JUDGE_ACCESS_TOKEN` |
 | Agent 侧 Judge 请求偶发超时 | Work Sandbox 无法通过 E2B 公网 gateway 建立连接 | 让 Agent 重试提交、降低同时提交的突发并发，或使用独立 Judge Server；host 侧 managed-controller 请求已通过 E2B command channel 走 loopback |
 | task timeout 到达时出现 `Sandbox not found` | 在最终归档和清理前达到了 team 级 Sandbox 最大生命周期 | 缩短 Agent timeout、减少多波次批次总时长，或使用支持更长 Sandbox 生命周期的套餐 |
-| 准备 Template 时 CPU 或内存被拒绝 | 请求规格超过当前 E2B team 上限 | 使用支持的规格重建；若榜单配置要求更高资源，则两者不具备严格可比性 |
 | 运行结束后仍有 Sandbox | cleanup 失败或 Runner 被强制终止 | 检查 run 日志；平台最终按配置的 E2B TTL 回收 |
 
 ## 常见问题

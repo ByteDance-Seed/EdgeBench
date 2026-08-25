@@ -94,8 +94,6 @@ Judge CPU/memory limits are currently set through CLI flags (`--judge-cpu-limit`
 | `SFORGE_K8S_NODE_SELECTOR` | --- | Node selector for K8s pods, format: `"key1=val1,key2=val2"` |
 | `SFORGE_E2B_TEMPLATE_MAP` | --- | Explicit E2B image-key to template mapping |
 | `SFORGE_E2B_SANDBOX_TTL` | `3600` | E2B Sandbox TTL in seconds |
-| `SFORGE_PORTABLE_REGISTRY_USERNAME` | --- | Registry username for portable E2B derivative images |
-| `SFORGE_PORTABLE_REGISTRY_PASSWORD` | --- | Registry password for portable E2B derivative images |
 
 ## Path Variables
 
@@ -104,8 +102,6 @@ Judge CPU/memory limits are currently set through CLI flags (`--judge-cpu-limit`
 | `SFORGE_LOG_DIR` | `logs/` | Override log output directory |
 | `SFORGE_TASKS_DIR` | `tasks/` | Override task definitions directory |
 | `SFORGE_REGISTRY` | --- | Default Docker registry URL for `pull`/`push` commands |
-| `SFORGE_REGISTRY_USERNAME` | --- | Source-registry username for E2B Template builds |
-| `SFORGE_REGISTRY_PASSWORD` | --- | Source-registry password for E2B Template builds |
 
 ## Proxy Fallback Chain
 

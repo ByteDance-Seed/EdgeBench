@@ -93,8 +93,6 @@ Judge CPU/内存限制目前通过 CLI 参数（`--judge-cpu-limit`、`--judge-m
 | `SFORGE_K8S_NODE_SELECTOR` | --- | K8s Pod 的节点选择器，格式：`"key1=val1,key2=val2"` |
 | `SFORGE_E2B_TEMPLATE_MAP` | --- | E2B image key 到 Template 的显式映射 |
 | `SFORGE_E2B_SANDBOX_TTL` | `3600` | E2B Sandbox TTL（秒） |
-| `SFORGE_PORTABLE_REGISTRY_USERNAME` | --- | E2B 可移植派生镜像 Registry 用户名 |
-| `SFORGE_PORTABLE_REGISTRY_PASSWORD` | --- | E2B 可移植派生镜像 Registry 密码 |
 
 ## 路径变量
 
@@ -103,8 +101,6 @@ Judge CPU/内存限制目前通过 CLI 参数（`--judge-cpu-limit`、`--judge-m
 | `SFORGE_LOG_DIR` | `logs/` | 覆盖日志输出目录 |
 | `SFORGE_TASKS_DIR` | `tasks/` | 覆盖任务定义目录 |
 | `SFORGE_REGISTRY` | --- | Docker Registry URL，用于 `pull`/`push` 命令 |
-| `SFORGE_REGISTRY_USERNAME` | --- | E2B Template 源镜像 Registry 用户名 |
-| `SFORGE_REGISTRY_PASSWORD` | --- | E2B Template 源镜像 Registry 密码 |
 
 ## 代理回退链
 

@@ -231,81 +231,22 @@ Controller, so no separately deployed Judge service is required.
 
 ### Docker Images and E2B Templates
 
-The pre-built EdgeBench images published under
-[`seededge`](https://hub.docker.com/u/seededge) can be used directly as source
-images. You do not need to run `sforge build`, `sforge pull`, or `sforge push`
-for an unchanged published task.
+A Docker image and an E2B Template are different runtime objects: E2B
+Sandboxes start from Templates, not from Docker image references. Official
+E2B Templates for the published EdgeBench tasks are pre-built and published
+by the SForge maintainers, so no template preparation step is required.
+`sforge run --backend e2b` derives each task image's Template reference
+automatically (`edgebench.work.foo_bar:abc123` ->
+`edgebench-work-foo-bar:abc123`). Set `SFORGE_E2B_TEMPLATE_MAP` only to
+override this mapping, for example to run self-built Templates for a
+modified task.
 
-A Docker image and an E2B Template are different runtime objects.
-`Template.from_image()` imports the Docker image into an E2B Template, while
-`Sandbox.create()` starts the resulting Template rather than accepting a
-Docker image reference. SForge automates this conversion:
-
-```text
-seededge Docker image
-  -> sforge e2b-template
-  -> E2B Template in the user's E2B team
-  -> sforge run --backend e2b
-  -> E2B Sandbox
-```
-
-Template preparation is required once for a new or changed task image in an
-E2B team. Matching Templates are reused; normal `sforge run` commands do not
-rebuild them.
-
-### Prepare Templates
+### Run a Task
 
 ```bash
 uv sync --extra e2b
 export E2B_API_KEY=...
 
-sforge fetch-tasks edgebench
-sforge e2b-template \
-  --task ad_placement_optimization \
-  --source-registry seededge
-```
-
-Use `--all` instead of `--task` to prepare all downloaded tasks. SForge
-automatically derives both image references, pins immutable digests, restores
-non-sensitive OCI environment variables, snapshots the image's initial `/tmp`,
-builds the Work and Judge Templates, waits for terminal status, retries
-transient failures, writes versioned manifests, and reuses matching builds.
-Users do not write an E2B Dockerfile or upload image layers manually.
-
-The current implementation requires a Linux amd64 host with a running local
-Docker daemon, but does not rebuild the published images. The official task
-images predate E2B and ship evaluator helpers under `/tmp` — a wrapper the
-command names plus other files that wrapper reads at runtime. Docker and
-Kubernetes boot from the image, so those files are simply present; E2B resets
-`/tmp` on every Sandbox. When a role's command references `/tmp`, SForge snapshots
-the whole image `/tmp` (so helpers reached only indirectly come along too),
-stores it in the Template, and restores it on Sandbox start, so the evaluator
-sees the same files as on the other backends. This never modifies the official
-image, the evaluators, or scoring. The source registry must also be reachable by
-the E2B build service.
-
-### Portable Image Fallback
-
-Some image versions contain an APT source that is inaccessible from the E2B
-build network. For those images, provide a writable registry:
-
-```bash
-export SFORGE_PORTABLE_REGISTRY_USERNAME=...
-export SFORGE_PORTABLE_REGISTRY_PASSWORD=...
-
-sforge e2b-template \
-  --task TASK \
-  --source-registry seededge \
-  --portable-registry registry.example.com/project
-```
-
-SForge creates a versioned portable derivative only after E2B reports an APT
-provisioning failure. Registry push access is required for this fallback, but
-the derivative is not rebuilt for every evaluation run.
-
-### Run a Task
-
-```bash
 export SFORGE_AGENT_API_KEY=...
 export SFORGE_AGENT_API_BASE_URL=...
 export SFORGE_AGENT_MODEL=...
@@ -372,13 +313,8 @@ ends.
 
 | Input | When required |
 | --- | --- |
-| `E2B_API_KEY` | Template preparation and E2B runs |
+| `E2B_API_KEY` | E2B runs |
 | Agent API key, base URL, and model | Agent runs |
-| Linux amd64 host and local Docker daemon | Template preparation with the current implementation |
-| `--source-registry seededge` | Published EdgeBench images |
-| Source registry credentials | Private source registries only |
-| `--portable-registry` and credentials | APT portability fallback only |
-| CPU/memory overrides | Only when task defaults are unsuitable; E2B resources are fixed in the Template |
 
 Host `HTTP_PROXY` and `HTTPS_PROXY` variables are not copied into E2B Work,
 Judge, or Game Sandboxes. A remote-reachable proxy is forwarded only when the
@@ -389,15 +325,10 @@ tasks remove proxy variables entirely. See [Network Isolation](/en/features/netw
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| Template not found | The image has not been converted in this E2B team, or its inputs changed | Run `sforge e2b-template` for the task |
-| E2B cannot pull a `seededge` image | Registry/network failure or the exact tag is unavailable | Confirm the task definition and retry |
-| Template provisioning cannot reach an APT source | The source image contains an inaccessible mirror | Supply `--portable-registry` and credentials |
-| A Template build reports an internal error or remains `building` past the client timeout | Transient E2B build-service failure; the SDK has no per-build cancellation API | Check whether the requested tag became launchable before retrying, then retry the specific role; avoid starting many cold builds at once |
-| A runtime evaluator under `/tmp` is missing | The Template was built outside SForge, so the image's `/tmp` snapshot is absent | Rebuild with `sforge e2b-template`; SForge snapshots the whole image `/tmp` and restores it on Sandbox start |
+| Template not found | The task image version has no published official Template, or the task uses a modified image | Verify the task uses a published image version, or point `SFORGE_E2B_TEMPLATE_MAP` at a self-built Template |
 | A secured Judge returns 403 | Its traffic access token was not provided | Use managed mode, or set `SFORGE_JUDGE_ACCESS_TOKEN` for an external secured Judge |
 | Agent-side Judge requests intermittently time out | The Work Sandbox could not establish a connection through the E2B public gateway | Retry the agent submission, reduce simultaneous submission bursts, or use an external Judge Server; host-side managed-controller calls already use E2B command-channel loopback |
 | A run ends at the configured task timeout with `Sandbox not found` | The team-level maximum Sandbox lifetime was reached before final extraction and cleanup | Shorten the agent timeout, reduce multi-wave batch duration, or use a plan with a longer Sandbox lifetime |
-| CPU or memory is rejected while preparing a Template | The requested Template resources exceed the E2B team's limits | Rebuild at supported values; note that this is not equivalent to leaderboard resource settings when those require more resources |
 | A run leaves a Sandbox | Cleanup failed or the runner was terminated abruptly | Inspect the run log and wait for the configured E2B TTL as the final safeguard |
 
 ## Troubleshooting

@@ -108,99 +108,6 @@ def _run_max_workers(
     return task_count
 
 
-def _e2b_registry_credentials(portable: bool) -> tuple[str | None, str | None]:
-    prefix = "SFORGE_PORTABLE_REGISTRY" if portable else "SFORGE_REGISTRY"
-    return os.environ.get(f"{prefix}_USERNAME"), os.environ.get(
-        f"{prefix}_PASSWORD"
-    )
-
-
-def _build_e2b_task_template(
-    task_spec: TaskSpec,
-    role: str,
-    source_registry: str,
-    docker_client,
-    args,
-) -> tuple[object, dict]:
-    """Build one task role, retrying through a portable source if needed."""
-    import tempfile
-
-    from e2b import default_build_logger
-
-    from sforge.harness.e2b_templates import (
-        AptSourceError,
-        build_e2b_template,
-        make_template_manifest,
-        stage_runtime_artifacts,
-    )
-
-    cpu = args.work_cpu if role == "work" else args.judge_cpu
-    memory = args.work_memory_mb if role == "work" else args.judge_memory_mb
-    force_portable = False
-
-    for stage_attempt in range(2):
-        manifest = make_template_manifest(
-            task_spec,
-            role,
-            source_registry,
-            cpu_count=cpu,
-            memory_mb=memory,
-        )
-        with tempfile.TemporaryDirectory(
-            prefix=f"sforge-e2b-{task_spec.task_id}-{role}-"
-        ) as context_dir:
-            context_path = Path(context_dir)
-            source_username, source_password = _e2b_registry_credentials(False)
-            portable_username, portable_password = _e2b_registry_credentials(True)
-            manifest, runtime_sources, portable = stage_runtime_artifacts(
-                manifest,
-                docker_client,
-                context_path,
-                pull_attempts=args.attempts,
-                portable_registry=args.portable_registry,
-                source_registry_username=source_username,
-                source_registry_password=source_password,
-                portable_registry_username=portable_username,
-                portable_registry_password=portable_password,
-                force_portable=force_portable,
-            )
-            print(
-                f"[{task_spec.task_id}/{role}] {manifest.source_image} "
-                f"-> {manifest.reference}"
-            )
-            username, password = (
-                (portable_username, portable_password)
-                if portable
-                else (source_username, source_password)
-            )
-            try:
-                result = build_e2b_template(
-                    manifest,
-                    attempts=args.attempts,
-                    build_timeout=args.build_timeout,
-                    force=args.force,
-                    on_build_logs=(
-                        None if args.silent else default_build_logger()
-                    ),
-                    registry_username=username,
-                    registry_password=password,
-                    context_dir=context_path,
-                    runtime_sources=runtime_sources,
-                )
-            except AptSourceError:
-                if stage_attempt or not args.portable_registry or portable:
-                    raise
-                print(
-                    f"[{task_spec.task_id}/{role}] retrying through a portable "
-                    "source image after E2B could not reach its APT source"
-                )
-                force_portable = True
-                continue
-            return manifest, result
-
-    raise RuntimeError("E2B Template build exhausted portable-image retries")
-
-
 # --- Commands ---
 
 
@@ -247,57 +154,6 @@ def cmd_build(args):
                     print(f"  [{ts.task_id}] FAILED: {e}", file=sys.stderr)
 
     print("Done.")
-
-
-def cmd_e2b_template(args):
-    """Build deterministic official E2B Templates from task images."""
-    config = _make_config(args)
-    task_specs = _resolve_tasks(args, config)
-    source_registry = args.source_registry or config.registry
-    if not source_registry:
-        print(
-            "Error: --source-registry or SFORGE_REGISTRY is required; E2B "
-            "must be able to pull immutable Work/Judge images",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    from sforge.harness.e2b_templates import write_template_manifest
-
-    docker_client = docker.from_env()
-    roles = [args.role] if args.role != "both" else ["work", "judge"]
-    failures = []
-    for task_spec in task_specs:
-        task_failed = False
-        for role in roles:
-            if task_failed:
-                print(
-                    f"[{task_spec.task_id}/{role}] SKIPPED: an earlier role "
-                    "failed for this task",
-                    file=sys.stderr,
-                )
-                continue
-            try:
-                manifest, result = _build_e2b_task_template(
-                    task_spec, role, source_registry, docker_client, args,
-                )
-                path = write_template_manifest(
-                    manifest, result,
-                    config.log_dir / "e2b_templates" / task_spec.task_id,
-                )
-                print(
-                    f"  {result['status']}: build={result.get('build_id')} "
-                    f"manifest={path}"
-                )
-            except Exception as exc:
-                failures.append((task_spec.task_id, role, str(exc)))
-                task_failed = True
-                print(
-                    f"[{task_spec.task_id}/{role}] FAILED: {exc}",
-                    file=sys.stderr,
-                )
-    if failures:
-        raise SystemExit(1)
 
 
 def cmd_pull(args):
@@ -1136,40 +992,6 @@ def main():
     p_build.add_argument("--force-rebuild-with-base", action="store_true", default=False,
                          help="Force rebuild ALL images including base")
     p_build.set_defaults(func=cmd_build)
-
-    # e2b-template
-    p_e2b_template = subparsers.add_parser(
-        "e2b-template",
-        help="Build official E2B Templates from immutable task images",
-    )
-    p_e2b_group = p_e2b_template.add_mutually_exclusive_group(required=True)
-    p_e2b_group.add_argument("--task", nargs="+")
-    p_e2b_group.add_argument("--all", action="store_true", default=False)
-    p_e2b_template.add_argument(
-        "--source-registry", default=None,
-        help="Registry prefix containing the Work/Judge images",
-    )
-    p_e2b_template.add_argument(
-        "--portable-registry", default=None,
-        help=(
-            "Registry prefix for sanitized derivatives of images that contain "
-            "APT sources unreachable from the official E2B build network"
-        ),
-    )
-    p_e2b_template.add_argument(
-        "--role", choices=["work", "judge", "both"], default="both",
-    )
-    p_e2b_template.add_argument("--work-cpu", type=_positive_int, default=None)
-    p_e2b_template.add_argument("--work-memory-mb", type=_positive_int, default=None)
-    p_e2b_template.add_argument("--judge-cpu", type=_positive_int, default=None)
-    p_e2b_template.add_argument("--judge-memory-mb", type=_positive_int, default=None)
-    p_e2b_template.add_argument("--attempts", type=_positive_int, default=3)
-    p_e2b_template.add_argument(
-        "--build-timeout", type=_positive_int, default=600,
-        help="Maximum seconds to wait for each E2B Template build",
-    )
-    p_e2b_template.add_argument("--force", action="store_true", default=False)
-    p_e2b_template.set_defaults(func=cmd_e2b_template)
 
     # pull
     p_pull = subparsers.add_parser("pull", help="Pull pre-built images from remote registry")
