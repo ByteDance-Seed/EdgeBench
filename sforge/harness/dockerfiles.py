@@ -16,6 +16,9 @@
 
 from __future__ import annotations
 
+from __future__ import annotations
+
+
 # --- Base Dockerfile: official image + common tools ---
 _DOCKERFILE_BASE = """\
 FROM --platform={platform} {official_image}
@@ -23,10 +26,9 @@ FROM --platform={platform} {official_image}
 ARG DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
 {env_directives}
-RUN {apt_mirror_prepare}apt-get update && apt-get install -y --no-install-recommends \\
+{apt_mirror_directive}RUN apt-get update && apt-get install -y --no-install-recommends \\
     {packages} sudo \\
     && rm -rf /var/lib/apt/lists/* \\
-{apt_mirror_restore}\
     && useradd -m -s /bin/bash agent \\
     && echo 'agent ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers \\
     && git config --global safe.directory '*'
@@ -66,34 +68,24 @@ def get_dockerfile_base(
     user_directive = spec.get("user_directive", "")
     post_install_directive = spec.get("post_install_directive", "")
 
-    apt_mirror_prepare = ""
-    apt_mirror_restore = ""
+    apt_mirror_directive = ""
     if apt_mirror_url:
         url = apt_mirror_url.rstrip("/")
-        apt_mirror_prepare = (
-            "rm -rf /tmp/sforge-apt-original && "
-            "mkdir -p /tmp/sforge-apt-original && "
-            "if [ -e /etc/apt/sources.list ]; then "
-            "cp -a /etc/apt/sources.list /tmp/sforge-apt-original/; fi && "
-            "if [ -d /etc/apt/sources.list.d ]; then "
-            "cp -a /etc/apt/sources.list.d /tmp/sforge-apt-original/; fi && "
-            "find /etc/apt -maxdepth 2 -type f "
-            "\\( -name '*.list' -o -name '*.sources' \\) "
-            "-exec sed -Ei "
-            f"-e 's#https?://deb.debian.org#{url}#g' "
-            f"-e 's#https?://archive.ubuntu.com#{url}#g' "
-            f"-e 's#https?://security.ubuntu.com#{url}#g' "
-            "{} + && "
-        )
-        apt_mirror_restore = (
-            "    && rm -f /etc/apt/sources.list \\\n"
-            "    && rm -rf /etc/apt/sources.list.d \\\n"
-            "    && if [ -e /tmp/sforge-apt-original/sources.list ]; then "
-            "mv /tmp/sforge-apt-original/sources.list /etc/apt/; fi \\\n"
-            "    && if [ -d /tmp/sforge-apt-original/sources.list.d ]; then "
-            "mv /tmp/sforge-apt-original/sources.list.d /etc/apt/; "
-            "else mkdir -p /etc/apt/sources.list.d; fi \\\n"
-            "    && rm -rf /tmp/sforge-apt-original \\\n"
+        apt_mirror_directive = (
+            f"RUN sed -i 's|http://deb.debian.org|{url}|g; "
+            f"s|https://deb.debian.org|{url}|g; "
+            f"s|http://archive.ubuntu.com|{url}|g; "
+            f"s|http://security.ubuntu.com|{url}|g' "
+            f"/etc/apt/sources.list 2>/dev/null; "
+            f"sed -i 's|http://deb.debian.org|{url}|g; "
+            f"s|https://deb.debian.org|{url}|g; "
+            f"s|http://archive.ubuntu.com|{url}|g; "
+            f"s|http://security.ubuntu.com|{url}|g' "
+            f"/etc/apt/sources.list.d/*.list 2>/dev/null; "
+            f"sed -i 's|http://deb.debian.org|{url}|g; "
+            f"s|https://deb.debian.org|{url}|g' "
+            f"/etc/apt/sources.list.d/*.sources 2>/dev/null; "
+            f"true\n"
         )
 
     pip_packages = spec.get("pip_packages", [])
@@ -107,8 +99,7 @@ def get_dockerfile_base(
         official_image=spec["official_image"],
         user_directive=user_directive,
         env_directives=env_directives,
-        apt_mirror_prepare=apt_mirror_prepare,
-        apt_mirror_restore=apt_mirror_restore,
+        apt_mirror_directive=apt_mirror_directive,
         packages=packages,
         pip_directive=pip_directive,
         post_install_directive=post_install_directive,
