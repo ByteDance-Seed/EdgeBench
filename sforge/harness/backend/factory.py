@@ -28,6 +28,7 @@ def create_backend(
     k8s_image_registry: str = "",
     k8s_kubeconfig: str | None = None,
     e2b_template_map: dict[str, str] | None = None,
+    e2b_template_namespace: str | None = None,
     e2b_sandbox_ttl: int | None = None,
 ) -> ContainerBackend:
     if name == "docker":
@@ -48,6 +49,7 @@ def create_backend(
 
         return E2BBackend(
             template_map=e2b_template_map,
+            template_namespace=e2b_template_namespace,
             sandbox_ttl=e2b_sandbox_ttl,
         )
     supported = "docker, k8s, e2b"

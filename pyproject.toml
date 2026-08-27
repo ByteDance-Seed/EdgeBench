@@ -32,7 +32,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-e2b = ["e2b>=2.42.0"]
+e2b = ["e2b>=2.46.0,<3"]
 
 [project.scripts]
 sforge = "sforge.cli:main"

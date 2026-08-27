@@ -519,6 +519,8 @@ def _effective_config_dict(
             )
             for key, value in config.agent_extra_env.items()
         }
+    if config.e2b_template_namespace:
+        d["e2b_template_namespace"] = config.e2b_template_namespace
     return d
 
 

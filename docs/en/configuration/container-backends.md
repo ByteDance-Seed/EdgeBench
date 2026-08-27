@@ -236,10 +236,11 @@ A Docker image and an E2B Template are different runtime objects: E2B
 Sandboxes start from Templates, not from Docker image references. Official
 E2B Templates for the published EdgeBench tasks are pre-built and published
 by the SForge maintainers, so no template preparation step is required.
-`sforge run --backend e2b` derives each task image's Template reference
-automatically (`edgebench.work.foo_bar:abc123` ->
-`edgebench-work-foo-bar:abc123`). Set `SFORGE_E2B_TEMPLATE_MAP` only to
-override this mapping, for example to run self-built Templates for a
+Set `SFORGE_E2B_TEMPLATE_NAMESPACE` to the namespace that publishes the
+Templates. `sforge run --backend e2b` then derives each task image's public
+Template reference automatically (`edgebench.work.foo_bar:abc123` ->
+`edgebench/edgebench-work-foo-bar:abc123`). Set `SFORGE_E2B_TEMPLATE_MAP`
+only to override this mapping, for example to run self-built Templates for a
 modified task.
 
 ### Run a Task
@@ -250,6 +251,7 @@ inside E2B Sandboxes submit to it over the internet):
 ```bash
 uv sync --extra e2b
 export E2B_API_KEY=...
+export SFORGE_E2B_TEMPLATE_NAMESPACE=edgebench
 export SFORGE_ADMIN_SECRET=...   # same value on the serve and run hosts
 
 sforge serve --host 0.0.0.0 --port 8080
@@ -259,6 +261,7 @@ Then run the agent, pointing `--judge-url` at that host:
 
 ```bash
 export E2B_API_KEY=...
+export SFORGE_E2B_TEMPLATE_NAMESPACE=edgebench
 export SFORGE_ADMIN_SECRET=...   # same value as on the serve host
 export SFORGE_AGENT_API_KEY=...
 export SFORGE_AGENT_API_BASE_URL=...
@@ -328,7 +331,7 @@ tasks remove proxy variables entirely. See [Network Isolation](/en/features/netw
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| Template not found | The task image version has no published official Template, or the task uses a modified image | Verify the task uses a published image version, or point `SFORGE_E2B_TEMPLATE_MAP` at a self-built Template |
+| Template not found | The Template namespace is missing or incorrect, the task image version has no published official Template, or the task uses a modified image | Check `SFORGE_E2B_TEMPLATE_NAMESPACE` and the task image version, or point `SFORGE_E2B_TEMPLATE_MAP` at a self-built Template |
 | Agent-side Judge requests intermittently time out | The Work Sandbox could not reach the Judge Server over the internet | Check that the Judge host and port are publicly reachable, then retry the agent submission |
 | A run ends at the configured task timeout with `Sandbox not found` | The team-level maximum Sandbox lifetime was reached before final extraction and cleanup | Shorten the agent timeout, reduce multi-wave batch duration, or use a plan with a longer Sandbox lifetime |
 | A run leaves a Sandbox | Cleanup failed or the runner was terminated abruptly | Inspect the run log and wait for the configured E2B TTL as the final safeguard |

@@ -377,8 +377,8 @@ def run_agent(
                     raise RuntimeError(
                         f"E2B Template for {image_key!r} was not found. Make sure "
                         "the task uses a published image version with an official "
-                        "Template, or point SFORGE_E2B_TEMPLATE_MAP at a "
-                        "self-built Template."
+                        "Template and SFORGE_E2B_TEMPLATE_NAMESPACE is set, or "
+                        "point SFORGE_E2B_TEMPLATE_MAP at a self-built Template."
                     )
                 raise RuntimeError(
                     f"Image '{image_key}' not found. Run `sforge pull --task {task_spec.task_id}` to fetch from registry, or `sforge build --task {task_spec.task_id}` to build locally."
@@ -406,6 +406,7 @@ def run_agent(
         elif backend.backend_name == "e2b":
             reg_body["backend"] = "e2b"
             reg_body["e2b_template_map"] = config.e2b_template_map
+            reg_body["e2b_template_namespace"] = config.e2b_template_namespace
             reg_body["e2b_sandbox_ttl"] = config.e2b_sandbox_ttl
         for _reg_attempt in range(1, 6):
             try:

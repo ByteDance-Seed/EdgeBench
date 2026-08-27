@@ -87,6 +87,7 @@ class SForgeConfig:
     # e2b backend settings (endpoint/credentials come from the standard
     # E2B_API_KEY / E2B_API_URL / E2B_DOMAIN env vars read by the e2b SDK)
     e2b_template_map: dict[str, str] = field(default_factory=dict)
+    e2b_template_namespace: str | None = None
     e2b_sandbox_ttl: int | None = None
     # Paths
     log_dir: Path = field(default_factory=lambda: LOG_DIR)
@@ -120,6 +121,7 @@ def load_config(cli_overrides: dict | None = None) -> SForgeConfig:
         "k8s_namespace": ["SFORGE_K8S_NAMESPACE"],
         "k8s_image_registry": ["SFORGE_K8S_IMAGE_REGISTRY"],
         "k8s_kubeconfig": ["SFORGE_K8S_KUBECONFIG"],
+        "e2b_template_namespace": ["SFORGE_E2B_TEMPLATE_NAMESPACE"],
         "work_cpu_limit": ["SFORGE_WORK_CPU_LIMIT"],
         "work_mem_limit": ["SFORGE_WORK_MEM_LIMIT"],
         "log_dir": ["SFORGE_LOG_DIR"],
@@ -340,5 +342,6 @@ def create_backend_from_config(config: SForgeConfig, docker_client=None):
         k8s_image_registry=config.k8s_image_registry,
         k8s_kubeconfig=config.k8s_kubeconfig,
         e2b_template_map=config.e2b_template_map or None,
+        e2b_template_namespace=config.e2b_template_namespace,
         e2b_sandbox_ttl=config.e2b_sandbox_ttl,
     )

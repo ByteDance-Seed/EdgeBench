@@ -91,6 +91,7 @@ Judge CPU/内存限制目前通过 CLI 参数（`--judge-cpu-limit`、`--judge-m
 | `SFORGE_K8S_KUBECONFIG` | --- | kubeconfig 文件路径 |
 | `SFORGE_K8S_NODE_SELECTOR` | --- | K8s Pod 的节点选择器，格式：`"key1=val1,key2=val2"` |
 | `SFORGE_E2B_TEMPLATE_MAP` | --- | E2B image key 到 Template 的显式映射 |
+| `SFORGE_E2B_TEMPLATE_NAMESPACE` | --- | 已发布 E2B Template 的 namespace（例如 `edgebench`） |
 | `SFORGE_E2B_SANDBOX_TTL` | `3600` | E2B Sandbox TTL（秒） |
 
 ## 路径变量

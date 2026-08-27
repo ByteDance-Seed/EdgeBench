@@ -232,10 +232,11 @@ E2B 后端使用 E2B Sandbox 运行 Work、Judge 和 Game 环境。Judge Server 
 Docker 镜像和 E2B Template 是两种不同的运行对象：E2B Sandbox 从 Template 启动，
 不能直接传入 Docker image 引用。已发布 EdgeBench 任务的官方 E2B Template 由
 SForge 维护者预先构建并发布，用户不需要执行任何 Template 准备步骤。
-`sforge run --backend e2b` 会自动推导每个任务镜像对应的 Template 引用
-（`edgebench.work.foo_bar:abc123` -> `edgebench-work-foo-bar:abc123`）。只有需要
-覆盖该映射时（例如为修改过的任务运行自建 Template）才设置
-`SFORGE_E2B_TEMPLATE_MAP`。
+设置 `SFORGE_E2B_TEMPLATE_NAMESPACE` 指定发布 Template 的 namespace。
+`sforge run --backend e2b` 随后会自动推导每个任务镜像对应的公开 Template 引用
+（`edgebench.work.foo_bar:abc123` ->
+`edgebench/edgebench-work-foo-bar:abc123`）。只有需要覆盖该映射时
+（例如为修改过的任务运行自建 Template）才设置 `SFORGE_E2B_TEMPLATE_MAP`。
 
 ### 运行任务
 
@@ -244,6 +245,7 @@ SForge 维护者预先构建并发布，用户不需要执行任何 Template 准
 ```bash
 uv sync --extra e2b
 export E2B_API_KEY=...
+export SFORGE_E2B_TEMPLATE_NAMESPACE=edgebench
 export SFORGE_ADMIN_SECRET=...   # serve 和 run 两台主机需使用同一个值
 
 sforge serve --host 0.0.0.0 --port 8080
@@ -253,6 +255,7 @@ sforge serve --host 0.0.0.0 --port 8080
 
 ```bash
 export E2B_API_KEY=...
+export SFORGE_E2B_TEMPLATE_NAMESPACE=edgebench
 export SFORGE_ADMIN_SECRET=...   # 与 serve 主机一致
 export SFORGE_AGENT_API_KEY=...
 export SFORGE_AGENT_API_BASE_URL=...
@@ -312,7 +315,7 @@ auto-eval submission 中选取最佳结果。`final_archive.tar.gz` 是恢复快
 
 | 现象 | 可能原因 | 处理方式 |
 | --- | --- | --- |
-| 找不到 Template | 该任务镜像版本没有已发布的官方 Template，或任务使用了修改过的镜像 | 确认任务使用已发布的镜像版本，或用 `SFORGE_E2B_TEMPLATE_MAP` 指向自建 Template |
+| 找不到 Template | Template namespace 缺失或错误、该任务镜像版本没有已发布的官方 Template，或任务使用了修改过的镜像 | 检查 `SFORGE_E2B_TEMPLATE_NAMESPACE` 和任务镜像版本，或用 `SFORGE_E2B_TEMPLATE_MAP` 指向自建 Template |
 | Agent 侧 Judge 请求偶发超时 | Work Sandbox 无法通过公网访问 Judge Server | 确认 Judge 主机和端口公网可达后重试提交 |
 | task timeout 到达时出现 `Sandbox not found` | 在最终归档和清理前达到了 team 级 Sandbox 最大生命周期 | 缩短 Agent timeout、减少多波次批次总时长，或使用支持更长 Sandbox 生命周期的套餐 |
 | 运行结束后仍有 Sandbox | cleanup 失败或 Runner 被强制终止 | 检查 run 日志；平台最终按配置的 E2B TTL 回收 |

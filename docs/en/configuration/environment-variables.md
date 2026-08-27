@@ -92,6 +92,7 @@ Judge CPU/memory limits are currently set through CLI flags (`--judge-cpu-limit`
 | `SFORGE_K8S_KUBECONFIG` | --- | Path to kubeconfig file |
 | `SFORGE_K8S_NODE_SELECTOR` | --- | Node selector for K8s pods, format: `"key1=val1,key2=val2"` |
 | `SFORGE_E2B_TEMPLATE_MAP` | --- | Explicit E2B image-key to template mapping |
+| `SFORGE_E2B_TEMPLATE_NAMESPACE` | --- | Namespace for published E2B Templates (for example, `edgebench`) |
 | `SFORGE_E2B_SANDBOX_TTL` | `3600` | E2B Sandbox TTL in seconds |
 
 ## Path Variables

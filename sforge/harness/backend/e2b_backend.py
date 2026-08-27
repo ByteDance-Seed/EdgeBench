@@ -18,7 +18,8 @@ Targets native E2B semantics (https://e2b.dev):
 
 - endpoint/credentials via the standard e2b env vars
   (``E2B_API_KEY``, ``E2B_API_URL`` / ``E2B_DOMAIN``);
-- image-key -> template mapping via ``SFORGE_E2B_TEMPLATE_MAP``
+- public Template namespace via ``SFORGE_E2B_TEMPLATE_NAMESPACE`` and optional
+  image-key overrides via ``SFORGE_E2B_TEMPLATE_MAP``
   (see :meth:`E2BBackend.resolve_template`).
 
 Semantics notes vs the docker backend:
@@ -41,6 +42,7 @@ import io
 import json
 import logging
 import os
+import re
 import shlex
 import tarfile
 import threading
@@ -82,6 +84,7 @@ FILE_TRANSFER_REQUEST_TIMEOUT = 300
 SANDBOX_CREATE_ATTEMPTS = 3
 
 _METADATA_NAME_KEY = "sforge_name"
+_E2B_NAME_PATTERN = re.compile(r"[a-z0-9_-]{1,128}")
 
 
 class E2BSandboxHandle(ContainerHandle):
@@ -167,6 +170,7 @@ class E2BBackend(ContainerBackend):
         template_map: dict[str, str] | None = None,
         sandbox_ttl: int | None = None,
         *,
+        template_namespace: str | None = None,
         sandbox_cls=None,
         template_cls=None,
     ) -> None:
@@ -188,6 +192,19 @@ class E2BBackend(ContainerBackend):
         self._template_map = (
             dict(template_map) if template_map else template_map_from_env()
         )
+        self._template_namespace = (
+            template_namespace
+            if template_namespace is not None
+            else os.environ.get("SFORGE_E2B_TEMPLATE_NAMESPACE", "")
+        ).strip() or None
+        if (
+            self._template_namespace is not None
+            and not _E2B_NAME_PATTERN.fullmatch(self._template_namespace)
+        ):
+            raise ValueError(
+                "E2B Template namespace must contain only lowercase letters, "
+                "numbers, dashes, and underscores, and be at most 128 characters"
+            )
         self._sandbox_ttl = (
             int(os.environ.get("SFORGE_E2B_SANDBOX_TTL", DEFAULT_SANDBOX_TTL))
             if sandbox_ttl is None
@@ -212,16 +229,17 @@ class E2BBackend(ContainerBackend):
 
         Explicit entries in ``SFORGE_E2B_TEMPLATE_MAP`` win (matched with and
         without the image tag); otherwise the repo part is normalized to the
-        template-alias charset and the image tag carries over as the template
-        tag (``edgebench.work.foo_bar:abc123`` -> ``edgebench-work-foo-bar:abc123``).
-        Templates built from SForge images must be tagged with the image tag.
+        template-name charset, the image tag carries over as the Template tag,
+        and ``SFORGE_E2B_TEMPLATE_NAMESPACE`` is prepended when configured
+        (``edgebench.work.foo_bar:abc123`` ->
+        ``edgebench/edgebench-work-foo-bar:abc123``).
         """
         if image_key in self._template_map:
             return self._template_map[image_key]
         repo, sep, tag = image_key.partition(":")
         if repo in self._template_map:
             return self._template_map[repo] + sep + tag
-        return repo.lower().replace(".", "-").replace("_", "-") + sep + tag
+        return e2b_template_reference(image_key, self._template_namespace)
 
     # --- Lifecycle ---
 
@@ -423,6 +441,13 @@ class E2BBackend(ContainerBackend):
         if self._template_cls is None:
             return False
         template = self.resolve_template(image_key)
+        if _is_namespaced_template_reference(template):
+            logger.debug(
+                "E2B cannot preflight public Template %r across namespaces; "
+                "deferring validation to Sandbox.create()",
+                template,
+            )
+            return True
         try:
             # Check the complete name:tag alias. Sandbox.create remains the
             # authoritative launchability check performed later in the flow.
@@ -938,6 +963,29 @@ class E2BBackend(ContainerBackend):
 
 def _as_shell(cmd: str | list[str]) -> str:
     return shlex.join(cmd) if isinstance(cmd, list) else cmd
+
+
+def e2b_template_reference(image_key: str, namespace: str | None = None) -> str:
+    repo, separator, tag = image_key.partition(":")
+    name = repo.lower().replace(".", "-").replace("_", "-")
+    if not _E2B_NAME_PATTERN.fullmatch(name):
+        raise ValueError(
+            f"E2B Template name derived from {image_key!r} is invalid: {name!r}"
+        )
+    if namespace:
+        if not _E2B_NAME_PATTERN.fullmatch(namespace):
+            raise ValueError(
+                "E2B Template namespace must contain only lowercase letters, "
+                "numbers, dashes, and underscores, and be at most 128 characters"
+            )
+        name = f"{namespace}/{name}"
+    return name + separator + tag
+
+
+def _is_namespaced_template_reference(template: str) -> bool:
+    name, _, _tag = template.partition(":")
+    parts = name.split("/")
+    return len(parts) == 2 and all(_E2B_NAME_PATTERN.fullmatch(part) for part in parts)
 
 
 def _exit_code_of(exc: Exception) -> int | None:

@@ -135,6 +135,7 @@ class RegisterRequest(BaseModel):
     max_agent_submissions: int | None = None
     submission_cooldown: int | None = None
     e2b_template_map: dict[str, str] | None = None
+    e2b_template_namespace: str | None = None
     e2b_sandbox_ttl: int | None = None
 
 
@@ -287,6 +288,7 @@ class JudgeState:
                          max_agent_submissions: int | None = None,
                          submission_cooldown: int | None = None,
                          e2b_template_map: dict[str, str] | None = None,
+                         e2b_template_namespace: str | None = None,
                          e2b_sandbox_ttl: int | None = None) -> str:
         if task_id not in self.tasks:
             raise ValueError(f"Unknown task: {task_id}")
@@ -308,7 +310,30 @@ class JudgeState:
                 "judge_cpu_limit": judge_cpu_limit,
                 "judge_mem_limit": judge_mem_limit,
             }
-            if backend and backend != self.backend.backend_name:
+            effective_e2b_template_map = (
+                self.config.e2b_template_map
+                if not e2b_template_map
+                else e2b_template_map
+            )
+            effective_e2b_template_namespace = (
+                self.config.e2b_template_namespace
+                if not e2b_template_namespace
+                else e2b_template_namespace
+            )
+            effective_e2b_sandbox_ttl = (
+                self.config.e2b_sandbox_ttl
+                if e2b_sandbox_ttl is None
+                else e2b_sandbox_ttl
+            )
+            e2b_config_changed = backend == "e2b" and (
+                effective_e2b_template_map != self.config.e2b_template_map
+                or effective_e2b_template_namespace
+                != self.config.e2b_template_namespace
+                or effective_e2b_sandbox_ttl != self.config.e2b_sandbox_ttl
+            )
+            if backend and (
+                backend != self.backend.backend_name or e2b_config_changed
+            ):
                 from sforge.harness.backend.factory import create_backend
                 self.run_backends[run_key] = create_backend(
                     backend,
@@ -316,8 +341,9 @@ class JudgeState:
                     k8s_node_selector=k8s_node_selector or self.config.k8s_node_selector,
                     k8s_image_registry=k8s_image_registry or self.config.k8s_image_registry,
                     k8s_kubeconfig=k8s_kubeconfig or self.config.k8s_kubeconfig,
-                    e2b_template_map=e2b_template_map or self.config.e2b_template_map,
-                    e2b_sandbox_ttl=e2b_sandbox_ttl or self.config.e2b_sandbox_ttl,
+                    e2b_template_map=effective_e2b_template_map,
+                    e2b_template_namespace=effective_e2b_template_namespace,
+                    e2b_sandbox_ttl=effective_e2b_sandbox_ttl,
                 )
         return token
 
@@ -888,6 +914,7 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
                 max_agent_submissions=req.max_agent_submissions,
                 submission_cooldown=req.submission_cooldown,
                 e2b_template_map=req.e2b_template_map,
+                e2b_template_namespace=req.e2b_template_namespace,
                 e2b_sandbox_ttl=req.e2b_sandbox_ttl,
             )
             return RegisterResponse(token=token)
