@@ -56,6 +56,7 @@ tasks:
 |------|------|--------|------|
 | `agent` | `string` | --- | Agent 名称（`claude-code`、`codex`） |
 | `model` | `string` | --- | 模型覆盖（在逐任务设置中可覆盖 `model.model`） |
+| `effort` | `string` | --- | 推理强度（`low`、`medium`、`high` 或 `max`），在所选 Agent 支持时映射到其原生配置 |
 | `timeout` | `int` | --- | Agent 超时时间（秒） |
 | `eval_interval` | `int` | --- | 自动评测间隔（秒） |
 | `disable_stop_hook` | `bool` | `false` | 禁用 Agent Stop Hook |

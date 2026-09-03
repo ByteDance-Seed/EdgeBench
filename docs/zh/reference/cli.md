@@ -138,6 +138,7 @@ sforge run --experiment experiment.yaml
 | `--agent` | 必填* | Agent 名称（如 `claude-code`、`codex`）。除非指定 `--experiment`，否则必填。 |
 | `--experiment` | --- | 实验 YAML 配置文件路径。如果未指定 `--task`，运行 YAML 中的全部任务；如果指定了 `--task`，则只运行该子集并套用实验配置。 |
 | `--model` | --- | 模型覆盖（如 `claude-opus-4-8`） |
+| `--effort` | Agent 默认值 | 推理强度（`low`、`medium`、`high` 或 `max`）。SForge 会在所选 Agent 支持时映射到其原生配置。 |
 | `--timeout` | `3600` | Agent 超时时间（秒） |
 | `--eval-interval` | `300` | 自动评测守护进程的间隔时间（秒） |
 | `--run-id` | 随机生成 | 运行标识符，用于跟踪和日志组织 |

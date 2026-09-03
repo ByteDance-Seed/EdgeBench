@@ -214,17 +214,17 @@ else
     tar czf {shlex.quote(str(remote_archive))} --files-from /dev/null
 fi
 """
-    result = backend.exec_run_with_exit_code(
-        handle, ["/bin/bash", "-c", tar_cmd], timeout=300,
-        user="agent",
-    )
-    if result.timed_out:
-        raise RuntimeError("Timed out while creating the submission archive")
-    if result.exit_code != 0:
-        raise RuntimeError(
-            "Could not create the submission archive: " + result.output[-4000:]
-        )
     try:
+        result = backend.exec_run_with_exit_code(
+            handle, ["/bin/bash", "-c", tar_cmd], timeout=300,
+        )
+        if result.timed_out:
+            raise RuntimeError("Timed out while creating the submission archive")
+        if result.exit_code != 0:
+            raise RuntimeError(
+                "Could not create the submission archive: "
+                + result.output[-4000:]
+            )
         if backend.backend_name == "e2b":
             raw = backend.copy_from_container(
                 handle, remote_archive, shutdown_event=shutdown_event,
@@ -520,8 +520,9 @@ def run_agent(
             cap_drop=container_cap_drop or None,
             cpu_limit=cpu,
             mem_limit=mem,
-            # e2b execs default to the SDK's "user" account, not the image USER
-            user="agent",
+            # E2B execs default to the SDK's "user" account rather than the
+            # image USER. Docker and Kubernetes retain the image default.
+            user="agent" if backend.backend_name == "e2b" else None,
         )
         backend.start_container(handle)
         logger.info(f"Container started: {container_name} (judge_url={judge_url})")
@@ -702,7 +703,7 @@ def run_agent(
         # 8. Extract final archive (tar of submit_paths)
         try:
             final_archive = _extract_archive_from_container(
-                backend, handle, task_spec, shutdown_event=shutdown_event,
+                backend, handle, task_spec,
             )
             (log_dir / "final_archive.tar.gz").write_bytes(final_archive)
             logger.info(f"Final archive: {len(final_archive)} bytes")
@@ -875,7 +876,7 @@ def run_agent(
         try:
             if handle is not None:
                 interrupted_archive = _extract_archive_from_container(
-                    backend, handle, task_spec, shutdown_event=shutdown_event,
+                    backend, handle, task_spec,
                 )
                 (log_dir / "final_archive.tar.gz").write_bytes(interrupted_archive)
                 logger.info(f"Final archive (interrupted): {len(interrupted_archive)} bytes")

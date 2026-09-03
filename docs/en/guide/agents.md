@@ -53,6 +53,17 @@ Override the model using the `--model` CLI flag or the `SFORGE_AGENT_MODEL` envi
 sforge run --task ad_placement_optimization --agent claude-code --model claude-opus-4-8
 ```
 
+### Reasoning Effort
+
+Use `--effort` or `SFORGE_AGENT_EFFORT` to select `low`, `medium`, `high`, or
+`max`. If neither is set, the Agent keeps its own default.
+
+| Agent | Native setting | Notes |
+|-------|----------------|-------|
+| Claude Code | `CLAUDE_CODE_EFFORT_LEVEL` | Uses the selected value directly |
+| Codex | `model_reasoning_effort` | Maps `max` to Codex's `xhigh` value |
+| opencode | `reasoningEffort` | Applies to non-Anthropic providers; Anthropic providers retain their own thinking configuration |
+
 ### Extra Environment Variables
 
 Pass additional environment variables to the agent container using `SFORGE_AGENT_EXTRA_ENV`:

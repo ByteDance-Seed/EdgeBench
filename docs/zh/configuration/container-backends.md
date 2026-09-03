@@ -285,6 +285,8 @@ E2B 套餐限制是运行契约的一部分。Template 的 CPU 和内存会在�
 
 Agent timeout 应明显短于当前套餐允许的最大 Sandbox 生命周期。Sandbox 生命周期还要覆盖
 Agent 安装、归档提取、等待 Judge 评测、读取结果和资源清理。
+进入清理阶段后，SForge 会停止续租，将服务端剩余生命周期收紧到最多 60 秒，再请求即时
+删除。该终止租约转换不受用户配置的运行期 TTL 影响。
 
 还需要检查每个任务的 `judge.eval_timeout`。Judge Sandbox 同样受 team 最大生命周期限制；
 如果任务声明的评测超时长于该限制，那么当 evaluator 实际使用完整预算时，就无法保证评测
@@ -318,7 +320,7 @@ auto-eval submission 中选取最佳结果。`final_archive.tar.gz` 是恢复快
 | 找不到 Template | Template namespace 缺失或错误、该任务镜像版本没有已发布的官方 Template，或任务使用了修改过的镜像 | 检查 `SFORGE_E2B_TEMPLATE_NAMESPACE` 和任务镜像版本，或用 `SFORGE_E2B_TEMPLATE_MAP` 指向自建 Template |
 | Agent 侧 Judge 请求偶发超时 | Work Sandbox 无法通过公网访问 Judge Server | 确认 Judge 主机和端口公网可达后重试提交 |
 | task timeout 到达时出现 `Sandbox not found` | 在最终归档和清理前达到了 team 级 Sandbox 最大生命周期 | 缩短 Agent timeout、减少多波次批次总时长，或使用支持更长 Sandbox 生命周期的套餐 |
-| 运行结束后仍有 Sandbox | cleanup 失败或 Runner 被强制终止 | 检查 run 日志；平台最终按配置的 E2B TTL 回收 |
+| 运行结束超过 60 秒后仍有 Sandbox | 服务端终止期限和即时删除请求均未生效 | 检查运行日志或 Judge Server 日志中的生命周期清理错误 |
 
 ## 常见问题
 

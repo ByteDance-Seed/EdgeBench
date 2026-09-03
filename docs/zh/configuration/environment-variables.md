@@ -46,6 +46,7 @@ SForge 大部分配置可通过 `SFORGE_*` 环境变量注入；仅 CLI/YAML 支
 | `SFORGE_AGENT_API_KEY` | 传递给所选 Agent 的 API 密钥，会映射为该 Agent 需要的环境变量（`ANTHROPIC_AUTH_TOKEN` 或 `CODEX_API_KEY`） |
 | `SFORGE_AGENT_API_BASE_URL` | API Base URL 覆盖，会传递给所选 Agent 支持的 base-url 环境变量 |
 | `SFORGE_AGENT_MODEL` | Agent 模型覆盖 |
+| `SFORGE_AGENT_EFFORT` | Agent 推理强度（`low`、`medium`、`high` 或 `max`） |
 | `SFORGE_AGENT_TIMEOUT` | Agent 超时时间（秒） |
 | `SFORGE_AGENT_EXTRA_ENV` | Agent 容器额外环境变量，格式：`"KEY1=VAL1,KEY2=VAL2"` |
 | `SFORGE_HTTP_PROXY` | 运行阶段注入 Agent 容器的 HTTP 代理。不推荐常规使用；不兼容 `--disable-internet`。 |

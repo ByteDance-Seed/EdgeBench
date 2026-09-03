@@ -56,6 +56,7 @@ Default settings applied to all tasks unless overridden per-task.
 |-------|------|---------|-------------|
 | `agent` | `string` | --- | Agent name (`claude-code`, `codex`) |
 | `model` | `string` | --- | Model override (overrides `model.model` for specific tasks if set per-task) |
+| `effort` | `string` | --- | Reasoning effort (`low`, `medium`, `high`, or `max`); mapped to the selected Agent when supported |
 | `timeout` | `int` | --- | Agent timeout in seconds |
 | `eval_interval` | `int` | --- | Auto-eval interval in seconds |
 | `disable_stop_hook` | `bool` | `false` | Disable the agent stop hook |

@@ -46,6 +46,7 @@ Used when running agents via `sforge run`. These are injected as container envir
 | `SFORGE_AGENT_API_KEY` | API key passed to the selected agent using that agent's expected env var (`ANTHROPIC_AUTH_TOKEN` or `CODEX_API_KEY`) |
 | `SFORGE_AGENT_API_BASE_URL` | API base URL override passed through the selected agent's base-url env var when it has one |
 | `SFORGE_AGENT_MODEL` | Model override for the agent |
+| `SFORGE_AGENT_EFFORT` | Reasoning effort (`low`, `medium`, `high`, or `max`) |
 | `SFORGE_AGENT_TIMEOUT` | Agent timeout in seconds |
 | `SFORGE_AGENT_EXTRA_ENV` | Extra env vars for agent container, format: `"KEY1=VAL1,KEY2=VAL2"` |
 | `SFORGE_HTTP_PROXY` | HTTP proxy injected into the agent container at run time. Not recommended for normal use; incompatible with `--disable-internet`. |

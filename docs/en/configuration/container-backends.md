@@ -295,6 +295,9 @@ existing E2B Template.
 Keep the agent timeout comfortably below the team's maximum Sandbox lifetime.
 The lifetime must also cover agent installation, archive extraction, pending
 Judge evaluations, result collection, and cleanup.
+At cleanup, SForge stops lease renewal, reduces the provider-side lifetime to
+at most 60 seconds, and then requests immediate deletion. This terminal lease
+transition is independent of the runtime TTL configured by the user.
 
 Check each task's `judge.eval_timeout` as well. A Judge Sandbox is subject to
 the same team lifetime limit, so a task whose declared evaluator timeout is
@@ -334,7 +337,7 @@ tasks remove proxy variables entirely. See [Network Isolation](/en/features/netw
 | Template not found | The Template namespace is missing or incorrect, the task image version has no published official Template, or the task uses a modified image | Check `SFORGE_E2B_TEMPLATE_NAMESPACE` and the task image version, or point `SFORGE_E2B_TEMPLATE_MAP` at a self-built Template |
 | Agent-side Judge requests intermittently time out | The Work Sandbox could not reach the Judge Server over the internet | Check that the Judge host and port are publicly reachable, then retry the agent submission |
 | A run ends at the configured task timeout with `Sandbox not found` | The team-level maximum Sandbox lifetime was reached before final extraction and cleanup | Shorten the agent timeout, reduce multi-wave batch duration, or use a plan with a longer Sandbox lifetime |
-| A run leaves a Sandbox | Cleanup failed or the runner was terminated abruptly | Inspect the run log and wait for the configured E2B TTL as the final safeguard |
+| A completed run retains a Sandbox for more than 60 seconds | Both the provider-side termination deadline and the immediate deletion request failed | Inspect the lifecycle cleanup error in the run or Judge Server log |
 
 ## Troubleshooting
 

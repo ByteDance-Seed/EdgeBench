@@ -82,6 +82,9 @@ DEFAULT_EXEC_TIMEOUT = 600
 FILE_TRANSFER_ATTEMPTS = 3
 FILE_TRANSFER_REQUEST_TIMEOUT = 300
 SANDBOX_CREATE_ATTEMPTS = 3
+SANDBOX_CLEANUP_ATTEMPTS = 3
+SANDBOX_LIFECYCLE_REQUEST_TIMEOUT = 10
+SANDBOX_CLEANUP_GRACE_PERIOD = 60
 
 _METADATA_NAME_KEY = "sforge_name"
 _E2B_NAME_PATTERN = re.compile(r"[a-z0-9_-]{1,128}")
@@ -99,6 +102,8 @@ class E2BSandboxHandle(ContainerHandle):
         self._sandbox = sandbox
         self._name = name
         self.default_user = default_user
+        self._lease_lock = threading.Lock()
+        self._closing = False
 
     @property
     def id(self) -> str:
@@ -375,28 +380,65 @@ class E2BBackend(ContainerBackend):
             return
         log = logger_ or logger
         sandbox = self._raw(handle)
-        # Stop extending the lease before deletion. If every kill attempt
-        # fails, E2B's on-timeout=kill lifecycle remains the final safeguard
-        # instead of this process keeping the leaked Sandbox alive forever.
+        # Cleanup is a terminal lease transition, independent of the runtime
+        # TTL selected by the user. Remove the handle from lease renewal first,
+        # then shorten its provider-side deadline before attempting deletion.
+        # If E2B temporarily rejects kill(), on_timeout=kill still reclaims the
+        # Sandbox within the cleanup grace period.
         with self._handles_lock:
             self._handles.pop(handle.id, None)
             self._renewal_wakeup.set()
+        cleanup_deadline_armed = False
+        cleanup_timeout = min(
+            self._sandbox_ttl, SANDBOX_CLEANUP_GRACE_PERIOD,
+        )
+        with handle._lease_lock:
+            handle._closing = True
+            for attempt in range(1, SANDBOX_CLEANUP_ATTEMPTS + 1):
+                try:
+                    sandbox.set_timeout(
+                        cleanup_timeout,
+                        request_timeout=SANDBOX_LIFECYCLE_REQUEST_TIMEOUT,
+                    )
+                    cleanup_deadline_armed = True
+                    break
+                except Exception as exc:
+                    if attempt == SANDBOX_CLEANUP_ATTEMPTS:
+                        log.warning(
+                            "Could not shorten sandbox %s cleanup deadline "
+                            "after %d attempts: %s",
+                            handle.id, attempt, exc,
+                        )
+                    else:
+                        time.sleep(attempt)
         log.info(f"Killing sandbox {handle.name} ({handle.id})...")
-        for attempt in range(1, 4):
+        for attempt in range(1, SANDBOX_CLEANUP_ATTEMPTS + 1):
             try:
-                sandbox.kill()
-                log.info(f"Sandbox {handle.name} killed.")
+                killed = sandbox.kill(
+                    request_timeout=SANDBOX_LIFECYCLE_REQUEST_TIMEOUT,
+                )
+                if killed:
+                    log.info(f"Sandbox {handle.name} killed.")
+                else:
+                    log.info(f"Sandbox {handle.name} was already gone.")
                 return
             except Exception as exc:
-                if attempt == 3:
-                    # Match the docker/k8s cleanup contract: log and rely on
-                    # the on_timeout=kill lifecycle instead of raising.
-                    log.error(
-                        "Failed to kill sandbox %s after %d attempts: %s",
-                        handle.id,
-                        attempt,
-                        exc,
-                    )
+                if attempt == SANDBOX_CLEANUP_ATTEMPTS:
+                    if cleanup_deadline_armed:
+                        log.warning(
+                            "Failed to kill sandbox %s after %d attempts; "
+                            "E2B will reclaim it within %ds: %s",
+                            handle.id, attempt,
+                            cleanup_timeout, exc,
+                        )
+                    else:
+                        message = (
+                            "Failed to arm cleanup deadline and kill sandbox "
+                            "%s after %d attempts; original TTL remains the "
+                            "only safeguard: %s"
+                        ) % (handle.id, attempt, exc)
+                        log.error(message)
+                        raise RuntimeError(message) from exc
                     return
                 time.sleep(attempt)
 
@@ -922,12 +964,21 @@ class E2BBackend(ContainerBackend):
             if woke_early:
                 continue
             for handle in handles:
-                try:
-                    handle.raw.set_timeout(self._sandbox_ttl)
-                except Exception as exc:
-                    logger.warning(
-                        f"Lease renewal failed for sandbox {handle.id}: {exc}"
-                    )
+                self._renew_handle(handle)
+
+    def _renew_handle(self, handle: E2BSandboxHandle) -> None:
+        with handle._lease_lock:
+            if handle._closing:
+                return
+            try:
+                handle.raw.set_timeout(
+                    self._sandbox_ttl,
+                    request_timeout=SANDBOX_LIFECYCLE_REQUEST_TIMEOUT,
+                )
+            except Exception as exc:
+                logger.warning(
+                    f"Lease renewal failed for sandbox {handle.id}: {exc}"
+                )
 
     # --- Helpers ---
 

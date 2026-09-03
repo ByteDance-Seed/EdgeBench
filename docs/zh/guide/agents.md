@@ -4,7 +4,7 @@ SForge 通过插件式的 Agent 注册表管理不同的 Code Agent。运行 Edg
 
 ## Agent 注册表
 
-SForge 内置了 2 种 Agent：
+SForge 内置了以下 Agent：
 
 | Agent 名称 | CLI 名称 | API Key 环境变量 | 模型环境变量 | 默认模型 | Stop Hook | Auto-Resume |
 |-----------|----------|-----------------|-------------|---------|-----------|-------------|
@@ -49,6 +49,17 @@ sforge run --task ad_placement_optimization --agent claude-code
 ```bash
 sforge run --task ad_placement_optimization --agent claude-code --model claude-opus-4-8
 ```
+
+### 推理强度
+
+通过 `--effort` 或 `SFORGE_AGENT_EFFORT` 选择 `low`、`medium`、`high` 或
+`max`。两者均未设置时，Agent 保持自身默认配置。
+
+| Agent | 原生配置 | 说明 |
+|-------|----------|------|
+| Claude Code | `CLAUDE_CODE_EFFORT_LEVEL` | 直接使用所选值 |
+| Codex | `model_reasoning_effort` | 将 `max` 映射为 Codex 的 `xhigh` |
+| opencode | `reasoningEffort` | 对非 Anthropic provider 生效；Anthropic provider 保持自身 thinking 配置 |
 
 ### 额外环境变量
 

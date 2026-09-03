@@ -139,6 +139,7 @@ sforge run --experiment experiment.yaml
 | `--agent` | required* | Agent name (e.g., `claude-code`, `codex`). Required unless `--experiment` is specified. |
 | `--experiment` | --- | Path to experiment YAML config file. If `--task` is omitted, all YAML tasks run; if `--task` is provided, only that subset runs with the experiment settings. |
 | `--model` | --- | Model override (e.g., `claude-opus-4-8`) |
+| `--effort` | Agent default | Reasoning effort (`low`, `medium`, `high`, or `max`). SForge maps the value to the selected Agent when supported. |
 | `--timeout` | `3600` | Agent timeout in seconds |
 | `--eval-interval` | `300` | Auto-eval daemon interval in seconds |
 | `--run-id` | random | Run identifier for tracking and log organization |
