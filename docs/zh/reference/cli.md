@@ -114,7 +114,8 @@ sforge serve --host 0.0.0.0 --port 9090
 
 ## sforge run
 
-在一个或多个任务上运行 Agent。这是评测的核心命令。
+在一个 task 上运行 Agent，或批量调度多个相互独立的 task 评测。每个 task 始终拥有各自的
+Work 环境、Judge session、结果和清理生命周期。
 
 ### 基本用法
 
@@ -122,7 +123,7 @@ sforge serve --host 0.0.0.0 --port 9090
 # 标准 Agent 模式
 sforge run --task ad_placement_optimization --agent claude-code
 
-# 多任务并行运行
+# 批量调度多个独立 task
 sforge run --task ad_placement_optimization gitlet rookiedb --agent claude-code
 
 # 实验配置模式
@@ -133,15 +134,16 @@ sforge run --experiment experiment.yaml
 
 | 选项 | 默认值 | 说明 |
 |------|--------|------|
-| `--task` | 必填* | 一个或多个任务 ID（空格分隔）。多任务时完全并行运行。 |
-| `--agent` | 必填* | Agent 名称（如 `claude-code`、`codex`）。除非指定 `--experiment`，否则必填。 |
+| `--task` | 必填* | 一个或多个任务 ID（空格分隔）。传入多个 ID 时，CLI 批量调度多个独立 task，不会把它们合并为一次评测。 |
+| `--agent` | 必填* | Agent 名称：`claude-code`、`codex`、`opencode`，或固定版本变体（`claude-code-2.1.214`、`codex-0.145.0`）。除非指定 `--experiment`，否则必填。 |
 | `--experiment` | --- | 实验 YAML 配置文件路径。如果未指定 `--task`，运行 YAML 中的全部任务；如果指定了 `--task`，则只运行该子集并套用实验配置。 |
 | `--model` | --- | 模型覆盖（如 `claude-opus-4-8`） |
+| `--effort` | Agent 默认值 | 推理强度（`low`、`medium`、`high` 或 `max`）。SForge 会在所选 Agent 支持时映射到其原生配置。 |
 | `--timeout` | `3600` | Agent 超时时间（秒） |
 | `--eval-interval` | `300` | 自动评测守护进程的间隔时间（秒） |
 | `--run-id` | 随机生成 | 运行标识符，用于跟踪和日志组织 |
 | `--judge-url` | `http://host.docker.internal:8080` | 容器内部看到的 Judge 服务器 URL |
-| `--backend` | `docker` | 容器后端（`docker` 或 `k8s`） |
+| `--backend` | `docker` | 容器后端（`docker`、`k8s` 或 `e2b`） |
 | `--stagger` | --- | 将任务启动均匀分散在 N 秒内（如 `--stagger 300`） |
 | `--max-submissions` | --- | 每次运行的最大 Agent 提交次数 |
 | `--submission-cooldown` | --- | Agent 两次提交之间的最小间隔（秒） |
@@ -152,7 +154,7 @@ sforge run --experiment experiment.yaml
 | `--disable-stop-hook` | `false` | 禁用 stop hook（允许 Agent 正常退出） |
 | `--disable-auto-eval` | `false` | 禁用后台自动评测守护进程 |
 | `--disable-auto-resume` | `false` | 禁用 Agent 异常退出时的自动恢复 |
-| `--disable-internet` | `false` | 强制网络隔离（仅允许 Judge 服务器 + API 访问）。需要 `sudo` 权限来配置 iptables。与 `--enable-internet` 互斥。 |
+| `--disable-internet` | `false` | 强制网络隔离（仅允许 Judge 服务器 + API 访问）。Docker 后端需要免密 `sudo` 配置 iptables；k8s 和 e2b 在集群/服务商侧隔离，不需要。与 `--enable-internet` 互斥。 |
 | `--enable-internet` | `false` | 强制开启完整网络访问（覆盖任务的 `internet: false` 设置）。与 `--disable-internet` 互斥。 |
 
 ::: warning 必填参数
@@ -192,7 +194,7 @@ sforge eval --task ad_placement_optimization --archive - < solution.tar.gz
 | `--run-id` | 自定义运行 ID，用于日志组织 |
 | `--timeout` | 评测超时时间（秒） |
 | `--json` | 同时输出完整的 JSON 报告 |
-| `--backend` | 容器后端（`docker` 或 `k8s`） |
+| `--backend` | 容器后端（`docker`、`k8s` 或 `e2b`） |
 | `--judge-cpu-limit` | Judge 容器的 CPU 数量限制 |
 | `--judge-mem-limit` | Judge 容器的内存限制（如 `'4g'`） |
 

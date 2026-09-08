@@ -34,6 +34,8 @@ Install the released package:
 pip install sforge
 ```
 
+To use the [E2B backend](/en/configuration/container-backends#e2b-backend), include the `e2b` extra: `pip install "sforge[e2b]"`.
+
 Or install from source:
 
 ```bash

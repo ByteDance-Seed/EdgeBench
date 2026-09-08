@@ -4,7 +4,8 @@ title: 容器后端
 
 # 容器后端
 
-SForge 通过容器后端创建 Work 容器和 Judge 容器。默认后端是本机 Docker；当需要把运行负载放到 Kubernetes 集群中时，可以切换到 `k8s` 后端。
+SForge 通过容器后端创建 Work 和 Judge 环境。默认后端是本机 Docker；已有 Kubernetes
+集群时可以使用 `k8s`，需要 E2B 托管远端运行环境时可以使用 `e2b`。
 
 ## 如何选择后端
 
@@ -12,8 +13,10 @@ SForge 通过容器后端创建 Work 容器和 Judge 容器。默认后端是本
 |------|----------|----------|
 | `docker` | 本地开发、调试任务、单机评测、小规模实验 | 本机 Docker daemon 可用 |
 | `k8s` | 共享集群、批量并发评测、希望让 Work/Judge Pod 在集群中运行 | `kubectl` 可访问集群，镜像在集群中可拉取，Judge URL 可从 Pod 访问 |
+| `e2b` | 不自行维护集群或 Judge broker 的远端 Work/Judge 运行 | E2B API 与 E2B Template；详见 [E2B 后端](#e2b-后端) |
 
 如果只是本地试跑任务，优先使用默认的 Docker 后端。Kubernetes 后端更适合已经有集群和镜像仓库的团队环境。
+E2B 后端在首次运行新增或发生变化的任务镜像前，需要先准备 Template。
 
 ::: warning Docker 后端不适合大批量运行
 每个任务会占用一个 Work 容器外加临时 Judge 容器，各自有独立的 CPU/内存限额。单机并发运行大量任务（约 **20 个以上**）即使是高性能服务器也会出现严重的资源争抢。大批量运行请使用 `k8s` 后端。
@@ -29,15 +32,13 @@ sforge run \
   --task ad_placement_optimization \
   --agent claude-code \
   --backend k8s \
-  --judge-url http://10.0.0.12:8080 --backend k8s
+  --judge-url http://10.0.0.12:8080
 
 # 环境变量覆盖
 export SFORGE_BACKEND=k8s
 sforge run \
   --task ad_placement_optimization \
-  --agent claude-code \
-  --backend k8s \
-  --judge-url http://10.0.0.12:8080
+  --agent claude-code
 ```
 
 实验配置中也可以设置默认后端：
@@ -51,7 +52,7 @@ tasks:
   ad_placement_optimization: {}
 ```
 
-## Docker backend
+## Docker 后端
 
 Docker 是默认后端，不需要显式配置：
 
@@ -62,9 +63,7 @@ sforge serve
 export SFORGE_AGENT_API_KEY="sk-..."
 sforge run \
   --task ad_placement_optimization \
-  --agent claude-code \
-  --backend k8s \
-  --judge-url http://10.0.0.12:8080
+  --agent claude-code
 ```
 
 Docker 后端会：
@@ -86,7 +85,7 @@ sforge run \
   --judge-mem-limit 4g
 ```
 
-## Kubernetes backend
+## Kubernetes 后端
 
 Kubernetes 后端通过 `kubectl` 创建 Pod。每个 SForge 容器会对应到集群中的一个 Pod，容器名为 `work`，Pod 使用标签 `app=sforge` 和 `sforge-pod=<pod-name>`。
 
@@ -222,13 +221,102 @@ sforge run \
 - 当前 kubeconfig 需要有创建和删除 `NetworkPolicy` 的权限。
 - 不同集群的默认 DNS、出口网关和策略实现可能不同，建议先用小任务验证隔离效果。
 
+## E2B 后端
+
+E2B 后端使用 E2B Sandbox 运行 Work、Judge 和 Game 环境。Judge Server 本身与其他后端
+一样部署在你自己的主机上：在 Sandbox 可达的机器上启动 `sforge serve`，并通过
+`--judge-url` 传入其地址。
+
+### Docker 镜像与 E2B Template
+
+Docker 镜像和 E2B Template 是两种不同的运行对象：E2B Sandbox 从 Template 启动，
+不能直接传入 Docker image 引用。已发布 EdgeBench 任务的官方 E2B Template 由
+SForge 维护者预先构建并发布，用户不需要执行任何 Template 准备步骤。
+设置 `SFORGE_E2B_TEMPLATE_NAMESPACE` 指定发布 Template 的 namespace。
+`sforge run --backend e2b` 随后会自动推导每个任务镜像对应的公开 Template 引用
+（`edgebench.work.foo_bar:abc123` ->
+`edgebench/edgebench-work-foo-bar:abc123`）。只有需要覆盖该映射时
+（例如为修改过的任务运行自建 Template）才设置 `SFORGE_E2B_TEMPLATE_MAP`。
+
+### 运行任务
+
+在有公网可达地址的主机上启动 Judge Server（E2B Sandbox 里的 Agent 通过公网向它提交）：
+
+```bash
+uv sync --extra e2b
+export E2B_API_KEY=...
+export SFORGE_E2B_TEMPLATE_NAMESPACE=edgebench
+export SFORGE_ADMIN_SECRET=...   # serve 和 run 两台主机需使用同一个值
+
+sforge serve --host 0.0.0.0 --port 8080
+```
+
+然后运行 Agent，`--judge-url` 指向该主机：
+
+```bash
+export E2B_API_KEY=...
+export SFORGE_E2B_TEMPLATE_NAMESPACE=edgebench
+export SFORGE_ADMIN_SECRET=...   # 与 serve 主机一致
+export SFORGE_AGENT_API_KEY=...
+export SFORGE_AGENT_API_BASE_URL=...
+export SFORGE_AGENT_MODEL=...
+
+sforge run \
+  --backend e2b \
+  --task ad_placement_optimization \
+  --agent claude-code \
+  --judge-url http://YOUR_HOST:8080
+```
+
+Judge Server 主机同样需要 `E2B_API_KEY`：e2b 运行注册后，Judge Server 会在 E2B 上
+创建 Judge 和 Game Sandbox（与 k8s 运行让它调度 judge pod 的机制对称）。Work Sandbox
+向 Judge Server 的公网地址提交；Judge Server 通过 E2B service gateway 访问 Game
+Sandbox。
+
+每个 E2B 评测实例只对应一个 task。传入多个 task ID 时，CLI 只是批量调度多个相互独立的
+评测，不会把多个 task 合并进同一个 Work 或 Judge 环境。本文验证采用每条
+`sforge run` 命令运行一个 task 的方式。
+
+### 套餐限制与运行规模
+
+E2B 套餐限制是运行契约的一部分：
+
+- **资源规格**：Template 的 CPU 和内存在构建时固化，超限会在创建 Template 时被拒绝。
+  请按 team 支持的规格重建；`--work-*` 和 `--judge-*` 参数不能调整已有 Template。
+- **Sandbox 生命周期**：Agent timeout 应明显短于套餐的最大 Sandbox 生命周期，后者还要覆盖
+  Agent 安装、归档提取、Judge 评测、读取结果和清理。清理时 SForge 会把剩余生命周期收紧到
+  60 秒内并删除 Sandbox，不受配置的 TTL 影响。
+- **评测超时**：Judge Sandbox 受同样限制，任务的 `judge.eval_timeout` 若超过该限制则可能
+  无法完成。应换更长生命周期的套餐，而不是缩短超时。
+- **并发用量**：任务全并行运行，需按所选任务数为 Work、Judge 和 Game Sandbox 预留容量，
+  并为评测与清理的重叠阶段留出余量。
+- **最终分数**：与其他后端一致，取已完成的 agent 或 auto-eval submission 中的最佳结果。
+  `final_archive.tar.gz` 是恢复快照，timeout 时不会隐式提交。短任务应保证至少一次 auto-eval
+  能完成，或让 Agent 在结束前执行 `sforge-submit`。
+
+### 用户需要提供的内容
+
+| 输入 | 需要场景 |
+| --- | --- |
+| `E2B_API_KEY` | E2B 运行（`sforge run` 主机和 Judge Server 主机都需要） |
+| 公网可达的 `--judge-url` | 所有 E2B 运行 |
+| Agent API key、base URL 和模型 | 运行 Agent |
+
+宿主机的 `HTTP_PROXY` 和 `HTTPS_PROXY` 不会复制到 E2B Work、Judge 或 Game Sandbox。
+只有用户显式配置 `SFORGE_HTTP_PROXY` 或 `SFORGE_HTTPS_PROXY` 时，远端可访问的代理才会
+被转发；网络隔离任务会移除全部代理变量。详见[网络隔离](/zh/features/network-isolation)。
+
 ## 常见问题
 
-| 现象 | 可能原因 | 处理方式 |
-|------|----------|----------|
-| `kubectl cluster-info failed` | kubeconfig 不正确、集群不可达或 namespace 参数有误 | 检查 `kubectl -n <namespace> cluster-info`；必要时设置 `SFORGE_K8S_KUBECONFIG` 和 `SFORGE_K8S_NAMESPACE` |
-| Pod 一直无法 Running | 镜像拉取失败、调度失败或资源不足 | 使用 `kubectl -n <namespace> describe pod <pod>` 查看事件 |
-| Pod 拉不到镜像 | 镜像没有推送到集群可访问的 registry，或 registry 凭证未配置 | 先 `sforge push`；确认 `SFORGE_K8S_IMAGE_REGISTRY` 正确；为 namespace 配置 image pull secret |
-| Work Pod 无法提交评测 | `--judge-url` 不是 Pod 可访问地址，或 Judge server 没有监听外部地址 | 用 `--host 0.0.0.0` 启动 `sforge serve`，并通过 `--judge-url` 设置 Pod 可访问的 IP/Service URL |
-| `--disable-internet` 没有效果 | 集群 CNI 不支持 NetworkPolicy 或策略权限不足 | 确认 CNI 支持 NetworkPolicy，并检查当前身份是否能创建 NetworkPolicy |
-| node selector 后 Pod Pending | 没有节点匹配 selector | 检查 `SFORGE_K8S_NODE_SELECTOR` 和节点标签 |
+| 后端 | 现象 | 可能原因 | 处理方式 |
+| --- | --- | --- | --- |
+| Kubernetes | `kubectl cluster-info failed` | kubeconfig 不正确、集群不可达或 namespace 参数有误 | 检查 `kubectl -n <namespace> cluster-info`；必要时设置 `SFORGE_K8S_KUBECONFIG` 和 `SFORGE_K8S_NAMESPACE` |
+| Kubernetes | Pod 一直无法 Running | 镜像拉取失败、调度失败或资源不足 | 使用 `kubectl -n <namespace> describe pod <pod>` 查看事件 |
+| Kubernetes | Pod 拉不到镜像 | 镜像对集群节点不可见，或 registry 凭证未配置 | 先 `sforge push`；确认 `SFORGE_K8S_IMAGE_REGISTRY`；为 namespace 配置 image pull secret |
+| Kubernetes | Work Pod 无法提交评测 | Judge URL 对 Pod 不可达，或服务没有监听外部地址 | 用 `--host 0.0.0.0` 启动 `sforge serve`，并设置 Pod 可访问的 IP 或 Service URL |
+| Kubernetes | `--disable-internet` 没有效果 | CNI 不执行 NetworkPolicy，或权限不足 | 确认 CNI 支持 NetworkPolicy，并检查当前身份的权限 |
+| Kubernetes | 配置 node selector 后 Pod Pending | 没有节点匹配 selector | 检查 `SFORGE_K8S_NODE_SELECTOR` 和节点标签 |
+| E2B | 找不到 Template | Template namespace 缺失或错误、该任务镜像版本没有已发布的官方 Template，或任务使用了修改过的镜像 | 检查 `SFORGE_E2B_TEMPLATE_NAMESPACE` 和任务镜像版本，或用 `SFORGE_E2B_TEMPLATE_MAP` 指向自建 Template |
+| E2B | Agent 侧 Judge 请求偶发超时 | Work Sandbox 无法通过公网访问 Judge Server | 确认 Judge 主机和端口公网可达后重试提交 |
+| E2B | task timeout 到达时出现 `Sandbox not found` | 在最终归档和清理前达到了 team 级 Sandbox 最大生命周期 | 缩短 Agent timeout、减少多波次批次总时长，或使用支持更长 Sandbox 生命周期的套餐 |
+| E2B | 运行结束超过 60 秒后仍有 Sandbox | 服务端终止期限和即时删除请求均未生效 | 检查运行日志或 Judge Server 日志中的生命周期清理错误 |

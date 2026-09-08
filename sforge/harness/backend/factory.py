@@ -27,6 +27,9 @@ def create_backend(
     k8s_node_selector: dict[str, str] | None = None,
     k8s_image_registry: str = "",
     k8s_kubeconfig: str | None = None,
+    e2b_template_map: dict[str, str] | None = None,
+    e2b_template_namespace: str | None = None,
+    e2b_sandbox_ttl: int | None = None,
 ) -> ContainerBackend:
     if name == "docker":
         from sforge.harness.backend.docker_backend import DockerBackend
@@ -41,5 +44,13 @@ def create_backend(
             image_registry=k8s_image_registry,
             kubeconfig=k8s_kubeconfig,
         )
-    else:
-        raise ValueError(f"Unknown backend: {name!r}. Must be 'docker' or 'k8s'.")
+    elif name == "e2b":
+        from sforge.harness.backend.e2b_backend import E2BBackend
+
+        return E2BBackend(
+            template_map=e2b_template_map,
+            template_namespace=e2b_template_namespace,
+            sandbox_ttl=e2b_sandbox_ttl,
+        )
+    supported = "docker, k8s, e2b"
+    raise ValueError(f"Unknown backend: {name!r}. Must be one of: {supported}.")

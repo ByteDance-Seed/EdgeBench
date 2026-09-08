@@ -278,6 +278,8 @@ def build_allowed_endpoints(
     api_url: str | None,
     gateway_ip: str,
     logger: logging.Logger,
+    *,
+    resolve_hostnames: bool = True,
 ) -> list[AllowedEndpoint]:
     """Build the whitelist of TCP endpoints from judge + API URLs."""
     endpoints: list[AllowedEndpoint] = []
@@ -289,6 +291,10 @@ def build_allowed_endpoints(
         endpoints.append(AllowedEndpoint(ip=gateway_ip, port=judge_port))
     elif is_ip_address(judge_host):
         endpoints.append(AllowedEndpoint(ip=judge_host, port=judge_port))
+    elif not resolve_hostnames:
+        endpoints.append(
+            AllowedEndpoint(ip="", port=judge_port, hostname=judge_host)
+        )
     else:
         for ip in resolve_hostname(judge_host, logger):
             endpoints.append(AllowedEndpoint(ip=ip, port=judge_port, hostname=judge_host))
@@ -301,6 +307,10 @@ def build_allowed_endpoints(
             endpoints.append(AllowedEndpoint(ip=gateway_ip, port=api_port))
         elif is_ip_address(api_host):
             endpoints.append(AllowedEndpoint(ip=api_host, port=api_port))
+        elif not resolve_hostnames:
+            endpoints.append(
+                AllowedEndpoint(ip="", port=api_port, hostname=api_host)
+            )
         else:
             for ip in resolve_hostname(api_host, logger):
                 endpoints.append(

@@ -43,9 +43,10 @@ SForge 大部分配置可通过 `SFORGE_*` 环境变量注入；仅 CLI/YAML 支
 
 | 变量 | 用途 |
 |------|------|
-| `SFORGE_AGENT_API_KEY` | 传递给所选 Agent 的 API 密钥，会映射为该 Agent 需要的环境变量（`ANTHROPIC_AUTH_TOKEN` 或 `CODEX_API_KEY`） |
+| `SFORGE_AGENT_API_KEY` | 传递给所选 Agent 的 API 密钥，会映射为该 Agent 需要的环境变量（Claude Code 为 `ANTHROPIC_AUTH_TOKEN`，Codex 为 `CODEX_API_KEY`，OpenCode 为 `ANTHROPIC_API_KEY`） |
 | `SFORGE_AGENT_API_BASE_URL` | API Base URL 覆盖，会传递给所选 Agent 支持的 base-url 环境变量 |
 | `SFORGE_AGENT_MODEL` | Agent 模型覆盖 |
+| `SFORGE_AGENT_EFFORT` | Agent 推理强度（`low`、`medium`、`high` 或 `max`） |
 | `SFORGE_AGENT_TIMEOUT` | Agent 超时时间（秒） |
 | `SFORGE_AGENT_EXTRA_ENV` | Agent 容器额外环境变量，格式：`"KEY1=VAL1,KEY2=VAL2"` |
 | `SFORGE_HTTP_PROXY` | 运行阶段注入 Agent 容器的 HTTP 代理。不推荐常规使用；不兼容 `--disable-internet`。 |
@@ -59,6 +60,10 @@ SForge 大部分配置可通过 `SFORGE_*` 环境变量注入；仅 CLI/YAML 支
 把 `SFORGE_HTTP_PROXY` / `SFORGE_HTTPS_PROXY` 直接注入 Agent 容器，会让容器通过代理获得网络访问能力。这个方式只适合极少数运行时下载依赖的场景，**不推荐**用于 LLM API 访问。
 
 它也不兼容网络隔离模式（`--disable-internet`）。如果需要在网络隔离下通过企业代理访问 LLM API，请在宿主机运行 `sforge proxy`，并把 `SFORGE_AGENT_API_BASE_URL` 指向 `http://host.docker.internal:<port>`。
+
+对于 E2B，宿主机通用的 `HTTP_PROXY` / `HTTPS_PROXY` 不会自动传入 Work Sandbox。只有
+显式设置 `SFORGE_` 代理变量且远端能够访问该代理时才应转发；隔离模式始终移除代理并由
+E2B 原生域名白名单直接放行。
 :::
 
 ## Judge 变量
@@ -66,6 +71,7 @@ SForge 大部分配置可通过 `SFORGE_*` 环境变量注入；仅 CLI/YAML 支
 | 变量 | 用途 |
 |------|------|
 | `SFORGE_JUDGE_EXTRA_ENV` | Judge 容器额外环境变量，格式：`"KEY1=VAL1,KEY2=VAL2"` |
+| `SFORGE_ADMIN_SECRET` | 可信 Host 用于注册 Judge 会话和 auto-eval 的凭证；未设置时在 `SFORGE_LOG_DIR` 下生成权限为 `0600` 的 secret 文件，不得注入 Work 容器。 |
 
 ## 资源限制变量
 
@@ -80,11 +86,14 @@ Judge CPU/内存限制目前通过 CLI 参数（`--judge-cpu-limit`、`--judge-m
 
 | 变量 | 默认值 | 用途 |
 |------|--------|------|
-| `SFORGE_BACKEND` | `docker` | 容器后端：`docker` 或 `k8s` |
+| `SFORGE_BACKEND` | `docker` | 容器后端：`docker`、`k8s` 或官方 `e2b` |
 | `SFORGE_K8S_NAMESPACE` | `default` | Kubernetes 命名空间 |
 | `SFORGE_K8S_IMAGE_REGISTRY` | --- | K8s 镜像拉取使用的容器镜像仓库 |
 | `SFORGE_K8S_KUBECONFIG` | --- | kubeconfig 文件路径 |
 | `SFORGE_K8S_NODE_SELECTOR` | --- | K8s Pod 的节点选择器，格式：`"key1=val1,key2=val2"` |
+| `SFORGE_E2B_TEMPLATE_MAP` | --- | E2B image key 到 Template 的显式映射，覆盖自动推导的名称。支持内联 `"image_key=template,..."`，或以 `.json` 结尾的 JSON 对象文件路径 |
+| `SFORGE_E2B_TEMPLATE_NAMESPACE` | --- | 已发布 E2B Template 的 namespace（例如 `edgebench`） |
+| `SFORGE_E2B_SANDBOX_TTL` | `3600` | E2B Sandbox TTL（秒） |
 
 ## 路径变量
 

@@ -20,27 +20,26 @@ import argparse
 import concurrent.futures
 import copy
 import json
+import os
 import signal
 import sys
 import threading
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 import docker
 
+from sforge.harness.benchmark import load_benchmark
 from sforge.harness.config import SForgeConfig, create_backend_from_config, load_config
 from sforge.harness.constants import DEFAULT_EVAL_INTERVAL
 from sforge.harness.docker_build import (
     build_all_images,
-    build_work_image,
-    build_judge_image,
     pull_all_images,
     push_all_images,
 )
-from sforge.harness.docker_utils import cleanup_container
 from sforge.harness.run_evaluation import judge_submission
-from sforge.harness.benchmark import load_benchmark
-from sforge.harness.task_spec import TaskSpec, make_task_spec, load_all_tasks
+from sforge.harness.task_spec import TaskSpec, load_all_tasks, make_task_spec
 
 
 def _resolve_task(args, config: SForgeConfig) -> TaskSpec:
@@ -252,6 +251,10 @@ def _run_single_task(
     from sforge.harness.agent import create_agent
     from sforge.harness.run_agent import run_agent
 
+    # CLI --effort wins over experiment/env values already on the config.
+    if getattr(args, "effort", None):
+        config.agent_effort = args.effort
+
     agent = create_agent(args.agent, config)
     effective_timeout = args.timeout or config.agent_timeout or agent.timeout
     disable_stop_hook = getattr(args, "disable_stop_hook", False)
@@ -273,6 +276,8 @@ def _run_single_task(
     print(f"  Timeout:     {effective_timeout}s")
     if args.model or config.agent_model or agent.default_model:
         print(f"  Model:       {args.model or config.agent_model or agent.default_model}")
+    if config.agent_effort:
+        print(f"  Effort:      {config.agent_effort}")
     if not task_spec.game_mode:
         eval_status = f"{effective_eval_interval}s" if not disable_auto_eval and effective_eval_interval > 0 else "disabled"
         print(f"  Auto-eval:   {eval_status}")
@@ -340,6 +345,7 @@ def _run_single_task(
         "task": task_spec.task_id,
         "run_id": run_id,
         "model": args.model or config.agent_model or agent.default_model,
+        "effort": config.agent_effort,
         **result.to_dict(),
     }
     (run_log_dir / "final_result.json").write_text(
@@ -407,6 +413,9 @@ def _apply_experiment_overrides(
 
     if task_args.model is None and merged.model is not None:
         task_args.model = merged.model
+
+    if getattr(task_args, "effort", None) is None and merged.effort is not None:
+        task_config.agent_effort = merged.effort
 
     if task_args.timeout is None and merged.timeout is not None:
         task_args.timeout = merged.timeout
@@ -481,6 +490,7 @@ def _effective_config_dict(
         "task_id": task_spec.task_id,
         "agent": agent_name,
         "model": model,
+        "effort": getattr(args, "effort", None) or config.agent_effort,
         "timeout": timeout,
         "eval_interval": eval_interval,
         "disable_stop_hook": getattr(args, "disable_stop_hook", False),
@@ -498,9 +508,19 @@ def _effective_config_dict(
     if config.agent_api_base_url:
         d["api_base_url"] = config.agent_api_base_url
     if config.agent_api_key:
-        d["api_key"] = config.agent_api_key[:8] + "..."
+        d["api_key"] = "<redacted>"
     if config.agent_extra_env:
-        d["extra_env"] = config.agent_extra_env
+        sensitive_markers = ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL")
+        d["extra_env"] = {
+            key: (
+                "<redacted>"
+                if any(marker in key.upper() for marker in sensitive_markers)
+                else value
+            )
+            for key, value in config.agent_extra_env.items()
+        }
+    if config.e2b_template_namespace:
+        d["e2b_template_namespace"] = config.e2b_template_namespace
     return d
 
 
@@ -520,7 +540,6 @@ def cmd_run(args):
 
     # Apply experiment-level backend/judge_url defaults before creating backend
     if experiment:
-        from sforge.harness.experiment import resolve_task_overrides
         exp_defaults = experiment.defaults
         if exp_defaults.backend and base_config.backend == "docker" and getattr(args, "backend", None) is None:
             base_config.backend = exp_defaults.backend
@@ -535,8 +554,6 @@ def cmd_run(args):
     else:
         print("Error: --task or --experiment is required")
         sys.exit(1)
-
-    backend = create_backend_from_config(base_config)
 
     run_id = args.run_id or uuid.uuid4().hex[:12]
     multi = len(task_specs) > 1
@@ -574,6 +591,28 @@ def cmd_run(args):
         "tasks": unified_tasks,
     }
     (run_root / "run_config.json").write_text(json.dumps(unified, indent=2, ensure_ascii=False))
+
+    backend_names = {task_config.backend for _, task_config, _ in task_runs}
+    if len(backend_names) != 1:
+        raise ValueError(
+            "A run must use one container backend; resolved backends: "
+            + ", ".join(sorted(backend_names))
+        )
+    base_config.backend = backend_names.pop()
+    backend = create_backend_from_config(base_config)
+    if backend.backend_name == "e2b":
+        unroutable = [
+            ta.judge_url for _, _, ta in task_runs
+            if urlparse(ta.judge_url).hostname == "host.docker.internal"
+        ]
+        if unroutable:
+            print(
+                "Error: the e2b backend needs a Judge Server the sandboxes "
+                "can reach. Start `sforge serve` on a routable host and pass "
+                "its address via --judge-url.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     # Resolve stagger: CLI flag wins over experiment YAML
     stagger = args.stagger
@@ -743,8 +782,9 @@ def cmd_serve(args):
     """Start the judge HTTP server."""
     config = _make_config(args)
 
-    from sforge.harness.judge_server import create_app
     import uvicorn
+
+    from sforge.harness.judge_server import create_app
 
     app = create_app(config)
     print(f"Starting SForge judge server on port {args.port}")
@@ -787,8 +827,9 @@ def cmd_proxy(args):
 
 def cmd_visualizer(args):
     """Start the run-results visualizer web UI."""
-    from sforge.visualizer.server import create_app as create_viz_app
     import uvicorn
+
+    from sforge.visualizer.server import create_app as create_viz_app
 
     config = _make_config(args)
     runs_dir = Path(args.runs_dir).resolve()
@@ -842,6 +883,7 @@ def cmd_list(args):
 def cmd_fetch_tasks(args):
     """Download benchmark task definitions from HuggingFace Hub."""
     from huggingface_hub import snapshot_download
+
     from sforge.harness.constants import BENCHMARK_REGISTRY, DEFAULT_BENCHMARK
 
     benchmark = args.benchmark or DEFAULT_BENCHMARK
@@ -931,15 +973,20 @@ def main():
 
     # run
     p_run = subparsers.add_parser("run", help="Run an agent on one or more tasks")
-    p_run.add_argument("--backend", choices=["docker", "k8s"], default=None,
+    p_run.add_argument("--backend", choices=["docker", "k8s", "e2b"], default=None,
                        help="Container backend (default from SFORGE_BACKEND or 'docker')")
     p_run.add_argument("--task", default=None, nargs="+",
                        help="One or more task IDs (e.g. --task ahc056 ahc057). "
                             "Multiple tasks are run fully in parallel.")
     p_run.add_argument("--experiment", default=None,
                        help="Path to experiment YAML config file (model config + per-task overrides)")
-    p_run.add_argument("--agent", default=None, help="Agent name (claude-code, aider, codex)")
+    p_run.add_argument("--agent", default=None, help="Agent name (claude-code, codex, opencode)")
     p_run.add_argument("--model", default=None, help="Model override")
+    p_run.add_argument("--effort", default=None,
+                       choices=["low", "medium", "high", "max"],
+                       help="Reasoning effort; each agent translates to its native "
+                            "mechanism (claude-code env, codex/opencode config). "
+                            "Default: agent's own default")
     p_run.add_argument("--timeout", type=int, default=None, help="Agent timeout in seconds")
     p_run.add_argument("--eval-interval", type=int, default=None, help=f"Auto-eval interval in seconds (default {DEFAULT_EVAL_INTERVAL})")
     p_run.add_argument("--disable-auto-eval", action="store_true", default=False,
@@ -980,7 +1027,7 @@ def main():
 
     # eval
     p_eval = subparsers.add_parser("eval", help="Evaluate an archive")
-    p_eval.add_argument("--backend", choices=["docker", "k8s"], default=None,
+    p_eval.add_argument("--backend", choices=["docker", "k8s", "e2b"], default=None,
                         help="Container backend (default from SFORGE_BACKEND or 'docker')")
     p_eval.add_argument("--task", required=True, help="Task ID")
     p_eval.add_argument("--archive", required=True, help="Path to .tar.gz archive (or - for stdin)")

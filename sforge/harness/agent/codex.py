@@ -70,6 +70,14 @@ fi''',
             prompt_path, model=model, cwd=cwd, internet=internet, resume=resume,
         )
 
+        effort = self._config.agent_effort
+        if effort:
+            # codex vocabulary tops out at "xhigh" where ours says "max".
+            effort = {"max": "xhigh"}.get(effort, effort)
+            cmd = cmd.replace(
+                "codex exec", f'codex exec -c model_reasoning_effort="{effort}"', 1,
+            )
+
         if not internet:
             cmd = cmd.replace(
                 "codex exec", 'codex exec -c web_search="disabled"', 1,
@@ -142,6 +150,18 @@ chown -R agent:agent /home/agent/.codex
         if result.exit_code != 0:
             raise RuntimeError(f"Failed to configure Codex hooks: {result.output}")
         logger.info("Configured Codex hooks")
+
+
+class Codex0_145_0Agent(CodexAgent):
+    """Codex pinned to 0.145.0. Kept as a separate agent so existing
+    codex (0.130.0) results stay comparable."""
+
+    name = "codex-0.145.0"
+    install_cmds = [
+        CodexAgent.install_cmds[0],
+        "sudo -E npm install -g @openai/codex@0.145.0",
+        CodexAgent.install_cmds[2],
+    ]
 
 
 # ---------------------------------------------------------------------------

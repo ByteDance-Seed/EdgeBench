@@ -25,15 +25,17 @@ import uuid
 from pathlib import Path, PurePosixPath
 
 from sforge.harness.backend import ContainerBackend
-from sforge.harness.config import SForgeConfig, get_container_env
-from sforge.harness.constants import (
-    DOCKER_USER,
+from sforge.harness.config import (
+    SForgeConfig,
+    get_container_env,
+    sanitize_e2b_proxy_env,
 )
+from sforge.harness.constants import DOCKER_USER
 from sforge.harness.docker_build import (
     BuildImageError,
     build_judge_image,
-    setup_logger,
     close_logger,
+    setup_logger,
 )
 from sforge.harness.grading import EvalReport, grade_output
 from sforge.harness.score_rescale import rescale_score
@@ -155,6 +157,8 @@ def judge_submission(
         # 2. Create + start ephemeral container
         container_name = f"{task_spec.benchmark_name}.judge.{task_spec.task_id}.{submission_id}"
         env = get_container_env(config, include_judge_extra=True)
+        if backend.backend_name == "e2b":
+            sanitize_e2b_proxy_env(env)
         env.setdefault("SFORGE_JUDGE_URL", "http://host.docker.internal:8080")
         # Resolve resource limits: config > task defaults
         cpu = config.judge_cpu_limit if config.judge_cpu_limit is not None else task_spec.judge.cpu_limit
@@ -183,7 +187,10 @@ def judge_submission(
             # List archive contents
             list_result = backend.exec_run(
                 handle,
-                f"tar tzf {tar_path}",
+                # --quoting-style=literal: GNU tar octal-escapes non-ASCII
+                # names in listings under some locales, which breaks the
+                # submit_paths match for CJK filenames
+                f"tar --quoting-style=literal -tzf {tar_path}",
                 workdir=task_spec.cwd,
                 user=DOCKER_USER,
             )
@@ -237,10 +244,12 @@ def judge_submission(
         eval_script_local.write_text(task_spec.eval_script)
         backend.copy_to_container(handle, eval_script_local, PurePosixPath("/tmp/eval.sh"))
 
-        # 5. Run eval script
+        # 5. Run eval script. workdir matters for eval_cmds that use relative
+        # paths: docker defaults to the image WORKDIR but envd execs land in
+        # the user's home, so pin the task cwd explicitly.
         logger.info("Running eval script...")
         result = backend.exec_run_with_timeout(
-            handle, "/bin/bash /tmp/eval.sh", timeout
+            handle, "/bin/bash /tmp/eval.sh", timeout, workdir=task_spec.cwd
         )
         test_output, timed_out, runtime = result.output, result.timed_out, result.elapsed_seconds
 
@@ -280,5 +289,7 @@ def judge_submission(
             raw_output=str(e),
         )
     finally:
-        backend.cleanup_container(handle, logger)
-        close_logger(logger)
+        try:
+            backend.cleanup_container(handle, logger)
+        finally:
+            close_logger(logger)

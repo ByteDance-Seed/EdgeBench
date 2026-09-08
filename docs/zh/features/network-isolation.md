@@ -25,6 +25,7 @@ sforge run --task <task> --agent claude-code --enable-internet
 |---------|----------|
 | Docker | 宿主机 iptables/ip6tables 规则 |
 | Kubernetes | Kubernetes NetworkPolicy |
+| E2B | E2B `update_network` allow/deny 规则 |
 
 ## 允许访问的端点
 
@@ -96,6 +97,14 @@ sforge run \
 ::: warning
 NetworkPolicy 是否真正生效取决于集群 CNI。部分集群即使成功创建 NetworkPolicy，也可能不会实际拦截流量。首次使用时建议用小任务验证隔离效果。
 :::
+
+## E2B backend
+
+E2B backend 通过官方 `update_network` API 下发白名单。E2B 规则按 Host
+生效，不支持端口粒度；允许某个域名意味着允许访问该域名的所有端口。E2B API
+当前接受 IPv4 全流量选择器（`0.0.0.0/0`），但会拒绝 `::/0`，因此 SForge 使用平台
+支持的选择器，不发送无效的 IPv6 规则。deny 规则会一直保留到 Sandbox 被删除，宿主机
+通用代理变量也不会自动传入 E2B Sandbox。
 
 ## 配合代理使用：`sforge proxy`
 

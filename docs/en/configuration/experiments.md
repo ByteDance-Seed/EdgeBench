@@ -54,8 +54,9 @@ Default settings applied to all tasks unless overridden per-task.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `agent` | `string` | --- | Agent name (`claude-code`, `codex`) |
+| `agent` | `string` | --- | Agent name (`claude-code`, `codex`, `opencode`, or a pinned variant such as `claude-code-2.1.214`) |
 | `model` | `string` | --- | Model override (overrides `model.model` for specific tasks if set per-task) |
+| `effort` | `string` | --- | Reasoning effort (`low`, `medium`, `high`, or `max`); mapped to the selected Agent when supported |
 | `timeout` | `int` | --- | Agent timeout in seconds |
 | `eval_interval` | `int` | --- | Auto-eval interval in seconds |
 | `disable_stop_hook` | `bool` | `false` | Disable the agent stop hook |
@@ -63,7 +64,7 @@ Default settings applied to all tasks unless overridden per-task.
 | `disable_auto_resume` | `bool` | `false` | Disable auto-resume on abnormal agent exit |
 | `internet` | `bool` | --- | Enable/disable internet access |
 | `extra_env` | `dict` | --- | Extra environment variables injected into the agent container |
-| `backend` | `string` | --- | Container backend (`docker` or `k8s`) |
+| `backend` | `string` | --- | Container backend (`docker`, `k8s`, or `e2b`) |
 | `judge_url` | `string` | --- | Judge server URL override |
 | `max_submissions` | `int` | --- | Maximum number of agent submissions per run |
 | `submission_cooldown` | `int` | --- | Minimum seconds between agent submissions |

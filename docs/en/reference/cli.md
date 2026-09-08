@@ -114,7 +114,9 @@ The server exposes the [Judge HTTP API](/en/reference/judge-api) and handles bot
 
 ## sforge run
 
-Run an agent on one or more tasks. This is the primary command for evaluation.
+Run an agent on one task, or batch-schedule independent evaluations for several
+tasks. Each task always has its own Work environment, Judge session, results,
+and cleanup lifecycle.
 
 ### Basic usage
 
@@ -122,7 +124,7 @@ Run an agent on one or more tasks. This is the primary command for evaluation.
 # Standard agent mode
 sforge run --task ad_placement_optimization --agent claude-code
 
-# Multiple tasks in parallel
+# Batch-schedule independent task runs
 sforge run --task ad_placement_optimization gitlet rookiedb --agent claude-code
 
 # Experiment config mode
@@ -133,15 +135,16 @@ sforge run --experiment experiment.yaml
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--task` | required* | One or more task IDs (space-separated). Multiple tasks run fully in parallel. |
-| `--agent` | required* | Agent name (e.g., `claude-code`, `codex`). Required unless `--experiment` is specified. |
+| `--task` | required* | One or more task IDs (space-separated). Multiple IDs batch-schedule independent task runs; they are not combined into one evaluation. |
+| `--agent` | required* | Agent name: `claude-code`, `codex`, `opencode`, or a pinned variant (`claude-code-2.1.214`, `codex-0.145.0`). Required unless `--experiment` is specified. |
 | `--experiment` | --- | Path to experiment YAML config file. If `--task` is omitted, all YAML tasks run; if `--task` is provided, only that subset runs with the experiment settings. |
 | `--model` | --- | Model override (e.g., `claude-opus-4-8`) |
+| `--effort` | Agent default | Reasoning effort (`low`, `medium`, `high`, or `max`). SForge maps the value to the selected Agent when supported. |
 | `--timeout` | `3600` | Agent timeout in seconds |
 | `--eval-interval` | `300` | Auto-eval daemon interval in seconds |
 | `--run-id` | random | Run identifier for tracking and log organization |
 | `--judge-url` | `http://host.docker.internal:8080` | Judge server URL as seen from inside the container |
-| `--backend` | `docker` | Container backend (`docker` or `k8s`) |
+| `--backend` | `docker` | Container backend (`docker`, `k8s`, or `e2b`) |
 | `--stagger` | --- | Spread task launches evenly over N seconds (e.g., `--stagger 300`) |
 | `--max-submissions` | --- | Maximum number of agent submissions per run |
 | `--submission-cooldown` | --- | Minimum seconds between agent submissions |
@@ -152,7 +155,7 @@ sforge run --experiment experiment.yaml
 | `--disable-stop-hook` | `false` | Disable the stop hook (allow agent to exit normally) |
 | `--disable-auto-eval` | `false` | Disable the background auto-evaluation daemon |
 | `--disable-auto-resume` | `false` | Disable auto-resume on abnormal agent exit |
-| `--disable-internet` | `false` | Force network isolation (only judge server + API allowed). Requires `sudo` for iptables. Mutually exclusive with `--enable-internet`. |
+| `--disable-internet` | `false` | Force network isolation (only judge server + API allowed). On the Docker backend this requires passwordless `sudo` for iptables; k8s and e2b isolate inside the cluster/provider. Mutually exclusive with `--enable-internet`. |
 | `--enable-internet` | `false` | Force full internet access (overrides per-task `internet: false` setting). Mutually exclusive with `--disable-internet`. |
 
 ::: warning Requirement
@@ -192,7 +195,7 @@ sforge eval --task ad_placement_optimization --archive - < solution.tar.gz
 | `--run-id` | Custom run ID for log organization |
 | `--timeout` | Evaluation timeout in seconds |
 | `--json` | Also output the full JSON report |
-| `--backend` | Container backend (`docker` or `k8s`) |
+| `--backend` | Container backend (`docker`, `k8s`, or `e2b`) |
 | `--judge-cpu-limit` | Number of CPUs for judge container |
 | `--judge-mem-limit` | Memory limit for judge container (e.g., `'4g'`) |
 

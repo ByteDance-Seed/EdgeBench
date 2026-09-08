@@ -42,6 +42,14 @@ class StreamingExecResult:
     elapsed_seconds: float = 0.0
 
 
+@dataclass(frozen=True)
+class ServiceEndpoint:
+    """A routable service URL and provider gateway credentials."""
+
+    url: str
+    headers: dict[str, str] = field(default_factory=dict)
+
+
 class ContainerHandle(abc.ABC):
     """Opaque handle to a running container or pod."""
 
@@ -183,6 +191,14 @@ class ContainerBackend(abc.ABC):
     @abc.abstractmethod
     def get_container_ip(self, handle: ContainerHandle) -> str:
         ...
+
+    def get_service_endpoint(
+        self, handle: ContainerHandle, port: int,
+    ) -> ServiceEndpoint:
+        """Return the URL plus headers needed to cross the provider gateway."""
+        return ServiceEndpoint(
+            url=f"http://{self.get_container_ip(handle)}:{port}",
+        )
 
     @abc.abstractmethod
     def get_container_gateway_ip(self, handle: ContainerHandle) -> str | None:

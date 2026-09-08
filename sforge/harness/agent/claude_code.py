@@ -55,6 +55,9 @@ class ClaudeCodeAgent(Agent):
             env["CLAUDE_CODE_ATTRIBUTION_HEADER"] = "0"
         if not self._config.agent_api_base_url and self._config.agent_api_key:
             env["ANTHROPIC_API_KEY"] = self._config.agent_api_key
+        # setdefault so an explicit extra_env value stays authoritative.
+        if self._config.agent_effort:
+            env.setdefault("CLAUDE_CODE_EFFORT_LEVEL", self._config.agent_effort)
 
     def format_run_cmd(
         self,
@@ -110,7 +113,26 @@ class ClaudeCodeAgent(Agent):
             local_settings,
             PurePosixPath("/home/agent/.claude/settings.json"),
         )
+        result = backend.exec_run(
+            handle, "chown -R agent:agent /home/agent/.claude", user="root",
+        )
+        if result.exit_code != 0:
+            raise RuntimeError(
+                f"Failed to set Claude Code config ownership: {result.output}"
+            )
         logger.info("Configured Claude Code settings with hooks")
+
+
+class ClaudeCode2_1_214Agent(ClaudeCodeAgent):
+    """Claude Code pinned to 2.1.214 — required by Claude 5-family models
+    (Fable/Mythos); the 2.1.159 pin predates them. Kept as a separate agent
+    so existing claude-code results stay comparable."""
+
+    name = "claude-code-2.1.214"
+    install_cmds = [
+        ClaudeCodeAgent.install_cmds[0],
+        "sudo -E npm install -g @anthropic-ai/claude-code@2.1.214",
+    ]
 
 
 # ---------------------------------------------------------------------------

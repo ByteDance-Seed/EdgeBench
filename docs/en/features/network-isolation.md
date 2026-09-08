@@ -25,6 +25,7 @@ The implementation of `--disable-internet` depends on the container backend:
 |---------|----------------|
 | Docker | Host-side iptables/ip6tables rules |
 | Kubernetes | Kubernetes NetworkPolicy |
+| E2B | E2B `update_network` allow/deny rules |
 
 ## Allowed Endpoints
 
@@ -96,6 +97,16 @@ sforge run \
 ::: warning
 Whether NetworkPolicy actually blocks traffic depends on the cluster CNI. Some clusters allow NetworkPolicy objects to be created but do not enforce them. Validate isolation with a small task before relying on it.
 :::
+
+## E2B Backend
+
+The E2B backend applies the allowlist with the official `update_network` API.
+E2B rules operate at host level rather than port level, so allowing a hostname
+allows all ports on that host. The E2B API currently accepts the
+IPv4 all-traffic selector (`0.0.0.0/0`) and rejects `::/0`; SForge therefore
+uses the provider-supported selector rather than sending an invalid IPv6 rule.
+The deny rule remains active until the Sandbox is deleted. Generic host proxy
+variables are not forwarded to E2B Sandboxes.
 
 ## Using with Proxy: `sforge proxy`
 

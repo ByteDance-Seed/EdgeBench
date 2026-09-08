@@ -63,14 +63,19 @@ class ToolCall:
             cmd = str(inp.get("command", ""))
             return cmd.splitlines()[0][:160] if cmd else ""
         if self.name in ("Read", "NotebookEdit"):
-            return str(inp.get("file_path") or inp.get("notebook_path", ""))
+            return str(
+                inp.get("file_path")
+                or inp.get("filePath")  # opencode uses camelCase
+                or inp.get("notebook_path", "")
+            )
         if self.name == "Edit":
-            fp = inp.get("file_path", "")
-            old = len(str(inp.get("old_string", "")))
-            new = len(str(inp.get("new_string", "")))
+            fp = inp.get("file_path") or inp.get("filePath", "")
+            old = len(str(inp.get("old_string") or inp.get("oldString", "")))
+            new = len(str(inp.get("new_string") or inp.get("newString", "")))
             return f"{fp}  ({old}→{new} chars)"
         if self.name == "Write":
-            return f"{inp.get('file_path', '')}  ({len(str(inp.get('content', '')))} chars)"
+            fp = inp.get("file_path") or inp.get("filePath", "")
+            return f"{fp}  ({len(str(inp.get('content', '')))} chars)"
         if self.name == "Glob":
             return str(inp.get("pattern", ""))
         if self.name == "Grep":
@@ -348,6 +353,7 @@ def get_trajectory(path: Path) -> Optional[Trajectory]:
 
     Dispatches to the appropriate parser based on the file's first bytes:
     - Claude Code: stream-json (first line is JSON starting with `{`)
+    - opencode: JSONL whose events carry a top-level camelCase "sessionID"
     - OpenAI Codex: plain text starting with "OpenAI Codex" or
       "Reading additional input from stdin..."
     """
@@ -372,6 +378,10 @@ def get_trajectory(path: Path) -> Optional[Trajectory]:
     if "OpenAI Codex" in head or head.lstrip().startswith("Reading additional input"):
         from sforge.visualizer.parsers.codex_output import parse as _codex_parse
         traj = _codex_parse(path)
+    elif head.lstrip().startswith("{") and '"sessionID"' in head:
+        # opencode events use camelCase sessionID; Claude Code uses session_id.
+        from sforge.visualizer.parsers.opencode_output import parse as _opencode_parse
+        traj = _opencode_parse(path)
     else:
         traj = parse(path)
 

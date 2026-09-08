@@ -17,6 +17,9 @@ logs/
 # Experiments (generated at runtime)
 experiments/
 
+# Benchmark task definitions downloaded by sforge fetch-tasks
+/tasks/
+
 # IDE
 .idea/
 .vscode/

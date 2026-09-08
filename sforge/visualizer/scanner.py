@@ -382,6 +382,8 @@ def _peek_agent(task_dir: Path) -> str:
         return "claude-code"
     if "Running agent: codex " in head or "Running agent: codex\n" in head:
         return "codex"
+    if "Running agent: opencode " in head or "Running agent: opencode\n" in head:
+        return "opencode"
     if "Running agent: aider " in head or "Running agent: aider\n" in head:
         return "aider"
     # New harness format: "Agent supervisor attempt N: claude -p ..."
@@ -393,6 +395,8 @@ def _peek_agent(task_dir: Path) -> str:
             return "claude-code"
         if after_colon.startswith("codex ") or after_colon.startswith("codex\n"):
             return "codex"
+        if after_colon.startswith("opencode ") or after_colon.startswith("opencode\n"):
+            return "opencode"
         if after_colon.startswith("aider ") or after_colon.startswith("aider\n"):
             return "aider"
     return ""

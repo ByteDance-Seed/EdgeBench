@@ -54,8 +54,9 @@ tasks:
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `agent` | `string` | --- | Agent 名称（`claude-code`、`codex`） |
+| `agent` | `string` | --- | Agent 名称（`claude-code`、`codex`、`opencode`，或 `claude-code-2.1.214` 等固定版本变体） |
 | `model` | `string` | --- | 模型覆盖（在逐任务设置中可覆盖 `model.model`） |
+| `effort` | `string` | --- | 推理强度（`low`、`medium`、`high` 或 `max`），在所选 Agent 支持时映射到其原生配置 |
 | `timeout` | `int` | --- | Agent 超时时间（秒） |
 | `eval_interval` | `int` | --- | 自动评测间隔（秒） |
 | `disable_stop_hook` | `bool` | `false` | 禁用 Agent Stop Hook |
@@ -63,7 +64,7 @@ tasks:
 | `disable_auto_resume` | `bool` | `false` | 禁用 Agent 异常退出时的自动恢复 |
 | `internet` | `bool` | --- | 启用/禁用网络访问 |
 | `extra_env` | `dict` | --- | 注入 Agent 容器的额外环境变量 |
-| `backend` | `string` | --- | 容器后端（`docker` 或 `k8s`） |
+| `backend` | `string` | --- | 容器后端（`docker`、`k8s` 或 `e2b`） |
 | `judge_url` | `string` | --- | Judge 服务器 URL 覆盖 |
 | `max_submissions` | `int` | --- | 每次运行中 Agent 最大提交次数 |
 | `submission_cooldown` | `int` | --- | Agent 两次提交之间的最小间隔（秒） |

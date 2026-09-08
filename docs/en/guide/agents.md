@@ -8,13 +8,45 @@ SForge manages different Code Agents through a plugin-style agent registry. To r
 |-------|----------|-------------|-----------|---------------|-----------|-------------|
 | Claude Code | `claude-code` | `ANTHROPIC_AUTH_TOKEN` | `ANTHROPIC_MODEL` | -- | Yes | Yes |
 | Codex | `codex` | `CODEX_API_KEY` | `CODEX_MODEL` | -- | Yes | Yes |
+| OpenCode | `opencode` | `ANTHROPIC_API_KEY` | -- | -- | No | Yes |
 
 Use the `--agent` flag to select an Agent:
 
 ```bash
 sforge run --task ad_placement_optimization --agent claude-code
 sforge run --task ad_placement_optimization --agent codex
+sforge run --task ad_placement_optimization --agent OpenCode
 ```
+
+::: details Pinned versions
+Each agent installs a fixed release inside the Work container:
+
+| CLI name | Installed release |
+|----------|-------------------|
+| `claude-code` | Claude Code 2.1.159 |
+| `claude-code-2.1.214` | Claude Code 2.1.214 |
+| `codex` | Codex 0.130.0 |
+| `codex-0.145.0` | Codex 0.145.0 |
+| `opencode` | OpenCode 1.18.2 |
+
+`claude-code-2.1.214` and `codex-0.145.0` are newer pins kept as separate
+agents so existing results stay comparable. Claude 5-family models
+(Fable/Mythos) require `claude-code-2.1.214`.
+:::
+
+::: details OpenCode notes
+- Models are addressed as `provider/model`; a bare model name is treated as
+  `anthropic/<model>`.
+- The default model, custom base URL (`SFORGE_AGENT_API_BASE_URL`), and
+  permissions are injected via the `OPENCODE_CONFIG_CONTENT` environment
+  variable. No config file is written into the container.
+- `SFORGE_AGENT_API_BASE_URL` follows the Claude Code convention (no `/v1`);
+  SForge appends `/v1` for OpenCode's AI SDK client.
+- When the task runs without internet, `webfetch` and `websearch` are denied so
+  the model does not waste turns on blocked requests.
+- OpenCode has no Stop-hook mechanism; long runs rely on the harness
+  auto-resume loop (`opencode run --continue`).
+:::
 
 ## Agent Configuration
 
@@ -43,6 +75,17 @@ Override the model using the `--model` CLI flag or the `SFORGE_AGENT_MODEL` envi
 ```bash
 sforge run --task ad_placement_optimization --agent claude-code --model claude-opus-4-8
 ```
+
+### Reasoning Effort
+
+Use `--effort` or `SFORGE_AGENT_EFFORT` to select `low`, `medium`, `high`, or
+`max`. If neither is set, the Agent keeps its own default.
+
+| Agent | Native setting | Notes |
+|-------|----------------|-------|
+| Claude Code | `CLAUDE_CODE_EFFORT_LEVEL` | Uses the selected value directly |
+| Codex | `model_reasoning_effort` | Maps `max` to Codex's `xhigh` value |
+| OpenCode | `reasoningEffort` | Applies to non-Anthropic providers; Anthropic providers retain their own thinking configuration |
 
 ### Extra Environment Variables
 
@@ -83,6 +126,7 @@ When an Agent such as Claude Code decides the task is complete and tries to exit
 |-------|-----------|-------------|
 | `claude-code` | Claude Code Stop Hook | Registered via `.claude/settings.json` |
 | `codex` | Codex Stop Hook | Registered via `/etc/codex/hooks.json` |
+| `opencode` | -- | No hook mechanism; early exits are covered by auto-resume |
 
 ### Disabling the Stop Hook
 
@@ -110,6 +154,7 @@ Auto-resume handles **abnormal agent exits** (API disconnects, transient errors,
 |-------|------------------|
 | `claude-code` | `claude --continue -p "Continue working."` |
 | `codex` | `codex exec resume --last "Continue working."` |
+| `opencode` | `opencode run --continue "Continue working."` |
 
 ### Safety Guards
 

@@ -34,6 +34,8 @@ Docker backend 只适合小批量任务。在单机上并发运行大量任务�
 pip install sforge
 ```
 
+如需使用 [E2B 后端](/zh/configuration/container-backends#e2b-后端)，请带上 `e2b` extra：`pip install "sforge[e2b]"`。
+
 也可以从源码安装：
 
 ```bash

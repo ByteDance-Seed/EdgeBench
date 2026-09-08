@@ -24,11 +24,14 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hmac
+import os
 import sys
 import threading
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 try:
@@ -77,6 +80,17 @@ class GameState:
 def create_app(rom_path: str) -> FastAPI:
     app = FastAPI(title="SForge Game Server (Container)")
     state = GameState(rom_path)
+
+    # On backends where this port is exposed through a public gateway (e2b),
+    # only the judge server knows the per-session token it set in our env.
+    token = os.environ.get("SFORGE_GAME_TOKEN", "")
+    if token:
+        @app.middleware("http")
+        async def require_token(request: Request, call_next):
+            got = request.headers.get("x-sforge-game-token", "")
+            if not hmac.compare_digest(got, token):
+                return JSONResponse({"detail": "unauthorized"}, status_code=401)
+            return await call_next(request)
 
     @app.get("/health")
     def health() -> dict:

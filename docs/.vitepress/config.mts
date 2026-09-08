@@ -36,6 +36,7 @@ export default defineConfig({
               text: 'Examples',
               items: [
                 { text: 'Single Task (Docker)', link: '/en/examples/single-task-docker' },
+                { text: 'Single Task (E2B)', link: '/en/examples/single-task-e2b' },
                 { text: 'All Tasks (Kubernetes)', link: '/en/examples/all-tasks-k8s' },
               ],
             },
@@ -105,6 +106,7 @@ export default defineConfig({
               text: '示例',
               items: [
                 { text: '单任务运行 (Docker)', link: '/zh/examples/single-task-docker' },
+                { text: '单任务运行 (E2B)', link: '/zh/examples/single-task-e2b' },
                 { text: '全部任务 (Kubernetes)', link: '/zh/examples/all-tasks-k8s' },
               ],
             },
