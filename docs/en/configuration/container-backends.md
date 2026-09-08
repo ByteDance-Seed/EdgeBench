@@ -286,36 +286,25 @@ per `sforge run` command.
 
 ### Plan Limits and Run Sizing
 
-E2B plan limits are part of the runtime contract. Template CPU and memory are
-fixed when the Template is built, and requests above the team's limits are
-rejected during Template creation. Rebuild the Template with values supported
-by the target team; runtime `--work-*` and `--judge-*` flags cannot resize an
-existing E2B Template.
+E2B plan limits are part of the runtime contract:
 
-Keep the agent timeout comfortably below the team's maximum Sandbox lifetime.
-The lifetime must also cover agent installation, archive extraction, pending
-Judge evaluations, result collection, and cleanup.
-At cleanup, SForge stops lease renewal, reduces the provider-side lifetime to
-at most 60 seconds, and then requests immediate deletion. This terminal lease
-transition is independent of the runtime TTL configured by the user.
-
-Check each task's `judge.eval_timeout` as well. A Judge Sandbox is subject to
-the same team lifetime limit, so a task whose declared evaluator timeout is
-longer than that limit cannot be guaranteed to finish when the evaluator uses
-its full budget. Do not silently lower the evaluator timeout if leaderboard
-comparability matters; use a plan with a sufficient lifetime instead.
-
-Tasks run fully in parallel, so total E2B usage scales with the number of
-selected tasks. Budget for the Work Sandboxes, temporary Judge Sandboxes, and
-active Game Sandboxes, and leave capacity for overlap while evaluations finish
-and resources are cleaned up.
-
-The final score retains SForge's backend-independent semantics: it is the best
-result among completed agent and auto-eval submissions. `final_archive.tar.gz`
-is a recovery snapshot and is not submitted implicitly at timeout. For short
-runs, choose an auto-eval interval that leaves enough time for at least one
-evaluation to finish, or have the agent call `sforge-submit` before the run
-ends.
+- **Resources**: Template CPU and memory are fixed at build time; over-limit
+  requests fail at Template creation. Rebuild with supported values, since
+  `--work-*` and `--judge-*` flags cannot resize an existing Template.
+- **Sandbox lifetime**: Keep the agent timeout well below the team's maximum
+  Sandbox lifetime, which must also cover agent install, archive extraction,
+  Judge evaluation, result collection, and cleanup. At cleanup SForge caps the
+  remaining lifetime at 60 seconds and deletes the Sandbox, regardless of the
+  configured TTL.
+- **Evaluator timeout**: Judge Sandboxes share the same limit, so a task whose
+  `judge.eval_timeout` exceeds it may not finish. Prefer a plan with a longer
+  lifetime over lowering the timeout.
+- **Concurrency**: Tasks run fully in parallel. Budget Work, Judge, and Game
+  Sandboxes for all selected tasks, plus overlap during evaluation and cleanup.
+- **Final score**: As on other backends, the score is the best completed agent
+  or auto-eval submission. `final_archive.tar.gz` is a recovery snapshot, not
+  an implicit submission at timeout. For short runs, allow at least one
+  auto-eval to finish, or have the agent call `sforge-submit` before the end.
 
 ### Required User Input
 
@@ -330,15 +319,6 @@ Judge, or Game Sandboxes. A remote-reachable proxy is forwarded only when the
 user explicitly configures `SFORGE_HTTP_PROXY` or `SFORGE_HTTPS_PROXY`; isolated
 tasks remove proxy variables entirely. See [Network Isolation](/en/features/network-isolation).
 
-### E2B Troubleshooting
-
-| Symptom | Likely cause | Fix |
-| --- | --- | --- |
-| Template not found | The Template namespace is missing or incorrect, the task image version has no published official Template, or the task uses a modified image | Check `SFORGE_E2B_TEMPLATE_NAMESPACE` and the task image version, or point `SFORGE_E2B_TEMPLATE_MAP` at a self-built Template |
-| Agent-side Judge requests intermittently time out | The Work Sandbox could not reach the Judge Server over the internet | Check that the Judge host and port are publicly reachable, then retry the agent submission |
-| A run ends at the configured task timeout with `Sandbox not found` | The team-level maximum Sandbox lifetime was reached before final extraction and cleanup | Shorten the agent timeout, reduce multi-wave batch duration, or use a plan with a longer Sandbox lifetime |
-| A completed run retains a Sandbox for more than 60 seconds | Both the provider-side termination deadline and the immediate deletion request failed | Inspect the lifecycle cleanup error in the run or Judge Server log |
-
 ## Troubleshooting
 
 | Backend | Symptom | Likely cause | Fix |
@@ -349,3 +329,7 @@ tasks remove proxy variables entirely. See [Network Isolation](/en/features/netw
 | Kubernetes | Work cannot reach Judge | The Judge URL is not pod-reachable, or the server is not listening externally | Start `sforge serve` with `--host 0.0.0.0` and pass a pod-reachable IP or Service URL |
 | Kubernetes | `--disable-internet` has no effect | CNI does not enforce NetworkPolicy, or permissions are insufficient | Confirm NetworkPolicy support and permissions |
 | Kubernetes | Pod remains Pending with a node selector | No nodes match the selector | Check `SFORGE_K8S_NODE_SELECTOR` and node labels |
+| E2B | Template not found | The Template namespace is missing or incorrect, the task image version has no published official Template, or the task uses a modified image | Check `SFORGE_E2B_TEMPLATE_NAMESPACE` and the task image version, or point `SFORGE_E2B_TEMPLATE_MAP` at a self-built Template |
+| E2B | Agent-side Judge requests intermittently time out | The Work Sandbox could not reach the Judge Server over the internet | Check that the Judge host and port are publicly reachable, then retry the agent submission |
+| E2B | A run ends at the configured task timeout with `Sandbox not found` | The team-level maximum Sandbox lifetime was reached before final extraction and cleanup | Shorten the agent timeout, reduce multi-wave batch duration, or use a plan with a longer Sandbox lifetime |
+| E2B | A completed run retains a Sandbox for more than 60 seconds | Both the provider-side termination deadline and the immediate deletion request failed | Inspect the lifecycle cleanup error in the run or Judge Server log |

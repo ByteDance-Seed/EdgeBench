@@ -54,7 +54,7 @@ tasks:
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `agent` | `string` | --- | Agent 名称（`claude-code`、`codex`） |
+| `agent` | `string` | --- | Agent 名称（`claude-code`、`codex`、`opencode`，或 `claude-code-2.1.214` 等固定版本变体） |
 | `model` | `string` | --- | 模型覆盖（在逐任务设置中可覆盖 `model.model`） |
 | `effort` | `string` | --- | 推理强度（`low`、`medium`、`high` 或 `max`），在所选 Agent 支持时映射到其原生配置 |
 | `timeout` | `int` | --- | Agent 超时时间（秒） |

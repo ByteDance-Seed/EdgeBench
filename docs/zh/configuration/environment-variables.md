@@ -43,7 +43,7 @@ SForge 大部分配置可通过 `SFORGE_*` 环境变量注入；仅 CLI/YAML 支
 
 | 变量 | 用途 |
 |------|------|
-| `SFORGE_AGENT_API_KEY` | 传递给所选 Agent 的 API 密钥，会映射为该 Agent 需要的环境变量（`ANTHROPIC_AUTH_TOKEN` 或 `CODEX_API_KEY`） |
+| `SFORGE_AGENT_API_KEY` | 传递给所选 Agent 的 API 密钥，会映射为该 Agent 需要的环境变量（Claude Code 为 `ANTHROPIC_AUTH_TOKEN`，Codex 为 `CODEX_API_KEY`，OpenCode 为 `ANTHROPIC_API_KEY`） |
 | `SFORGE_AGENT_API_BASE_URL` | API Base URL 覆盖，会传递给所选 Agent 支持的 base-url 环境变量 |
 | `SFORGE_AGENT_MODEL` | Agent 模型覆盖 |
 | `SFORGE_AGENT_EFFORT` | Agent 推理强度（`low`、`medium`、`high` 或 `max`） |
@@ -91,7 +91,7 @@ Judge CPU/内存限制目前通过 CLI 参数（`--judge-cpu-limit`、`--judge-m
 | `SFORGE_K8S_IMAGE_REGISTRY` | --- | K8s 镜像拉取使用的容器镜像仓库 |
 | `SFORGE_K8S_KUBECONFIG` | --- | kubeconfig 文件路径 |
 | `SFORGE_K8S_NODE_SELECTOR` | --- | K8s Pod 的节点选择器，格式：`"key1=val1,key2=val2"` |
-| `SFORGE_E2B_TEMPLATE_MAP` | --- | E2B image key 到 Template 的显式映射 |
+| `SFORGE_E2B_TEMPLATE_MAP` | --- | E2B image key 到 Template 的显式映射，覆盖自动推导的名称。支持内联 `"image_key=template,..."`，或以 `.json` 结尾的 JSON 对象文件路径 |
 | `SFORGE_E2B_TEMPLATE_NAMESPACE` | --- | 已发布 E2B Template 的 namespace（例如 `edgebench`） |
 | `SFORGE_E2B_SANDBOX_TTL` | `3600` | E2B Sandbox TTL（秒） |
 

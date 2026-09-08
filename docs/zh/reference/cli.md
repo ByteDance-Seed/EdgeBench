@@ -135,7 +135,7 @@ sforge run --experiment experiment.yaml
 | 选项 | 默认值 | 说明 |
 |------|--------|------|
 | `--task` | 必填* | 一个或多个任务 ID（空格分隔）。传入多个 ID 时，CLI 批量调度多个独立 task，不会把它们合并为一次评测。 |
-| `--agent` | 必填* | Agent 名称（如 `claude-code`、`codex`）。除非指定 `--experiment`，否则必填。 |
+| `--agent` | 必填* | Agent 名称：`claude-code`、`codex`、`opencode`，或固定版本变体（`claude-code-2.1.214`、`codex-0.145.0`）。除非指定 `--experiment`，否则必填。 |
 | `--experiment` | --- | 实验 YAML 配置文件路径。如果未指定 `--task`，运行 YAML 中的全部任务；如果指定了 `--task`，则只运行该子集并套用实验配置。 |
 | `--model` | --- | 模型覆盖（如 `claude-opus-4-8`） |
 | `--effort` | Agent 默认值 | 推理强度（`low`、`medium`、`high` 或 `max`）。SForge 会在所选 Agent 支持时映射到其原生配置。 |
@@ -154,7 +154,7 @@ sforge run --experiment experiment.yaml
 | `--disable-stop-hook` | `false` | 禁用 stop hook（允许 Agent 正常退出） |
 | `--disable-auto-eval` | `false` | 禁用后台自动评测守护进程 |
 | `--disable-auto-resume` | `false` | 禁用 Agent 异常退出时的自动恢复 |
-| `--disable-internet` | `false` | 强制网络隔离（仅允许 Judge 服务器 + API 访问）。需要 `sudo` 权限来配置 iptables。与 `--enable-internet` 互斥。 |
+| `--disable-internet` | `false` | 强制网络隔离（仅允许 Judge 服务器 + API 访问）。Docker 后端需要免密 `sudo` 配置 iptables；k8s 和 e2b 在集群/服务商侧隔离，不需要。与 `--enable-internet` 互斥。 |
 | `--enable-internet` | `false` | 强制开启完整网络访问（覆盖任务的 `internet: false` 设置）。与 `--disable-internet` 互斥。 |
 
 ::: warning 必填参数

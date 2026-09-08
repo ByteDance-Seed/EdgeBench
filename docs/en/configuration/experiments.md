@@ -54,7 +54,7 @@ Default settings applied to all tasks unless overridden per-task.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `agent` | `string` | --- | Agent name (`claude-code`, `codex`) |
+| `agent` | `string` | --- | Agent name (`claude-code`, `codex`, `opencode`, or a pinned variant such as `claude-code-2.1.214`) |
 | `model` | `string` | --- | Model override (overrides `model.model` for specific tasks if set per-task) |
 | `effort` | `string` | --- | Reasoning effort (`low`, `medium`, `high`, or `max`); mapped to the selected Agent when supported |
 | `timeout` | `int` | --- | Agent timeout in seconds |

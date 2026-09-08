@@ -279,27 +279,20 @@ Sandbox。
 
 ### 套餐限制与运行规模
 
-E2B 套餐限制是运行契约的一部分。Template 的 CPU 和内存会在构建时固化；超过当前 team
-上限的请求会在创建 Template 时被拒绝。应使用目标 team 支持的规格重新构建 Template；
-运行时的 `--work-*` 和 `--judge-*` 参数不能调整已有 E2B Template 的资源。
+E2B 套餐限制是运行契约的一部分：
 
-Agent timeout 应明显短于当前套餐允许的最大 Sandbox 生命周期。Sandbox 生命周期还要覆盖
-Agent 安装、归档提取、等待 Judge 评测、读取结果和资源清理。
-进入清理阶段后，SForge 会停止续租，将服务端剩余生命周期收紧到最多 60 秒，再请求即时
-删除。该终止租约转换不受用户配置的运行期 TTL 影响。
-
-还需要检查每个任务的 `judge.eval_timeout`。Judge Sandbox 同样受 team 最大生命周期限制；
-如果任务声明的评测超时长于该限制，那么当 evaluator 实际使用完整预算时，就无法保证评测
-完成。如果要求与榜单口径可比，不应静默缩短 evaluator timeout，而应使用生命周期足够长的
-套餐。
-
-任务是全并行运行的，E2B 总用量随所选任务数增长。容量规划要计入 Work Sandbox、临时
-Judge Sandbox 和活跃 Game Sandbox，并为评测完成和资源清理的重叠阶段留出余量。
-
-最终分数沿用 SForge 与后端无关的既有语义：只在已经完成的 agent submission 和
-auto-eval submission 中选取最佳结果。`final_archive.tar.gz` 是恢复快照，timeout 时不会被
-隐式提交。短任务应选择能为至少一次完整评分留出时间的 auto-eval 间隔，或者让 Agent 在
-结束前主动执行 `sforge-submit`。
+- **资源规格**：Template 的 CPU 和内存在构建时固化，超限会在创建 Template 时被拒绝。
+  请按 team 支持的规格重建；`--work-*` 和 `--judge-*` 参数不能调整已有 Template。
+- **Sandbox 生命周期**：Agent timeout 应明显短于套餐的最大 Sandbox 生命周期，后者还要覆盖
+  Agent 安装、归档提取、Judge 评测、读取结果和清理。清理时 SForge 会把剩余生命周期收紧到
+  60 秒内并删除 Sandbox，不受配置的 TTL 影响。
+- **评测超时**：Judge Sandbox 受同样限制，任务的 `judge.eval_timeout` 若超过该限制则可能
+  无法完成。应换更长生命周期的套餐，而不是缩短超时。
+- **并发用量**：任务全并行运行，需按所选任务数为 Work、Judge 和 Game Sandbox 预留容量，
+  并为评测与清理的重叠阶段留出余量。
+- **最终分数**：与其他后端一致，取已完成的 agent 或 auto-eval submission 中的最佳结果。
+  `final_archive.tar.gz` 是恢复快照，timeout 时不会隐式提交。短任务应保证至少一次 auto-eval
+  能完成，或让 Agent 在结束前执行 `sforge-submit`。
 
 ### 用户需要提供的内容
 
@@ -313,15 +306,6 @@ auto-eval submission 中选取最佳结果。`final_archive.tar.gz` 是恢复快
 只有用户显式配置 `SFORGE_HTTP_PROXY` 或 `SFORGE_HTTPS_PROXY` 时，远端可访问的代理才会
 被转发；网络隔离任务会移除全部代理变量。详见[网络隔离](/zh/features/network-isolation)。
 
-### E2B 常见问题
-
-| 现象 | 可能原因 | 处理方式 |
-| --- | --- | --- |
-| 找不到 Template | Template namespace 缺失或错误、该任务镜像版本没有已发布的官方 Template，或任务使用了修改过的镜像 | 检查 `SFORGE_E2B_TEMPLATE_NAMESPACE` 和任务镜像版本，或用 `SFORGE_E2B_TEMPLATE_MAP` 指向自建 Template |
-| Agent 侧 Judge 请求偶发超时 | Work Sandbox 无法通过公网访问 Judge Server | 确认 Judge 主机和端口公网可达后重试提交 |
-| task timeout 到达时出现 `Sandbox not found` | 在最终归档和清理前达到了 team 级 Sandbox 最大生命周期 | 缩短 Agent timeout、减少多波次批次总时长，或使用支持更长 Sandbox 生命周期的套餐 |
-| 运行结束超过 60 秒后仍有 Sandbox | 服务端终止期限和即时删除请求均未生效 | 检查运行日志或 Judge Server 日志中的生命周期清理错误 |
-
 ## 常见问题
 
 | 后端 | 现象 | 可能原因 | 处理方式 |
@@ -332,3 +316,7 @@ auto-eval submission 中选取最佳结果。`final_archive.tar.gz` 是恢复快
 | Kubernetes | Work Pod 无法提交评测 | Judge URL 对 Pod 不可达，或服务没有监听外部地址 | 用 `--host 0.0.0.0` 启动 `sforge serve`，并设置 Pod 可访问的 IP 或 Service URL |
 | Kubernetes | `--disable-internet` 没有效果 | CNI 不执行 NetworkPolicy，或权限不足 | 确认 CNI 支持 NetworkPolicy，并检查当前身份的权限 |
 | Kubernetes | 配置 node selector 后 Pod Pending | 没有节点匹配 selector | 检查 `SFORGE_K8S_NODE_SELECTOR` 和节点标签 |
+| E2B | 找不到 Template | Template namespace 缺失或错误、该任务镜像版本没有已发布的官方 Template，或任务使用了修改过的镜像 | 检查 `SFORGE_E2B_TEMPLATE_NAMESPACE` 和任务镜像版本，或用 `SFORGE_E2B_TEMPLATE_MAP` 指向自建 Template |
+| E2B | Agent 侧 Judge 请求偶发超时 | Work Sandbox 无法通过公网访问 Judge Server | 确认 Judge 主机和端口公网可达后重试提交 |
+| E2B | task timeout 到达时出现 `Sandbox not found` | 在最终归档和清理前达到了 team 级 Sandbox 最大生命周期 | 缩短 Agent timeout、减少多波次批次总时长，或使用支持更长 Sandbox 生命周期的套餐 |
+| E2B | 运行结束超过 60 秒后仍有 Sandbox | 服务端终止期限和即时删除请求均未生效 | 检查运行日志或 Judge Server 日志中的生命周期清理错误 |

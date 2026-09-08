@@ -10,17 +10,40 @@ SForge 内置了以下 Agent：
 |-----------|----------|-----------------|-------------|---------|-----------|-------------|
 | Claude Code | `claude-code` | `ANTHROPIC_AUTH_TOKEN` | `ANTHROPIC_MODEL` | — | 支持 | 支持 |
 | Codex | `codex` | `CODEX_API_KEY` | `CODEX_MODEL` | — | 支持 | 支持 |
-| opencode | `opencode` | `ANTHROPIC_API_KEY` | — | — | 不支持（靠自动恢复） | 支持 |
+| OpenCode | `opencode` | `ANTHROPIC_API_KEY` | — | — | 不支持 | 支持 |
 
 使用 `--agent` 参数指定要运行的 Agent：
 
 ```bash
 sforge run --task ad_placement_optimization --agent claude-code
 sforge run --task ad_placement_optimization --agent codex
-sforge run --task ad_placement_optimization --agent opencode
+sforge run --task ad_placement_optimization --agent OpenCode
 ```
 
-> **opencode 说明**：模型名格式为 `provider/model`（裸模型名会视为 `anthropic/<model>`）。默认模型、自定义 base URL（`SFORGE_AGENT_API_BASE_URL`）和权限均通过 `OPENCODE_CONFIG_CONTENT` 环境变量注入，容器内不写配置文件。opencode 无 Stop Hook 机制，长时运行依赖自动恢复循环（`opencode run --continue`）。
+::: details 固定版本
+每个 Agent 在 Work 容器内安装固定版本：
+
+| CLI 名称 | 安装版本 |
+|----------|----------|
+| `claude-code` | Claude Code 2.1.159 |
+| `claude-code-2.1.214` | Claude Code 2.1.214 |
+| `codex` | Codex 0.130.0 |
+| `codex-0.145.0` | Codex 0.145.0 |
+| `opencode` | OpenCode 1.18.2 |
+
+`claude-code-2.1.214` 和 `codex-0.145.0` 是更新的固定版本，作为独立 Agent 保留以保证
+既有结果可比。Claude 5 系列模型（Fable/Mythos）需要使用 `claude-code-2.1.214`。
+:::
+
+::: details OpenCode 说明
+- 模型名格式为 `provider/model`，裸模型名会视为 `anthropic/<model>`。
+- 默认模型、自定义 base URL（`SFORGE_AGENT_API_BASE_URL`）和权限均通过
+  `OPENCODE_CONFIG_CONTENT` 环境变量注入，容器内不写配置文件。
+- `SFORGE_AGENT_API_BASE_URL` 沿用 Claude Code 约定（不带 `/v1`），SForge 会为
+  OpenCode 的 AI SDK 客户端自动补上 `/v1`。
+- 任务断网时会禁用 `webfetch` 和 `websearch`，避免模型在被阻断的请求上浪费轮次。
+- OpenCode 无 Stop Hook 机制，长时运行依赖自动恢复循环（`opencode run --continue`）。
+:::
 
 ## Agent 配置
 
@@ -59,7 +82,7 @@ sforge run --task ad_placement_optimization --agent claude-code --model claude-o
 |-------|----------|------|
 | Claude Code | `CLAUDE_CODE_EFFORT_LEVEL` | 直接使用所选值 |
 | Codex | `model_reasoning_effort` | 将 `max` 映射为 Codex 的 `xhigh` |
-| opencode | `reasoningEffort` | 对非 Anthropic provider 生效；Anthropic provider 保持自身 thinking 配置 |
+| OpenCode | `reasoningEffort` | 对非 Anthropic provider 生效；Anthropic provider 保持自身 thinking 配置 |
 
 ### 额外环境变量
 

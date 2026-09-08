@@ -43,7 +43,7 @@ Used when running agents via `sforge run`. These are injected as container envir
 
 | Variable | Purpose |
 |----------|---------|
-| `SFORGE_AGENT_API_KEY` | API key passed to the selected agent using that agent's expected env var (`ANTHROPIC_AUTH_TOKEN` or `CODEX_API_KEY`) |
+| `SFORGE_AGENT_API_KEY` | API key passed to the selected agent using that agent's expected env var (`ANTHROPIC_AUTH_TOKEN` for Claude Code, `CODEX_API_KEY` for Codex, `ANTHROPIC_API_KEY` for OpenCode) |
 | `SFORGE_AGENT_API_BASE_URL` | API base URL override passed through the selected agent's base-url env var when it has one |
 | `SFORGE_AGENT_MODEL` | Model override for the agent |
 | `SFORGE_AGENT_EFFORT` | Reasoning effort (`low`, `medium`, `high`, or `max`) |
@@ -92,7 +92,7 @@ Judge CPU/memory limits are currently set through CLI flags (`--judge-cpu-limit`
 | `SFORGE_K8S_IMAGE_REGISTRY` | --- | Container registry for K8s image pulls |
 | `SFORGE_K8S_KUBECONFIG` | --- | Path to kubeconfig file |
 | `SFORGE_K8S_NODE_SELECTOR` | --- | Node selector for K8s pods, format: `"key1=val1,key2=val2"` |
-| `SFORGE_E2B_TEMPLATE_MAP` | --- | Explicit E2B image-key to template mapping |
+| `SFORGE_E2B_TEMPLATE_MAP` | --- | Explicit E2B image-key to Template mapping, overriding the derived name. Inline `"image_key=template,..."` pairs, or a path ending in `.json` holding a JSON object |
 | `SFORGE_E2B_TEMPLATE_NAMESPACE` | --- | Namespace for published E2B Templates (for example, `edgebench`) |
 | `SFORGE_E2B_SANDBOX_TTL` | `3600` | E2B Sandbox TTL in seconds |
 

@@ -136,7 +136,7 @@ sforge run --experiment experiment.yaml
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--task` | required* | One or more task IDs (space-separated). Multiple IDs batch-schedule independent task runs; they are not combined into one evaluation. |
-| `--agent` | required* | Agent name (e.g., `claude-code`, `codex`). Required unless `--experiment` is specified. |
+| `--agent` | required* | Agent name: `claude-code`, `codex`, `opencode`, or a pinned variant (`claude-code-2.1.214`, `codex-0.145.0`). Required unless `--experiment` is specified. |
 | `--experiment` | --- | Path to experiment YAML config file. If `--task` is omitted, all YAML tasks run; if `--task` is provided, only that subset runs with the experiment settings. |
 | `--model` | --- | Model override (e.g., `claude-opus-4-8`) |
 | `--effort` | Agent default | Reasoning effort (`low`, `medium`, `high`, or `max`). SForge maps the value to the selected Agent when supported. |
@@ -155,7 +155,7 @@ sforge run --experiment experiment.yaml
 | `--disable-stop-hook` | `false` | Disable the stop hook (allow agent to exit normally) |
 | `--disable-auto-eval` | `false` | Disable the background auto-evaluation daemon |
 | `--disable-auto-resume` | `false` | Disable auto-resume on abnormal agent exit |
-| `--disable-internet` | `false` | Force network isolation (only judge server + API allowed). Requires `sudo` for iptables. Mutually exclusive with `--enable-internet`. |
+| `--disable-internet` | `false` | Force network isolation (only judge server + API allowed). On the Docker backend this requires passwordless `sudo` for iptables; k8s and e2b isolate inside the cluster/provider. Mutually exclusive with `--enable-internet`. |
 | `--enable-internet` | `false` | Force full internet access (overrides per-task `internet: false` setting). Mutually exclusive with `--disable-internet`. |
 
 ::: warning Requirement
