@@ -31,6 +31,7 @@ import requests
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
+from sforge import __version__
 from sforge.harness.backend import ContainerBackend
 from sforge.harness.benchmark import load_benchmark
 from sforge.harness.config import (
@@ -879,7 +880,7 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
     if config is None:
         config = load_config()
 
-    app = FastAPI(title="SForge Judge", version="1.0.0")
+    app = FastAPI(title="SForge Judge", version=__version__)
     state = JudgeState(config)
     state.load_tasks()
 
