@@ -46,6 +46,7 @@ from sforge.harness.docker_build import BuildImageError, build_judge_image
 from sforge.harness.run_evaluation import judge_submission
 from sforge.harness.selection import select_best
 from sforge.harness.task_spec import TaskSpec, load_all_tasks
+from sforge.harness.trajectory_metrics import compute_trajectory_metrics
 
 logger = logging.getLogger("sforge.judge_server")
 
@@ -429,6 +430,9 @@ class JudgeState:
             entry["total_tests"] = report_dict.get("total_tests", 0)
             entry["valid"] = report_dict.get("valid", True)
             entry["summary"] = report_dict.get("summary")
+            entry["submitted_at"] = report_dict.get("submitted_at", 0.0)
+            entry["runtime_seconds"] = report_dict.get("runtime_seconds", 0.0)
+            entry["timed_out"] = report_dict.get("timed_out", False)
         if error:
             entry["error"] = error
         history_key = f"{run_id}/{task_id}"
@@ -466,6 +470,7 @@ class JudgeState:
             "best_round": best["best_round"],
             "agent_submissions": sum(1 for e in sub_entries if (e.get("round") or "").startswith("agent-")),
             "auto_submissions": sum(1 for e in sub_entries if (e.get("round") or "").startswith("auto-")),
+            "trajectory_metrics": compute_trajectory_metrics(entries, direction),
             "entries": entries,
         }
 
@@ -991,6 +996,7 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
             "best_round": best["best_round"],
             "agent_submissions": sum(1 for e in agent_entries if e.get("type") == "submission"),
             "auto_submissions": 0,
+            "trajectory_metrics": compute_trajectory_metrics(agent_entries, direction),
             "entries": agent_entries,
         }
 
