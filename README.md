@@ -33,6 +33,17 @@
 
 ---
 
+## What's New
+
+> [!NOTE]
+> **SForge 1.1.0**
+>
+> - **E2B backend**: `--backend e2b` runs everything in E2B Sandboxes, no Docker or cluster needed. Official Templates are published under the `edgebench` namespace on E2B. See the [E2B example](https://bytedance-seed.github.io/EdgeBench/en/examples/single-task-e2b).
+> - **OpenCode agent**: `--agent opencode` joins Claude Code and Codex as a built-in scaffold.
+> - **Reasoning effort**: `--effort {low,medium,high,max}` sets reasoning effort uniformly across agents.
+
+---
+
 ## Overview
 
 **EdgeBench** is a benchmark of **134 real-world tasks** for evaluating how autonomous AI agents *learn from real-world environments*. Instead of measuring one-shot performance, EdgeBench places agents in executable task environments with realistic, multi-level feedback and lets them iterate for **12+ hours** per task — tracking the full trajectory of improvement, not just the final score. We publicly release **51 tasks** along with the full evaluation framework.
@@ -193,7 +204,7 @@ SFORGE_AGENT_API_KEY="sk-xxx" \
 **Step-by-step examples:**
 - [Single task on local Docker](examples/single-task-docker/) — run one task end-to-end with Docker
 - [All tasks on Kubernetes](examples/all-tasks-k8s/) — run the full suite on a K8s cluster with the **official leaderboard setting**
-- [E2B backend](https://bytedance-seed.github.io/EdgeBench/en/configuration/container-backends#e2b-backend) — run Work and Judge environments on E2B without operating a cluster
+- [Single task on E2B](https://bytedance-seed.github.io/EdgeBench/en/examples/single-task-e2b) — run one task in E2B cloud Sandboxes
 
 > [!IMPORTANT]
 > - **Official setting** — leaderboard numbers use the [official experiment YAMLs](examples/all-tasks-k8s/) unchanged, including the time budget, stop hook, auto-eval, submission cooldowns, and hardware resource limits.
@@ -201,7 +212,7 @@ SFORGE_AGENT_API_KEY="sk-xxx" \
 > - **Scale** — the Docker backend suits only a few tasks at a time; for full-suite runs use the [Kubernetes backend](https://bytedance-seed.github.io/EdgeBench/en/configuration/container-backends).
 
 **Evaluating your own model / agent:**
-- **Your own model** — the built-in Claude Code and Codex scaffolds work with any compatible API endpoint: point `SFORGE_AGENT_API_BASE_URL` at your endpoint, set your key via `SFORGE_AGENT_API_KEY`, and pass your model name via `--model`. See [Supported Agents](https://bytedance-seed.github.io/EdgeBench/en/guide/agents#using-third-party-models).
+- **Your own model** — the built-in Claude Code, Codex, and OpenCode scaffolds work with any compatible API endpoint: point `SFORGE_AGENT_API_BASE_URL` at your endpoint, set your key via `SFORGE_AGENT_API_KEY`, and pass your model name via `--model`. See [Supported Agents](https://bytedance-seed.github.io/EdgeBench/en/guide/agents#using-third-party-models).
 - **Your own agent scaffold** — just add a new agent under [`sforge/harness/agent/`](sforge/harness/agent/) (a small `Agent` subclass declaring how to install and launch it) and register it in the factory, then run with `--agent <your-agent>`. See [Custom Agents](https://bytedance-seed.github.io/EdgeBench/en/guide/agents#custom-agents).
 
 Full documentation: [bytedance-seed.github.io/EdgeBench](https://bytedance-seed.github.io/EdgeBench/)
