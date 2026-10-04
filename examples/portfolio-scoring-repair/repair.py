@@ -15,7 +15,7 @@ DIAGNOSTIC_ONLY = (
 )
 
 
-def repair(source: bytes) -> bytes:
+def repair(source: bytes, *, event_contract: bool = False) -> bytes:
     if hashlib.sha256(source).hexdigest() != SOURCE_SHA256:
         raise ValueError('Unsupported scorer revision; inspect the new source before porting this repair')
     text = source.decode('utf-8')
@@ -95,18 +95,56 @@ def repair(source: bytes) -> bytes:
         if lines[index].strip() == '# getrebalancedatecolumntable':
             lines[index] = ''
     result = ''.join(lines).encode('utf-8')
+    if event_contract:
+        result = install_event_contract(result)
     compile(result, '<repaired scorer>', 'exec')
     return result
 
 
+def install_event_contract(source: bytes) -> bytes:
+    """Explicit task revision; common public validator is embedded at build time."""
+    text = source.decode('utf-8')
+    tree = ast.parse(text)
+    audit = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
+                 and n.name == 'audit_core_constraints')
+    dates = [n for n in ast.walk(audit) if isinstance(n, ast.Assign)
+             and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name)
+             and n.targets[0].id == 'rdates']
+    loops = [n for n in ast.walk(audit) if isinstance(n, ast.For)
+             and ast.unparse(n.iter) == 'range(1, len(rdates))']
+    if len(dates) != 1 or len(loops) != 1:
+        raise ValueError('Unexpected interval audit shape')
+    lines = text.splitlines(keepends=True)
+    replacement = """            interval_errors = validate_rebalance_history(
+                rebalance_history, [pd.Timestamp(d).strftime('%Y-%m-%d') for d in dates_for_audit])
+            for error in interval_errors:
+                warns.append('event contract: ' + error)
+                rebalance_penalty += 2
+                penalty_details['rolling revaluation interval violation'] += 2
+"""
+    lines[dates[0].lineno - 1] = replacement
+    for index in range(dates[0].lineno, loops[0].end_lineno):
+        lines[index] = ''
+    for index in range(audit.lineno - 1, audit.end_lineno):
+        lines[index] = lines[index].replace(
+            "if r.get('trigger') == 'risk_scale_change'", "if isinstance(r, dict) and r.get('trigger') == 'risk_scale_change'")
+    validator_tree = ast.parse(Path(__file__).with_name('event_contract.py').read_text())
+    validator = next(n for n in validator_tree.body if isinstance(n, ast.FunctionDef)
+                     and n.name == 'validate_rebalance_history')
+    lines[audit.lineno - 1] = ast.unparse(validator) + '\n\n' + lines[audit.lineno - 1]
+    return ''.join(lines).encode('utf-8')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--event-contract-v1', action='store_true',
+                        help='Opt into revised event semantics; requires matching work-image contract')
     parser.add_argument('source', type=Path)
     parser.add_argument('output', type=Path)
     args = parser.parse_args()
     if args.source.resolve() == args.output.resolve():
         parser.error('Use a separate output path; keep the original scorer')
-    result = repair(args.source.read_bytes())
+    result = repair(args.source.read_bytes(), event_contract=args.event_contract_v1)
     if args.output.exists():
         parser.error('Output already exists; refusing to replace it')
     args.output.write_bytes(result)

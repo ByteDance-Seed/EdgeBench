@@ -1,10 +1,12 @@
 # Portfolio event and constraint contract proposal
 
-Status: interval and event-schema correction remains **proposed, not installed**.
-The diagnostic v3 candidate now audits all reported daily weight vectors,
-independently of event labels, using the existing position equations and penalty
-caps. It does not implement the separate clocks, scheduled anchor, or correction
-exemptions below. Those still require a versioned task correction.
+Status: the default diagnostic image still preserves original interval semantics.
+An explicit `EVENT_CONTRACT=1` build now implements separate model/risk clocks
+and a public calendar anchor through `event_contract.py`; it must be paired with
+`Work.Dockerfile` and its [task amendment](task-contract.md). This is a versioned
+experimental task, not an official correction or reinterpretation of old scores.
+The v3 daily-weight audit remains label-independent. Constraint-repair exemptions
+and automatic verification of risk-trigger thresholds are not implemented.
 
 ## Demonstrated inconsistencies
 
@@ -30,7 +32,7 @@ The last pair demonstrates a label-dependent audit gap, repaired in v3; it is no
 an agent intentionally exploited the grader. Simply excluding correction events
 from interval checks would be an incomplete fix and could conceal this gap.
 
-## Proposed common contract
+## Contract basis and remaining extensions
 
 1. Use the sorted, unique trading calendar supplied to the task. Elapsed sessions
    are `index(end) - index(start)`, excluding the starting session. Invalid dates,
@@ -53,7 +55,8 @@ from interval checks would be an incomplete fix and could conceal this gap.
    unrecognized labels cannot grant an exemption. If drift tolerance or temporary
    intraday breaches are permitted, publish their bound and repair deadline.
 6. A constraint correction is an execution restoring a demonstrated breach, not a
-   model re-estimation. Record the affected limit and pre/post exposure. Verify
+   model re-estimation. In event v1 it belongs only in the execution ledger and
+   receives no exemption; the following is a possible future extension. Record the affected limit and pre/post exposure. Verify
    that evidence before allowing an interval exemption; relabeling a discretionary
    risk trade is insufficient. The current daily output may lack pre-trade facts,
    so an exemption must not be inferred solely from `trigger` or free-text reason.
@@ -61,8 +64,8 @@ from interval checks would be an incomplete fix and could conceal this gap.
    Define the event contract first, then choose and publish penalty magnitudes.
    Do not tune penalties to make a particular strategy's score positive.
 
-These are proposed owning-task semantics, not a silent reinterpretation of old
-results. Existing records that cannot establish an exemption remain unqualified
+These are explicitly versioned owning-task semantics, not a silent reinterpretation of old
+results. The task amendment identifies the installed subset; exemption extensions remain proposed. Existing records that cannot establish an exemption remain unqualified
 for the new contract; their original scores are retained as historical evidence.
 
 ## Decisive acceptance

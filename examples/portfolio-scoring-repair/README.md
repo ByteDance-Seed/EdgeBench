@@ -42,11 +42,11 @@ intraday tolerance or correction exemption is inferred. Original results remain
 historical; this change needs a separately versioned comparison.
 
 It is intentionally not a comprehensive validation of every remaining rule.
-Trigger-specific rebalancing intervals remain unresolved: scheduled re-estimation,
-additional risk rebalances and constraint corrections need an explicit common
-task contract before that rule is changed. Do not treat this image as fully qualified. See the [event and constraint contract
-proposal](interval-contract.md) for synthetic counterexamples, label-independent
-audit requirements and the remaining acceptance cases.
+The default image retains original interval semantics. The opt-in event-v1 pair
+below changes them only alongside an explicit public task amendment and validator.
+It is a new experimental task variant, not certification of every scoring policy.
+See the [event contract basis](interval-contract.md) for the counterexamples and
+remaining risk-trigger/correction evidence boundaries.
 
 ## Reproduce and validate
 
@@ -69,27 +69,47 @@ Keep original and corrected scorer results separate, identify the image digest,
 and do not reuse corrected scores as official leaderboard scores. This example
 does not launch an agent, install credentials, or expose judge data to workers.
 
-## Public contract clarification for upstream task sources
+## Optional paired event-contract revision
 
-The work image's task instruction and `deliverables_guide.docx` should both define:
+The published task says to re-estimate every 20 sessions and keep five sessions
+between additional risk events, but the judge applies an inclusive 5–25-day clock
+to every adjacent event. The optional pair installs an explicit initialization
+anchor, separate scheduled/risk clocks, missing-update checks and elapsed-session
+arithmetic. It rejects unsupported model-event labels; execution-only records
+belong in `trades`. It grants no constraint-repair exemption. This changes task
+semantics and must never be silently applied to historical results.
 
-- A `trades` record represents either an actual execution or a matched closed lot;
-  distinguish them explicitly (for example `record_type=execution|closed_lot`).
-- An execution has its true execution timestamp and price; if the compatibility
-  open/close fields are required, both use that actual timestamp and price. This
-  describes one transaction, not an immediate opening and closing of a position.
-- A closed lot uses its actual opening and closing dates/prices and matched
-  quantity. State the matching policy and allocate partial closes consistently.
-  Keep unmatched open positions separately; never invent closure dates.
-- `return` is optional; absent or zero values alone do not establish fabricated
-  accounting. NAV and holdings remain independently verified.
+```sh
+docker build --platform linux/amd64 --build-arg EVENT_CONTRACT=1 \
+  -f examples/portfolio-scoring-repair/Dockerfile \
+  -t portfolio-judge:event-contract-v1 examples/portfolio-scoring-repair
+docker build --platform linux/amd64 \
+  -f examples/portfolio-scoring-repair/Work.Dockerfile \
+  -t portfolio-work:event-contract-v1 examples/portfolio-scoring-repair
+```
 
-This text is a proposed schema clarification, **not installed by the scorer
-Dockerfile**. Test it as a separate intervention from the scorer repair. Give
-identical public examples and schema validation to feedback and blind arms;
-only hidden evaluation feedback should differ. Upstream must update its owning
-work/judge sources, rebuild versioned images and update dataset pins before
-calling this an official task correction.
+Select **both** images in a copied task definition and record their exact digests.
+The work image adds [the canonical amendment](task-contract.md), links it from
+`task_instruction.md` with explicit precedence over ambiguous legacy guide fields,
+and installs `event_contract.py`. The judge embeds that same validator at build
+time. Both feedback settings receive exactly the same public files. The validator
+uses only supplied event records and calendar; it has no judge client, hidden-data
+path or scoring function. Its success does not certify truthful model updates,
+strategy quality, accounting or complete output-schema compliance.
+
+The amendment also disambiguates executions from closed lots, defines daily weight
+timing and describes the existing diagnostic score repairs. It does not add a
+second transaction ledger or change independent NAV reconstruction. Upstream still
+owns consolidation into the original DOCX/work/judge sources and official pins.
+Disable this revision by selecting the original work image and either the original
+judge or the separately identified default diagnostic candidate; start a new run.
+Never mix task variants in one comparison or splice their curves.
+
+Validation covers the real judge function, embedded/public validator identity,
+valid and invalid calendars/events, independent clocks, holidays, duplicates,
+missing updates, a partial final period and absence of transactions. An isolated
+work-image CLI check exercises success/error output without judge files or network.
+No long-run model adoption or scientific benefit is established by these checks.
 
 Task provenance: [EdgeBench dataset](https://huggingface.co/datasets/ByteDance-Seed/EdgeBench),
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). This candidate is
