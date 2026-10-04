@@ -52,6 +52,23 @@ def repair(source: bytes) -> bytes:
             'diagnostic only; verify accounting evidence')
     if matched != expected:
         raise ValueError('Incomplete audit repair')
+    # Completeness does not imply a minimum investment: the published task
+    # requires all ETF fields, but specifies no lower gross-exposure bound.
+    completeness = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
+                        and n.name == 'validate_daily_weights_completeness')
+    lower_bound = ast.dump(ast.parse('total_abs < 0.8 or total_abs > 2.2', mode='eval').body)
+    conditions = [n for n in ast.walk(completeness) if isinstance(n, ast.If)
+                  and ast.dump(n.test) == lower_bound]
+    if len(conditions) != 1:
+        raise ValueError('Unexpected exposure completeness condition')
+    condition = conditions[0]
+    old = lines[condition.lineno - 1]
+    if 'total_abs < 0.8 or total_abs > 2.2:' not in old:
+        raise ValueError('Unexpected exposure condition formatting')
+    lines[condition.lineno - 1] = old.replace(
+        'total_abs < 0.8 or total_abs > 2.2:', 'total_abs > 2.2:')
+    for index in range(completeness.lineno - 1, completeness.end_lineno):
+        lines[index] = lines[index].replace('(0.8-2.2)', '(upper bound 2.2; no minimum)')
     result = ''.join(lines).encode('utf-8')
     compile(result, '<repaired scorer>', 'exec')
     return result

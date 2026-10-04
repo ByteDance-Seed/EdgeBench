@@ -78,10 +78,40 @@ class RepairTests(unittest.TestCase):
         # constraints, metrics, penalties, scoring aggregation and execution.
         for tree in (before, after):
             tree.body = [n for n in tree.body if not (isinstance(n, ast.FunctionDef)
-                         and n.name == 'audit_anti_fraud')]
+                         and n.name in {'audit_anti_fraud', 'validate_daily_weights_completeness'})]
         self.assertEqual(ast.dump(before), ast.dump(after))
         self.assertEqual(audit(original, metrics={'agent_var_break_rate':.2}),
                          audit(repaired, metrics={'agent_var_break_rate':.2}))
+
+    def test_complete_low_exposure_is_not_missing_data(self):
+        dates = ['2025-01-02', '2025-01-03']
+        nav = [dict(date=d, nav=1.) for d in dates]
+        for gross in (0., .7, .799, .8, 1., 2.2, 2.3):
+            with self.subTest(gross=gross):
+                weights = {etf: 0. for etf in repaired['ALL_ETFS']}
+                weights[next(iter(weights))] = gross
+                records = [dict(date=d, weights=weights) for d in dates]
+                before = original['validate_daily_weights_completeness'](records, nav)
+                after = repaired['validate_daily_weights_completeness'](records, nav)
+                if gross < .8:
+                    self.assertEqual(before[2], 2)
+                    self.assertEqual(after, (0, [], 0))
+                    self.assertEqual(repaired['calculate_weights_penalty'](after[2], 2), 0)
+                else:
+                    self.assertEqual(before, after)
+
+    def test_missing_fields_dates_and_unknown_assets_are_not_exempt(self):
+        weights = {etf: .07 for etf in repaired['ALL_ETFS']}
+        nav = [dict(date='2025-01-02', nav=1.)]
+        missing = dict(weights)
+        missing.pop(next(iter(missing)))
+        for records in ([dict(date='2025-01-02', weights=missing)],
+                        [dict(date='2025-01-02', weights=dict(weights, UNKNOWN=.01))], []):
+            with self.subTest(records=records):
+                before = original['validate_daily_weights_completeness'](records, nav)
+                after = repaired['validate_daily_weights_completeness'](records, nav)
+                self.assertEqual(before, after)
+                self.assertGreater(after[0], 0)
 
     def test_unknown_source_and_repeated_patch_fail_closed(self):
         self.assertEqual(repair_module.repair(ORIGINAL.read_bytes()), REPAIRED.read_bytes())

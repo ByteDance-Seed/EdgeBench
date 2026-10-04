@@ -4,7 +4,7 @@ This opt-in **diagnostic** repair targets the published Portfolio judge image
 `seededge/edgebench.judge.portfolio_risk_calibration:08fe0a4bad80`. It does not
 change SForge defaults, dataset image pins, official results, or running jobs.
 The evaluator source is distributed inside the image, not this Git repository;
-`repair.py` checks its exact digest and changes five audit effects at build time.
+`repair.py` checks its exact digest and changes five audit effects plus an undeclared minimum-exposure check at build time.
 No hidden data, reference solution, agent trajectory, or evaluator dump is included.
 
 ## Why
@@ -23,8 +23,19 @@ by scoring but can also trigger a veto when supplied as zero.
 These observations can warrant investigation; alone they do not prove fabricated
 returns. This candidate retains diagnostic warnings but removes their automatic
 core-score veto. It preserves independent NAV reconstruction, price/date/quantity
-checks, constraints, other existing audit effects, scoring functions and deductions.
+checks, constraints, other existing audit effects and scoring functions.
+
+A separate completeness check treats gross exposure below 80% as missing data,
+even when every date and all ten ETF fields are present. The published task
+specifies upper position/leverage limits but no minimum investment. This repair
+removes only that lower-bound condition. Missing dates, missing ETF fields,
+unknown instruments, the existing upper check and core leverage checks remain
+unchanged. Low investment can still lose performance or short-exposure credit;
+structural completeness does not imply a good or compliant strategy.
 It is intentionally not a comprehensive validation of every remaining rule.
+Trigger-specific rebalancing intervals remain unresolved: scheduled re-estimation,
+additional risk rebalances and constraint corrections need an explicit common
+task contract before that rule is changed. Do not treat this image as fully qualified.
 
 ## Reproduce and validate
 
@@ -33,7 +44,7 @@ From the repository root, with Docker available:
 ```sh
 docker build --platform linux/amd64 \
   -f examples/portfolio-scoring-repair/Dockerfile \
-  -t portfolio-judge:contract-repair-v1 examples/portfolio-scoring-repair
+  -t portfolio-judge:contract-repair-v2 examples/portfolio-scoring-repair
 ```
 
 The build runs synthetic boundary tests against both original and repaired
