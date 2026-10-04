@@ -35,7 +35,9 @@ structural completeness does not imply a good or compliant strategy.
 It is intentionally not a comprehensive validation of every remaining rule.
 Trigger-specific rebalancing intervals remain unresolved: scheduled re-estimation,
 additional risk rebalances and constraint corrections need an explicit common
-task contract before that rule is changed. Do not treat this image as fully qualified.
+task contract before that rule is changed. Do not treat this image as fully qualified. See the [event and constraint contract
+proposal](interval-contract.md) for synthetic counterexamples, label-independent
+audit requirements and the remaining acceptance cases.
 
 ## Reproduce and validate
 
