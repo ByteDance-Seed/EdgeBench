@@ -1,8 +1,10 @@
 # Portfolio event and constraint contract proposal
 
-Status: proposed task correction, **not installed** by this repair image. The
-current candidate does not alter interval or position-audit behavior. This note
-specifies the remaining acceptance boundary before a versioned task correction.
+Status: interval and event-schema correction remains **proposed, not installed**.
+The diagnostic v3 candidate now audits all reported daily weight vectors,
+independently of event labels, using the existing position equations and penalty
+caps. It does not implement the separate clocks, scheduled anchor, or correction
+exemptions below. Those still require a versioned task correction.
 
 ## Demonstrated inconsistencies
 
@@ -11,7 +13,7 @@ at least five sessions between additional risk-triggered rebalances. Its output
 guide describes `scheduled` and `risk_scale_change` events. Re-estimation,
 execution and restoring a violated position limit are different operations.
 
-Synthetic probes against the published judge (also unchanged in this candidate)
+Synthetic probes against the original published judge
 produce the following results. Indices below refer to a synthetic trading calendar;
 no submission, market data or strategy trajectory is needed.
 
@@ -24,7 +26,7 @@ no submission, market data or strategy trajectory is needed.
 | Complete weight records: all zero at 0, all ten assets at 25% each at 18; event labels `initial` at 0, `scheduled` at 18, `risk_scale_change` at 40 | Five leverage penalty points, plus other position penalties | Gross exposure is 2.5, above the published 2.0 cap |
 | Same weights/dates, changing only the event at 18 to `constraint_repair` or an unknown label | Zero leverage and total constraint penalty | An event label must not select whether exposure is audited |
 
-The last pair demonstrates a label-dependent audit gap; it is not evidence that
+The last pair demonstrates a label-dependent audit gap, repaired in v3; it is not evidence that
 an agent intentionally exploited the grader. Simply excluding correction events
 from interval checks would be an incomplete fix and could conceal this gap.
 

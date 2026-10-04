@@ -4,7 +4,7 @@ This opt-in **diagnostic** repair targets the published Portfolio judge image
 `seededge/edgebench.judge.portfolio_risk_calibration:08fe0a4bad80`. It does not
 change SForge defaults, dataset image pins, official results, or running jobs.
 The evaluator source is distributed inside the image, not this Git repository;
-`repair.py` checks its exact digest and changes five audit effects plus an undeclared minimum-exposure check at build time.
+`repair.py` checks its exact digest and changes five audit effects, an undeclared minimum-exposure check and label-dependent position selection at build time.
 No hidden data, reference solution, agent trajectory, or evaluator dump is included.
 
 ## Why
@@ -23,15 +23,24 @@ by scoring but can also trigger a veto when supplied as zero.
 These observations can warrant investigation; alone they do not prove fabricated
 returns. This candidate retains diagnostic warnings but removes their automatic
 core-score veto. It preserves independent NAV reconstruction, price/date/quantity
-checks, constraints, other existing audit effects and scoring functions.
+checks, other existing audit effects and scoring functions.
 
 A separate completeness check treats gross exposure below 80% as missing data,
 even when every date and all ten ETF fields are present. The published task
 specifies upper position/leverage limits but no minimum investment. This repair
 removes only that lower-bound condition. Missing dates, missing ETF fields,
-unknown instruments, the existing upper check and core leverage checks remain
-unchanged. Low investment can still lose performance or short-exposure credit;
+unknown instruments and the existing upper check remain unchanged. Low investment can still lose performance or short-exposure credit;
 structural completeness does not imply a good or compliant strategy.
+Position and leverage limits now apply to every reported daily weight vector.
+Previously only dates carrying recognized rebalance labels were checked when any
+such labels existed. Identical excessive exposures could evade penalties by
+renaming or omitting an event. The candidate removes that date filter and its
+unused selector; it retains all existing constraint equations, penalty amounts
+and caps. This is a deliberate strengthening: unlabelled days, including drifted
+holdings, are audited against the published daily position limits. No unpublished
+intraday tolerance or correction exemption is inferred. Original results remain
+historical; this change needs a separately versioned comparison.
+
 It is intentionally not a comprehensive validation of every remaining rule.
 Trigger-specific rebalancing intervals remain unresolved: scheduled re-estimation,
 additional risk rebalances and constraint corrections need an explicit common
@@ -46,7 +55,7 @@ From the repository root, with Docker available:
 ```sh
 docker build --platform linux/amd64 \
   -f examples/portfolio-scoring-repair/Dockerfile \
-  -t portfolio-judge:contract-repair-v2 examples/portfolio-scoring-repair
+  -t portfolio-judge:contract-repair-v3 examples/portfolio-scoring-repair
 ```
 
 The build runs synthetic boundary tests against both original and repaired

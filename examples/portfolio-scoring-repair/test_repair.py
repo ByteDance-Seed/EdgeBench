@@ -74,11 +74,12 @@ class RepairTests(unittest.TestCase):
     def test_unrelated_effects_and_source_are_preserved(self):
         before = ast.parse(ORIGINAL.read_text())
         after = ast.parse(REPAIRED.read_text())
-        # Entire surrounding program is identical, including NAV reconstruction,
-        # constraints, metrics, penalties, scoring aggregation and execution.
+        # Surrounding program remains identical, including NAV reconstruction,
+        # metrics, scoring aggregation and execution. The targeted constraint
+        # function has a separate structural equality assertion below.
         for tree in (before, after):
             tree.body = [n for n in tree.body if not (isinstance(n, ast.FunctionDef)
-                         and n.name in {'audit_anti_fraud', 'validate_daily_weights_completeness'})]
+                         and n.name in {'audit_anti_fraud', 'validate_daily_weights_completeness', 'audit_core_constraints'})]
         self.assertEqual(ast.dump(before), ast.dump(after))
         self.assertEqual(audit(original, metrics={'agent_var_break_rate':.2}),
                          audit(repaired, metrics={'agent_var_break_rate':.2}))
@@ -112,6 +113,48 @@ class RepairTests(unittest.TestCase):
                 after = repaired['validate_daily_weights_completeness'](records, nav)
                 self.assertEqual(before, after)
                 self.assertGreater(after[0], 0)
+
+    def test_position_audit_is_independent_of_event_labels_and_omission(self):
+        dates = pd.bdate_range('2025-01-02', periods=41)
+        def check(module, trigger, weights):
+            records = [dict(date=str(dates[0].date()), weights=dict.fromkeys(module['ALL_ETFS'], 0.)),
+                       dict(date=str(dates[18].date()), weights=weights)]
+            events = [dict(date=str(dates[0].date()), trigger='initial'),
+                      dict(date=str(dates[40].date()), trigger='risk_scale_change')]
+            if trigger is not None:
+                events.insert(1, dict(date=str(dates[18].date()), trigger=trigger))
+            return module['audit_core_constraints'](records, [], {'rebalance_history': events}, dates)[3]
+        # The same violations must survive removal, unknown labels and claims of
+        # constraint repair. This does not exempt those events from interval rules.
+        for weights in (dict.fromkeys(repaired['ALL_ETFS'], .25),
+                        dict.fromkeys(repaired['ALL_ETFS'], -.30)):
+            reference = check(original, 'scheduled', weights)
+            keys = [k for k in reference if k not in {
+                'rolling revaluation interval violation', 'risk_scale_change not triggered'}]
+            for trigger in ('scheduled', 'constraint_repair', 'unrecognized', None):
+                with self.subTest(weights=weights, trigger=trigger):
+                    result = check(repaired, trigger, weights)
+                    self.assertEqual({k: reference[k] for k in keys}, {k: result[k] for k in keys})
+                    self.assertGreater(result['total leverage exceeds 2.0'], 0)
+        self.assertEqual(check(repaired, None, dict.fromkeys(repaired['ALL_ETFS'], 0.))[
+            'total leverage exceeds 2.0'], 0)
+
+    def test_position_repair_preserves_interval_rules_and_penalty_arithmetic(self):
+        before = next(n for n in ast.parse(ORIGINAL.read_text()).body
+                      if isinstance(n, ast.FunctionDef) and n.name == 'audit_core_constraints')
+        after = next(n for n in ast.parse(REPAIRED.read_text()).body
+                     if isinstance(n, ast.FunctionDef) and n.name == 'audit_core_constraints')
+        # Independently delimit the original label-dependent selection; every
+        # subsequent constraint equation, counter, cap and interval rule is equal.
+        first = next(i for i, n in enumerate(before.body)
+                     if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == 'rebalance_history')
+        del before.body[first:first + 4]
+        for node in ast.walk(before):
+            if isinstance(node, ast.For) and ast.unparse(node.iter) == 'daily_weights':
+                node.body = [n for n in node.body if not (isinstance(n, ast.If)
+                             and ast.unparse(n.test) == 'date_str not in rebalance_dates')]
+        before.body[0] = after.body[0]  # The changed docstring states daily scope.
+        self.assertEqual(ast.dump(before), ast.dump(after))
 
     def test_unknown_source_and_repeated_patch_fail_closed(self):
         self.assertEqual(repair_module.repair(ORIGINAL.read_bytes()), REPAIRED.read_bytes())

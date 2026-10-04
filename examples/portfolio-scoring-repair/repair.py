@@ -69,6 +69,31 @@ def repair(source: bytes) -> bytes:
         'total_abs < 0.8 or total_abs > 2.2:', 'total_abs > 2.2:')
     for index in range(completeness.lineno - 1, completeness.end_lineno):
         lines[index] = lines[index].replace('(0.8-2.2)', '(upper bound 2.2; no minimum)')
+    # Published position limits apply to reported daily weights, independent of
+    # a solver-controlled event label. Remove only that date-selection gate.
+    constraints = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
+                       and n.name == 'audit_core_constraints')
+    selector = next(i for i, n in enumerate(constraints.body)
+                    if isinstance(n, ast.Assign) and len(n.targets) == 1
+                    and isinstance(n.targets[0], ast.Name)
+                    and n.targets[0].id == 'rebalance_history')
+    selection = constraints.body[selector:selector + 4]
+    if ([type(n) for n in selection] != [ast.Assign, ast.Assign, ast.For, ast.If]
+            or ast.unparse(selection[1]) != 'rebalance_dates = set()'
+            or ast.unparse(selection[2].iter) != 'rebalance_history'
+            or ast.unparse(selection[3].test) != 'not rebalance_dates'):
+        raise ValueError('Unexpected position date selector')
+    gates = [n for n in ast.walk(constraints) if isinstance(n, ast.If)
+             and ast.unparse(n.test) == 'date_str not in rebalance_dates']
+    if len(gates) != 1 or len(gates[0].body) != 1 or not isinstance(gates[0].body[0], ast.Continue):
+        raise ValueError('Unexpected position date gate')
+    for node in [*selection, gates[0]]:
+        for index in range(node.lineno - 1, node.end_lineno):
+            lines[index] = ''
+    for index in range(constraints.lineno - 1, constraints.end_lineno):
+        lines[index] = lines[index].replace('(byrebalancing daycheck)', '(all reported daily weights)')
+        if lines[index].strip() == '# getrebalancedatecolumntable':
+            lines[index] = ''
     result = ''.join(lines).encode('utf-8')
     compile(result, '<repaired scorer>', 'exec')
     return result
