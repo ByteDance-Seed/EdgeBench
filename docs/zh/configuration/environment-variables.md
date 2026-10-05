@@ -155,3 +155,26 @@ export SFORGE_BACKEND="k8s"
 export SFORGE_K8S_NAMESPACE="sforge-runs"
 export SFORGE_K8S_IMAGE_REGISTRY="registry.example.com/sforge"
 ```
+
+## 评测服务容量
+
+`serve` 默认改为每个服务进程最多同时运行 2 个评测，额外排队 32 个快照，
+不再为每次提交无界创建评测线程。例如：
+
+```bash
+sforge serve --judge-max-concurrent 1 --judge-max-pending 32
+```
+
+对应环境变量为 `SFORGE_JUDGE_MAX_CONCURRENT`（至少 1）和
+`SFORGE_JUDGE_MAX_PENDING`（至少 0）。限制由服务持有，覆盖所有任务、run
+和 agent/auto 提交；多个进程各自计数。交互游戏和直接 `sforge eval` 不走此队列。
+
+快照按受理顺序落盘排队；报告保留受理时间，执行耗时不含排队。不会合并快照或缓存分数。
+容量满返回带 Retry-After 的 503，不消耗提交次数、不分配轮次、不触发冷却。
+要无损采样，客户端必须保留原快照重试；当前周期自动评测器只记录失败 tick，不自动重试。
+队列限制资源而非延迟，输入持续超过吞吐时需降低采样频率或增加合格资源。
+
+优雅关闭会等待已受理任务完成。会话、计数和队列元数据仍在内存中，
+不是崩溃恢复机制，孤立 spool 文件不足以重建运行；重启前必须排空。
+本修改不改变题目、评分规则、单次容器限制或反馈权限。回滚需排空后停止服务，
+再部署旧版；不提供无界并发开关。

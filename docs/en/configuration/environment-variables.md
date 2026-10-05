@@ -83,6 +83,42 @@ host allowlist directly.
 
 Judge CPU/memory limits are currently set through CLI flags (`--judge-cpu-limit`, `--judge-mem-limit`) or experiment YAML (`judge_cpu_limit`, `judge_mem_limit`), not environment variables.
 
+## Judge admission and resource limits
+
+`serve` now defaults to **2 active evaluations and 32 additional pending snapshots**
+per server process, instead of creating an evaluation thread for every submission.
+Set the capacity according to available memory and the per-container limits:
+
+```bash
+sforge serve --judge-max-concurrent 1 --judge-max-pending 32
+```
+
+The equivalent environment variables are `SFORGE_JUDGE_MAX_CONCURRENT` (>= 1)
+and `SFORGE_JUDGE_MAX_PENDING` (>= 0). These are server settings; registration
+cannot raise them. Multiple server processes have independent limits. They apply
+across tasks, runs and both agent/auto submissions; interactive game sessions
+and direct synchronous `sforge eval` are separate paths.
+
+Accepted snapshots are spooled under the log directory and evaluated in admission
+order by a fixed worker pool. Pending snapshots do not retain their archive bytes
+in RAM. Results transition from `queued` to `running` before reaching a terminal
+state. Reports retain the admission timestamp for timelines; runtime still measures
+execution. No snapshots are deduplicated, coalesced, or assigned cached scores.
+
+At capacity, submission returns **503 with Retry-After**, without allocating a
+round, consuming submission budget, or starting a cooldown. Clients must retain
+and retry the same snapshot if they need lossless sampling; the existing periodic
+auto-evaluator logs failed ticks and does not retry them. A queue bounds resource
+use, not scoring latency: if arrivals exceed throughput, reduce sampling or add
+qualified capacity. Larger pending limits also require disk space.
+
+Graceful shutdown drains accepted work. Sessions, queue metadata, and counters
+remain in memory, so this is **not restart recovery**; orphan spool files alone
+are not enough to reconstruct a run. Drain before restarting. This does not change
+task/scoring rules, per-evaluation limits, or feedback visibility. To revert the
+scheduling change, drain, stop, and deploy the previous server revision; there is
+no unlimited-concurrency switch.
+
 ## Container Backend Variables
 
 | Variable | Default | Purpose |
