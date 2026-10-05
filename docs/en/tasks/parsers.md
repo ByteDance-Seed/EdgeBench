@@ -75,6 +75,8 @@ Use `PASSED`, `FAILED`, or `ERROR` for `details[].status`.
 
 The parser can also detect a standalone JSON object in the output, but markers are more robust because they avoid accidentally parsing unrelated JSON logs.
 
+Missing, empty, or malformed result output with no `TOTAL_SCORE` now produces an invalid report (`valid=false`, `score=null`) with a diagnostic summary. It is not a zero score. Existing numeric `TOTAL_SCORE` fallback, including zero, is preserved. A result object without a numeric score (for example, pass-rate-only results) remains supported.
+
 **Task config example:**
 
 ```json
