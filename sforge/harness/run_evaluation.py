@@ -110,6 +110,7 @@ def judge_submission(
     timeout: int | None = None,
     log_dir: Path | None = None,
     verbose: bool = False,
+    submitted_at: float | None = None,
 ) -> EvalReport:
     """
     Grade an archive submission in an ephemeral judge container.
@@ -130,7 +131,7 @@ def judge_submission(
     if submission_id is None:
         submission_id = uuid.uuid4().hex[:12]
 
-    submitted_at = time.time()
+    submitted_at = time.time() if submitted_at is None else submitted_at
     timeout = timeout or task_spec.judge.eval_timeout
 
     # Set up logging

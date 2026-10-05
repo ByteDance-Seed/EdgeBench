@@ -19,6 +19,9 @@ from __future__ import annotations
 import json
 import logging
 import secrets
+import tempfile
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 import threading
 import time
 import uuid
@@ -50,6 +53,10 @@ from sforge.harness.task_spec import TaskSpec, load_all_tasks
 logger = logging.getLogger("sforge.judge_server")
 
 GAME_SERVER_APP_PATH = Path(__file__).parent / "game_server_app.py"
+
+
+class JudgeCapacityExceeded(Exception):
+    pass
 
 
 class SubmissionBudgetExceeded(Exception):
@@ -188,7 +195,17 @@ class GameSessionState:
 
 class JudgeState:
     def __init__(self, config: SForgeConfig):
+        if config.judge_max_concurrent < 1 or config.judge_max_pending < 0:
+            raise ValueError("judge_max_concurrent must be >= 1 and judge_max_pending >= 0")
         self.config = config
+        self._admission_lock = threading.Lock()
+        self._closed = False
+        self._capacity = threading.BoundedSemaphore(
+            config.judge_max_concurrent + config.judge_max_pending
+        )
+        self._executor = ThreadPoolExecutor(
+            max_workers=config.judge_max_concurrent, thread_name_prefix="sforge-judge"
+        )
         self.admin_secret = get_admin_secret(config.log_dir)
         self.tasks: dict[str, TaskSpec] = {}
         self.submissions: dict[str, dict] = {}  # submission_id -> {status, report, ...}
@@ -474,37 +491,111 @@ class JudgeState:
         task_list = load_all_tasks(self.config.tasks_dir, benchmark)
         self.tasks = {t.task_id: t for t in task_list}
 
+    def close(self) -> None:
+        """Drain accepted evaluations on graceful shutdown; stop new admission."""
+        with self._admission_lock:
+            self._closed = True
+        self._reaper_stop.set()
+        self._executor.shutdown(wait=True)
+        self._reaper_thread.join()
+
+    def _reserve(self) -> None:
+        if self._closed or not self._capacity.acquire(blocking=False):
+            raise JudgeCapacityExceeded("Judge capacity full; retry this snapshot later")
+
+    def submit_for_token(self, token: str, archive: bytes, kind: str) -> tuple[str, str, int | None]:
+        """Reserve capacity before spending a round or starting its cooldown."""
+        with self._admission_lock:
+            self.resolve_token(token)
+            self._reserve()
+            try:
+                # Spool before consuming budget: disk failure must not spend a round.
+                spool = self._spool(archive)
+            except BaseException:
+                self._capacity.release()
+                raise
+            try:
+                task_id, run_id, round_id, cpu, mem, remaining = self.consume_round(token, kind)
+            except BaseException:
+                spool.unlink()
+                self._capacity.release()
+                raise
+            submission_id = self._enqueue(task_id, spool, run_id, round_id, cpu, mem)
+            return submission_id, round_id, remaining
+
     def submit(self, task_id: str, archive: bytes, run_id: str | None = None, round: str | None = None,
                judge_cpu_limit: int | None = None, judge_mem_limit: str | None = None) -> str:
-        """Submit and grade asynchronously. Returns submission_id for polling."""
-        if task_id not in self.tasks:
-            raise ValueError(f"Unknown task: {task_id}")
+        """Submit within the same aggregate limit as HTTP submissions."""
+        with self._admission_lock:
+            if task_id not in self.tasks:
+                raise ValueError(f"Unknown task: {task_id}")
+            self._reserve()
+            try:
+                spool = self._spool(archive)
+            except BaseException:
+                self._capacity.release()
+                raise
+            return self._enqueue(task_id, spool, run_id, round, judge_cpu_limit, judge_mem_limit)
 
+    def _spool(self, archive: bytes) -> Path:
+        # Queued snapshots must not accumulate in RAM. Retain the spool after a
+        # process crash for operator recovery, but do not claim automatic replay.
+        directory = self.config.log_dir / "judge-pending"
+        directory.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=directory, suffix=".tar.gz", delete=False) as f:
+            path = Path(f.name)
+            try:
+                f.write(archive)
+            except BaseException:
+                path.unlink(missing_ok=True)
+                raise
+        return path
+
+    def _enqueue(self, task_id: str, spool: Path, run_id: str | None,
+                 round_id: str | None, cpu: int | None, mem: str | None) -> str:
         submission_id = uuid.uuid4().hex[:12]
-        log_run_id = run_id or submission_id
         self.submissions[submission_id] = {
-            "status": SubmissionStatus.QUEUED,
-            "task_id": task_id,
-            "run_id": run_id,
-            "round": round,
-            "report": None,
-            "error": None,
+            "status": SubmissionStatus.QUEUED, "task_id": task_id,
+            "run_id": run_id, "round": round_id, "report": None, "error": None,
+            "submitted_at": time.time(),
         }
-        self._record_submission(log_run_id, submission_id, task_id, round, None, None, status="running")
-
-        thread = threading.Thread(
-            target=self._grade_worker,
-            args=(submission_id, task_id, archive, run_id, round,
-                  judge_cpu_limit, judge_mem_limit),
-            daemon=True,
-        )
-        thread.start()
+        self._record_submission(run_id or submission_id, submission_id, task_id,
+                                round_id, None, None, status="queued")
+        try:
+            self._executor.submit(self._grade_spooled, submission_id, task_id,
+                                  spool, run_id, round_id, cpu, mem)
+        except BaseException as e:
+            self.submissions[submission_id].update(status=SubmissionStatus.ERROR, error=str(e))
+            self._record_submission(run_id or submission_id, submission_id, task_id,
+                                    round_id, None, str(e), status="error")
+            try:
+                spool.unlink(missing_ok=True)
+            finally:
+                self._capacity.release()
+            raise
         return submission_id
 
+    def _grade_spooled(self, submission_id: str, task_id: str, spool: Path,
+                       run_id: str | None, round_id: str | None,
+                       cpu: int | None, mem: str | None) -> None:
+        try:
+            self._grade_worker(submission_id, task_id, spool.read_bytes(), run_id, round_id, cpu, mem)
+        except Exception as e:
+            self.submissions[submission_id].update(status=SubmissionStatus.ERROR, error=str(e))
+            self._record_submission(run_id or submission_id, submission_id, task_id,
+                                    round_id, None, str(e), status="error")
+        finally:
+            try:
+                spool.unlink(missing_ok=True)
+            finally:
+                self._capacity.release()
+
     def _grade_worker(self, submission_id: str, task_id: str, archive: bytes,
-                      run_id: str | None = None, round: int | None = None,
+                      run_id: str | None = None, round: str | None = None,
                       judge_cpu_limit: int | None = None, judge_mem_limit: str | None = None) -> None:
         self.submissions[submission_id]["status"] = SubmissionStatus.RUNNING
+        self._record_submission(run_id or submission_id, submission_id, task_id,
+                                round, None, None, status="running")
         try:
             task_spec = self.tasks[task_id]
             log_run_id = run_id or submission_id
@@ -525,6 +616,7 @@ class JudgeState:
                 config=config,
                 backend=self._get_backend(run_id, task_id),
                 submission_id=submission_id,
+                submitted_at=self.submissions[submission_id]["submitted_at"],
                 log_dir=sub_log_dir,
             )
             report_dict = report.to_dict()
@@ -535,7 +627,7 @@ class JudgeState:
         except Exception as e:
             self.submissions[submission_id]["status"] = SubmissionStatus.ERROR
             self.submissions[submission_id]["error"] = str(e)
-            self._record_submission(log_run_id, submission_id, task_id, round, None, str(e))
+            self._record_submission(log_run_id, submission_id, task_id, round, None, str(e), status="error")
 
     def get_result(self, submission_id: str) -> dict | None:
         return self.submissions.get(submission_id)
@@ -880,9 +972,18 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
     if config is None:
         config = load_config()
 
-    app = FastAPI(title="SForge Judge", version=__version__)
     state = JudgeState(config)
     state.load_tasks()
+
+    @asynccontextmanager
+    async def lifespan(app):
+        try:
+            yield
+        finally:
+            state.close()
+
+    app = FastAPI(title="SForge Judge", version=__version__, lifespan=lifespan)
+    app.state.judge = state
 
     @app.get("/api/v1/result/{submission_id}")
     def get_result(submission_id: str) -> ResultResponse:
@@ -939,24 +1040,19 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
         if kind == "auto" and admin_secret != state.admin_secret:
             raise HTTPException(status_code=403, detail="admin_secret required for auto submissions")
         try:
-            task_id, run_id, round_id, judge_cpu_limit, judge_mem_limit, remaining = state.consume_round(token, kind)
+            submission_id, round_id, remaining = state.submit_for_token(
+                token, archive.file.read(), kind,
+            )
+            return SubmitResponse(
+                submission_id=submission_id, round_id=round_id,
+                status=SubmissionStatus.QUEUED, remaining_submissions=remaining,
+            )
         except KeyError:
             raise HTTPException(status_code=401, detail="Invalid token")
-        except SubmissionBudgetExceeded as e:
+        except (SubmissionBudgetExceeded, SubmissionCooldownActive) as e:
             raise HTTPException(status_code=429, detail=str(e))
-        except SubmissionCooldownActive as e:
-            raise HTTPException(status_code=429, detail=str(e))
-        archive_data = archive.file.read()
-        try:
-            submission_id = state.submit(task_id, archive_data, run_id, round_id,
-                                         judge_cpu_limit=judge_cpu_limit,
-                                         judge_mem_limit=judge_mem_limit)
-            return SubmitResponse(
-                submission_id=submission_id,
-                round_id=round_id,
-                status=SubmissionStatus.QUEUED,
-                remaining_submissions=remaining,
-            )
+        except JudgeCapacityExceeded as e:
+            raise HTTPException(status_code=503, detail=str(e), headers={"Retry-After": "5"})
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
 
