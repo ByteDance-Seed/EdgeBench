@@ -142,3 +142,17 @@ def test_capacity_environment(monkeypatch):
     monkeypatch.setenv('SFORGE_JUDGE_MAX_PENDING', '7')
     config = load_config()
     assert (config.judge_max_concurrent, config.judge_max_pending) == (3, 7)
+
+
+def test_pending_and_invalid_are_not_zero_score_observations(tmp_path):
+    import json
+    from sforge.visualizer.scanner import _scan_submissions_shallow
+    root = tmp_path / 'submissions'
+    for n in range(1, 5):
+        (root / f'auto-{n}').mkdir(parents=True)
+    # Missing and partially written reports are pending, not zero.
+    (root / 'auto-2' / 'report.json').write_text('{')
+    (root / 'auto-3' / 'report.json').write_text(json.dumps({'valid': False, 'score': 0}))
+    (root / 'auto-4' / 'report.json').write_text(json.dumps({'valid': True, 'score': 0, 'pass_rate': 0, 'submitted_at': 123}))
+    rows = _scan_submissions_shallow(tmp_path)
+    assert [(r.round_label, r.score, r.submitted_at) for r in rows] == [('auto-4', 0, 123)]

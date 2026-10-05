@@ -102,7 +102,8 @@ and direct synchronous `sforge eval` are separate paths.
 Accepted snapshots are spooled under the log directory and evaluated in admission
 order by a fixed worker pool. Pending snapshots do not retain their archive bytes
 in RAM. Results transition from `queued` to `running` before reaching a terminal
-state. Reports retain the admission timestamp for timelines; runtime still measures
+state. The visualizer excludes missing/invalid reports rather than plotting them as zeros.
+Reports retain the admission timestamp for timelines; runtime still measures
 execution. No snapshots are deduplicated, coalesced, or assigned cached scores.
 
 At capacity, submission returns **503 with Retry-After**, without allocating a
