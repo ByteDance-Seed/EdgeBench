@@ -115,3 +115,38 @@ Task provenance: [EdgeBench dataset](https://huggingface.co/datasets/ByteDance-S
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). This candidate is
 submitted for maintainer review; the original task and scoring authors retain
 attribution.
+
+## Optional paired ledger v2
+
+The [ledger-v2 amendment](ledger-contract.md) makes close execution, starting
+capital and costs explicit, then checks the full daily cash/share/equity path.
+It supersedes approximate current-weight NAV reconstruction and signature-only
+duplicate detection. Missing costs, duplicated executions and altered intermediate
+NAV fail even if the final NAV matches. Separate same-size fills remain valid
+when their identities, inventory, cash and costs reconcile. Invalid accounting
+receives zero with an accounting diagnostic, not a fraud verdict.
+
+This is an opt-in experimental task revision, including event v1, not a silent
+change to either default image or historical scores. Costs are fixed at 5 bps
+commission and 1 bp slippage per execution, with 4% ACT/365 prior-close short
+borrow paid daily. These are explicit new task conventions, not assumptions
+retroactively imposed on older outputs. Remaining strategy/scoring heuristics
+are outside this accounting repair.
+
+```sh
+docker build --platform linux/amd64 --build-arg EVENT_CONTRACT=1 \
+  --build-arg LEDGER_CONTRACT=1 \
+  -f examples/portfolio-scoring-repair/Dockerfile \
+  -t portfolio-judge:ledger-v2 examples/portfolio-scoring-repair
+docker build --platform linux/amd64 --build-arg LEDGER_CONTRACT=1 \
+  -f examples/portfolio-scoring-repair/Work.Dockerfile \
+  -t portfolio-work:ledger-v2 examples/portfolio-scoring-repair
+```
+
+Use both image digests in a copied task definition. The same public validator is
+installed in the work image and embedded in the judge, without judge clients,
+hidden input data or score access. Synthetic tests cover close timing, weekend
+borrow, legitimate matching-size fills, 24 accounting/schema mutations and
+actual judge-entry rejection before performance calculation. A local pass does
+not certify hidden-period strategy performance or causal use of market inputs.
+Revert by selecting a previously qualified paired task for a new attempt.

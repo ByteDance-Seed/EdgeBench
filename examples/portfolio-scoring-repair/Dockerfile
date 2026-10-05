@@ -18,3 +18,14 @@ RUN if [ "$EVENT_CONTRACT" = 1 ]; then \
       && python3 /tmp/test_event_contract.py \
       && python3 /tmp/test_event_judge.py /home/workspace/scoring/eval_script.py; \
     elif [ "$EVENT_CONTRACT" != 0 ]; then exit 2; fi
+
+# A new paired task version; defaults and event-v1 stay unchanged.
+ARG LEDGER_CONTRACT=0
+COPY ledger_contract.py ledger_repair.py test_ledger_contract.py test_ledger_judge.py /tmp/
+RUN if [ "$LEDGER_CONTRACT" = 1 ] && [ "$EVENT_CONTRACT" = 1 ]; then \
+      cp /tmp/portfolio-repair.py /tmp/repair.py \
+      && python3 /tmp/ledger_repair.py /tmp/original-eval-script.py /tmp/ledger-eval-script.py \
+      && cp /tmp/ledger-eval-script.py /home/workspace/scoring/eval_script.py \
+      && python3 /tmp/test_ledger_contract.py \
+      && python3 /tmp/test_ledger_judge.py /home/workspace/scoring/eval_script.py; \
+    elif [ "$LEDGER_CONTRACT" != 0 ]; then exit 2; fi
