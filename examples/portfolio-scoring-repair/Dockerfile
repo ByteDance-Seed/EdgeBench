@@ -29,3 +29,14 @@ RUN if [ "$LEDGER_CONTRACT" = 1 ] && [ "$EVENT_CONTRACT" = 1 ]; then \
       && python3 /tmp/test_ledger_contract.py \
       && python3 /tmp/test_ledger_judge.py /home/workspace/scoring/eval_script.py; \
     elif [ "$LEDGER_CONTRACT" != 0 ]; then exit 2; fi
+
+# Separate timing opt-in; existing ledger-v2 image bytes stay the default.
+ARG VAR_TIMING=0
+COPY test_var_timing.py /tmp/
+RUN if [ "$VAR_TIMING" = 1 ] && [ "$LEDGER_CONTRACT" = 1 ] && [ "$EVENT_CONTRACT" = 1 ]; then \
+      cp /home/workspace/scoring/eval_script.py /tmp/ledger-before-var.py \
+      && python3 /tmp/ledger_repair.py --var-timing-v1 /tmp/original-eval-script.py /tmp/var-eval-script.py \
+      && cp /tmp/var-eval-script.py /home/workspace/scoring/eval_script.py \
+      && python3 /tmp/test_var_timing.py /tmp/original-eval-script.py /tmp/ledger-before-var.py /home/workspace/scoring/eval_script.py \
+      && python3 /tmp/test_ledger_judge.py /home/workspace/scoring/eval_script.py; \
+    elif [ "$VAR_TIMING" != 0 ]; then exit 2; fi

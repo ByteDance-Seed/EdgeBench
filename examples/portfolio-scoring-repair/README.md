@@ -150,3 +150,23 @@ borrow, legitimate matching-size fills, 24 accounting/schema mutations and
 actual judge-entry rejection before performance calculation. A local pass does
 not certify hidden-period strategy performance or causal use of market inputs.
 Revert by selecting a previously qualified paired task for a new attempt.
+
+## Optional independent VaR timing v1
+
+Add `--build-arg VAR_TIMING=1` to **both** ledger-v2 build commands above,
+using new tags such as `portfolio-judge:ledger-v2-var-timing-v1` and
+`portfolio-work:ledger-v2-var-timing-v1`. It requires `LEDGER_CONTRACT=1`
+(and `EVENT_CONTRACT=1` for the judge); invalid combinations fail the build.
+The [public timing amendment](var-timing-contract.md) aligns independent VaR
+with the prior trading session's close holdings. An execution at today's close
+must not retroactively change the risk forecast for today's realized return.
+
+This deliberately changes only holding-time alignment. Warm-up, covariance,
+net-return cost treatment, calibration scoring and the remaining veto thresholds
+are unchanged. The source patch adds an explicit score-report version marker;
+with the flag omitted the existing ledger-v2 scorer is byte-identical. Synthetic
+real-function tests cover post-close rotation invariance, sensitivity to prior
+holdings, current/future price exclusion, the first covariance session, short
+history and zero exposure. No ongoing runs are restarted or regraded; activate
+only with new paired digests at the next experiment admission. Omit the flag
+on both images to return to ledger-v2.

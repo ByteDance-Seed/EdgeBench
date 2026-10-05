@@ -5,7 +5,7 @@ from pathlib import Path
 from repair import repair
 
 
-def install(source):
+def install(source, *, var_timing=False):
     text = repair(source, event_contract=True).decode()
     tree = ast.parse(text)
     functions = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
@@ -55,9 +55,24 @@ def install(source):
     lines[sig[0].lineno - 1] = "        sig = t.get('execution_id')\n"
     for i in range(sig[0].lineno, sig[0].end_lineno):
         lines[i] = ''
+    if var_timing:
+        # Ledger-v2 requires one chronological weight row per market session.
+        # A close fill at t cannot forecast the return earned before that fill.
+        var_fn = next(n for n in main.body if isinstance(n, ast.FunctionDef)
+                      and n.name == 'calculate_independent_var_break_rate')
+        weights = [n for n in ast.walk(var_fn) if isinstance(n, ast.Assign)
+                   and ast.unparse(n.targets[0]) == 'w_vec']
+        if len(weights) != 1 or ast.unparse(weights[0].value) != 'weights_df.loc[date].values':
+            raise ValueError('Unexpected independent VaR weight selection')
+        node = weights[0]
+        lines[node.lineno - 1] = '            w_vec = weights_df.iloc[i - 1].values\n'
+        for i in range(node.lineno, node.end_lineno):
+            lines[i] = ''
     report = next(n for n in main.body if isinstance(n, ast.Assign)
                   and ast.unparse(n.targets[0]) == 'report')
     lines[report.lineno - 1] += "        'accounting_contract': 'portfolio-ledger-v2',\n"
+    if var_timing:
+        lines[report.lineno - 1] += "        'risk_timing_contract': 'portfolio-var-timing-v1',\n"
     owner = ast.parse(Path(__file__).with_name('ledger_contract.py').read_text())
     embedded = [n for n in owner.body if isinstance(n, (ast.Import, ast.ImportFrom, ast.Assign, ast.ClassDef))
                 or isinstance(n, ast.FunctionDef) and n.name != 'main']
@@ -83,9 +98,10 @@ def audit_accounting_output(data, prices_df):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--var-timing-v1', action='store_true')
     parser.add_argument('source', type=Path)
     parser.add_argument('output', type=Path)
     args = parser.parse_args()
     if args.output.exists():
         parser.error('Output exists; keep original and versioned artifacts separate')
-    args.output.write_bytes(install(args.source.read_bytes()))
+    args.output.write_bytes(install(args.source.read_bytes(), var_timing=args.var_timing_v1))
