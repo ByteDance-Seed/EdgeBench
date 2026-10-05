@@ -50,7 +50,9 @@ def parse_structured_json(output: str) -> dict:
     if si != -1 and ei != -1:
         block = output[si + len(marker_start) : ei].strip()
         try:
-            return json.loads(block)
+            obj = json.loads(block)
+            if isinstance(obj, dict):
+                return obj
         except json.JSONDecodeError:
             pass
 

@@ -166,6 +166,20 @@ def _grade_structured(
     from sforge.harness.log_parsers.structured_json import parse_structured_json
 
     data = parse_structured_json(test_output)
+    fallback_score = extract_score(test_output)
+    if not data and fallback_score is None:
+        return EvalReport(
+            task_id=task_spec.task_id,
+            submission_id=submission_id,
+            timed_out=timed_out,
+            runtime_seconds=runtime,
+            raw_output=raw_output,
+            valid=False,
+            summary=(
+                "No structured evaluation result or TOTAL_SCORE was produced; "
+                "inspect the evaluator output for build or execution failures."
+            ),
+        )
 
     raw_details = data.get("details", [])
     details = [
@@ -199,7 +213,7 @@ def _grade_structured(
 
     score = data.get("score")
     if score is None:
-        score = extract_score(test_output)
+        score = fallback_score
 
     return EvalReport(
         task_id=task_spec.task_id,
