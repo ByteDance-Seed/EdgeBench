@@ -18,3 +18,10 @@ RUN if [ "$VAR_TIMING" = 1 ] && [ "$LEDGER_CONTRACT" = 1 ]; then \
       cp /tmp/var-timing-contract.md /home/workspace/attachments/portfolio-var-timing-v1.md \
       && printf '\n\n## Experimental VaR timing v1\nRead `attachments/portfolio-var-timing-v1.md`. Independent VaR uses the preceding session close holdings for the following close-to-close NAV return. All other ledger-v2 and scoring rules remain unchanged.\n' >> /home/workspace/task_instruction.md; \
     elif [ "$VAR_TIMING" != 0 ]; then exit 2; fi
+
+ARG RETURN_BASIS=0
+COPY return-basis-contract.md /tmp/
+RUN if [ "$RETURN_BASIS" = 1 ] && [ "$LEDGER_CONTRACT" = 1 ]; then \
+      cp /tmp/return-basis-contract.md /home/workspace/attachments/portfolio-return-basis-v1.md \
+      && printf '\n\n## Experimental return basis v1\nRead `attachments/portfolio-return-basis-v1.md`. Performance metrics include initial capital and the first session costs. Excess return is the difference of separately annualized strategy and benchmark returns. This takes precedence for performance time basis; other score rules remain unchanged.\n' >> /home/workspace/task_instruction.md; \
+    elif [ "$RETURN_BASIS" != 0 ]; then exit 2; fi

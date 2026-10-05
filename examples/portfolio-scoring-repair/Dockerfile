@@ -40,3 +40,17 @@ RUN if [ "$VAR_TIMING" = 1 ] && [ "$LEDGER_CONTRACT" = 1 ] && [ "$EVENT_CONTRACT
       && python3 /tmp/test_var_timing.py /tmp/original-eval-script.py /tmp/ledger-before-var.py /home/workspace/scoring/eval_script.py \
       && python3 /tmp/test_ledger_judge.py /home/workspace/scoring/eval_script.py; \
     elif [ "$VAR_TIMING" != 0 ]; then exit 2; fi
+
+# Independent performance time-basis opt-in, preserving other scoring rules.
+ARG RETURN_BASIS=0
+COPY test_return_basis.py /tmp/
+RUN if [ "$RETURN_BASIS" = 1 ] && [ "$LEDGER_CONTRACT" = 1 ] && [ "$EVENT_CONTRACT" = 1 ]; then \
+      python3 /tmp/ledger_repair.py /tmp/original-eval-script.py /tmp/return-before.py \
+      && python3 /tmp/ledger_repair.py --return-basis-v1 /tmp/original-eval-script.py /tmp/return-after.py \
+      && python3 /tmp/test_return_basis.py /tmp/original-eval-script.py /tmp/return-before.py /tmp/return-after.py \
+      && if [ "$VAR_TIMING" = 1 ]; then \
+           python3 /tmp/ledger_repair.py --return-basis-v1 --var-timing-v1 /tmp/original-eval-script.py /tmp/return-combined.py \
+           && cp /tmp/return-combined.py /home/workspace/scoring/eval_script.py; \
+         else cp /tmp/return-after.py /home/workspace/scoring/eval_script.py; fi \
+      && python3 /tmp/test_ledger_judge.py /home/workspace/scoring/eval_script.py; \
+    elif [ "$RETURN_BASIS" != 0 ]; then exit 2; fi

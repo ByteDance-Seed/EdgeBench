@@ -5,7 +5,48 @@ from pathlib import Path
 from repair import repair
 
 
-def install(source, *, var_timing=False):
+def install_return_basis(text):
+    """Version only the performance metric time basis, not score thresholds."""
+    tree = ast.parse(text)
+    fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
+              and n.name == 'calculate_metrics_from_data')
+    replacements = {
+        'r': ('s.pct_change().dropna()', 's.div(s.shift(1).fillna(1.0)).sub(1.0)'),
+        'cummax': ('s.cummax()', 's.cummax().clip(lower=1.0)'),
+        'bench_total': ('bench_aligned.iloc[-1] / bench_aligned.iloc[0] - 1',
+                        'bench_aligned.iloc[-1] - 1.0'),
+        'agent_total': ('agent_aligned.iloc[-1] / agent_aligned.iloc[0] - 1',
+                        'agent_aligned.iloc[-1] - 1.0'),
+        'excess_annual': ('(1 + excess_total) ** (252 / len(common_idx)) - 1',
+                          '(1 + agent_total) ** (252 / len(common_idx)) - '
+                          '(1 + bench_total) ** (252 / len(common_idx))'),
+        'agent_daily_ret': ('agent_aligned.pct_change().dropna()',
+                            'agent_aligned.div(agent_aligned.shift(1).fillna(1.0)).sub(1.0)'),
+        'bench_daily_ret': ('bench_aligned.pct_change().dropna()',
+                            'bench_aligned.div(bench_aligned.shift(1).fillna(1.0)).sub(1.0)'),
+    }
+    lines = text.splitlines(keepends=True)
+    matched = set()
+    for node in ast.walk(fn):
+        if not isinstance(node, ast.Assign):
+            continue
+        target = ast.unparse(node.targets[0])
+        if target not in replacements:
+            continue
+        before, after = replacements[target]
+        if ast.dump(node.value) != ast.dump(ast.parse(before, mode='eval').body):
+            continue  # e.g. the separate zero-value initialization
+        if target in matched or node.end_lineno != node.lineno:
+            raise ValueError('Unexpected repeated/multiline metric assignment')
+        indent = ' ' * node.col_offset
+        lines[node.lineno - 1] = f'{indent}{target} = {after}\n'
+        matched.add(target)
+    if matched != set(replacements):
+        raise ValueError('Unexpected performance metric source')
+    return ''.join(lines)
+
+
+def install(source, *, var_timing=False, return_basis=False):
     text = repair(source, event_contract=True).decode()
     tree = ast.parse(text)
     functions = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
@@ -71,6 +112,8 @@ def install(source, *, var_timing=False):
     report = next(n for n in main.body if isinstance(n, ast.Assign)
                   and ast.unparse(n.targets[0]) == 'report')
     lines[report.lineno - 1] += "        'accounting_contract': 'portfolio-ledger-v2',\n"
+    if return_basis:
+        lines[report.lineno - 1] += "        'return_basis_contract': 'portfolio-return-basis-v1',\n"
     if var_timing:
         lines[report.lineno - 1] += "        'risk_timing_contract': 'portfolio-var-timing-v1',\n"
     owner = ast.parse(Path(__file__).with_name('ledger_contract.py').read_text())
@@ -91,7 +134,10 @@ def audit_accounting_output(data, prices_df):
 
 '''
     lines[main.lineno - 1] = '\n'.join(ast.unparse(n) for n in embedded) + '\n' + wrapper + lines[main.lineno - 1]
-    result = ''.join(lines).encode()
+    result_text = ''.join(lines)
+    if return_basis:
+        result_text = install_return_basis(result_text)
+    result = result_text.encode()
     compile(result, '<ledger-v2 scorer>', 'exec')
     return result
 
@@ -99,9 +145,12 @@ def audit_accounting_output(data, prices_df):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--var-timing-v1', action='store_true')
+    parser.add_argument('--return-basis-v1', action='store_true')
     parser.add_argument('source', type=Path)
     parser.add_argument('output', type=Path)
     args = parser.parse_args()
     if args.output.exists():
         parser.error('Output exists; keep original and versioned artifacts separate')
-    args.output.write_bytes(install(args.source.read_bytes(), var_timing=args.var_timing_v1))
+    args.output.write_bytes(install(
+        args.source.read_bytes(), var_timing=args.var_timing_v1,
+        return_basis=args.return_basis_v1))

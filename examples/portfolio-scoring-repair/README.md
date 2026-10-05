@@ -170,3 +170,22 @@ holdings, current/future price exclusion, the first covariance session, short
 history and zero exposure. No ongoing runs are restarted or regraded; activate
 only with new paired digests at the next experiment admission. Omit the flag
 on both images to return to ledger-v2.
+
+## Optional performance return basis v1
+
+Add `--build-arg RETURN_BASIS=1` to **both** ledger-v2 builds, selecting fresh
+work/judge tags. It may be combined with `VAR_TIMING=1`; neither enables the other.
+The [public return-basis amendment](return-basis-contract.md) includes initial
+capital and first-session costs, uses the full session count, and defines annual
+excess as separately annualized strategy return minus benchmark return. A path
+losing money only on its first session must not appear flat in relative returns
+or drawdown. Large relative underperformance must not produce complex numbers.
+
+Default-off scorer bytes and other scoring/audit functions are preserved.
+Synthetic real-function tests check first-session losses, explicit half-year
+annualization, large underperformance, identical paths, Sharpe/tracking error,
+drawdown peaks, turnover time base and option composition. Legacy Sortino,
+benchmark construction and risk-calibration policies are explicitly retained;
+this does not certify their scientific suitability. Activate only for new paired
+experiments, never for existing jobs or historical scores. Omit the flag on both
+images for rollback to the prior metric basis.
