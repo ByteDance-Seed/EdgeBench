@@ -69,6 +69,10 @@ class SForgeConfig:
     judge_cpu_limit: int | None = None      # CPUs for judge containers
     judge_mem_limit: str | None = None      # memory for judge containers
 
+    # Aggregate asynchronous judge capacity (per server process).
+    judge_max_concurrent: int = 2
+    judge_max_pending: int = 32
+
     # Docker build extra hosts (DNS overrides)
     extra_hosts: dict[str, str] | None = None
 
@@ -122,6 +126,8 @@ def load_config(cli_overrides: dict | None = None) -> SForgeConfig:
         "k8s_image_registry": ["SFORGE_K8S_IMAGE_REGISTRY"],
         "k8s_kubeconfig": ["SFORGE_K8S_KUBECONFIG"],
         "e2b_template_namespace": ["SFORGE_E2B_TEMPLATE_NAMESPACE"],
+        "judge_max_concurrent": ["SFORGE_JUDGE_MAX_CONCURRENT"],
+        "judge_max_pending": ["SFORGE_JUDGE_MAX_PENDING"],
         "work_cpu_limit": ["SFORGE_WORK_CPU_LIMIT"],
         "work_mem_limit": ["SFORGE_WORK_MEM_LIMIT"],
         "log_dir": ["SFORGE_LOG_DIR"],
