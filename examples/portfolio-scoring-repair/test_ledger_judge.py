@@ -75,6 +75,56 @@ class JudgeLedgerTests(unittest.TestCase):
         self.assertEqual(after - before, 10)
         self.assertFalse(self.audit(result, market)['ok'])
 
+    def test_main_reconciles_only_the_authoritative_evaluation_period(self):
+        result, market = fixture()
+        result.update(metrics={}, risk_calibration={})
+        # The scorer restores full prices after the strategy sees a bounded
+        # period. Extra historical/future marks must not become required rows.
+        full_market = market + [dict(date=day, stock_code=code, close=100)
+                                for day in ('2025-01-02', '2025-01-08')
+                                for code in ('A', 'B')]
+        class ReachedPerformance(Exception):
+            pass
+        for missing in (None, 0, 1, 2, 'extra'):
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as directory:
+                import os
+                previous = os.getcwd()
+                try:
+                    os.chdir(directory)
+                    pd.DataFrame(full_market).to_csv('etf_prices_test.csv', index=False)
+                    submitted = deepcopy(result)
+                    for field in ('daily_nav', 'daily_weights', 'daily_accounting'):
+                        if isinstance(missing, int):
+                            submitted[field].pop(missing)
+                        elif missing == 'extra':
+                            submitted[field].append(dict(submitted[field][-1], date='2025-01-08'))
+                    def strategy():
+                        visible = pd.read_csv('etf_prices_test.csv')
+                        self.assertEqual(sorted(visible.date.unique()),
+                                         ['2025-01-03', '2025-01-06', '2025-01-07'])
+                        Path('backtest_results.json').write_text(json.dumps(submitted))
+                        return True, 1, 'synthetic'
+                    def performance(*args, **kwargs):
+                        if missing is not None:
+                            self.fail('Incomplete/out-of-period ledger reached performance')
+                        raise ReachedPerformance()
+                    with patch.dict(runtime, ALL_ETFS=['A', 'B'], TEST_START='2025-01-03',
+                                    TEST_END='2025-01-07', map_platform_files=lambda: None,
+                                    audit_strategy_code=lambda: (True, [], []),
+                                    run_strategy_and_generate_output=strategy,
+                                    calculate_benchmark_nav=performance):
+                        if missing is None:
+                            with self.assertRaises(ReachedPerformance):
+                                judge['main']()
+                        else:
+                            judge['main']()
+                            report = json.loads(Path('score_report.json').read_text())
+                            self.assertFalse(report['validation']['accounting_valid'])
+                            self.assertIn('calendar', report['warnings'][0])
+                    self.assertEqual(pd.read_csv('etf_prices_test.csv').date.nunique(), 5)
+                finally:
+                    os.chdir(previous)
+
 
 if __name__ == '__main__':
     unittest.main()

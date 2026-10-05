@@ -63,9 +63,15 @@ def install(source):
                 or isinstance(n, ast.FunctionDef) and n.name != 'main']
     wrapper = '''
 def audit_accounting_output(data, prices_df):
+    # prepare_agent_data exposes only this authoritative period to the solver;
+    # restore_full_data may add history/future marks needed by other audits.
+    # Never derive the required calendar from the submitted output itself.
+    dates = pd.to_datetime(prices_df['date'])
+    period = prices_df[(dates >= pd.Timestamp(TEST_START)) &
+                       (dates <= pd.Timestamp(TEST_END))]
     market = [dict(date=pd.Timestamp(row.date).strftime('%Y-%m-%d'),
                    stock_code=row.stock_code, close=float(row.close))
-              for row in prices_df.itertuples(index=False)]
+              for row in period.itertuples(index=False)]
     return validate_ledger(data, market, ALL_ETFS)
 
 '''

@@ -90,7 +90,10 @@ equity, NAV and weight. Tolerances: 0.01 cash units, 1e-8 prices/NAV/weights, ex
 shares and initial capital. Missing/duplicate dates, nonfinite values, omitted
 costs and unmatched duplicated executions fail. Failure reports its first error.
 
-The judge embeds this same validator with its own input prices. An invalid or
+The judge embeds this same validator with prices restricted to its authoritative
+evaluation start/end dates, matching the period supplied to the strategy.
+Restored historical or future prices are not required output sessions. The
+submitted dates never determine or shorten that required calendar. An invalid or
 missing ledger receives **zero total score with an accounting error**, not a
 fraud verdict. Validity does not promise a positive performance score. Full-path
 reconciliation replaces approximate current-weight NAV reconstruction, its
