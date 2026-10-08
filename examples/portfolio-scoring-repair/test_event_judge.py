@@ -3,6 +3,7 @@ import ast
 import runpy
 import sys
 import unittest
+from unittest.mock import patch
 import pandas as pd
 from event_contract import validate_rebalance_history
 
@@ -32,6 +33,20 @@ class JudgeEventTests(unittest.TestCase):
         self.assertGreater(self.penalty(self.events + [None]), 0)
         self.assertGreater(self.penalty(self.events + [dict(self.risk(18), trigger='constraint_repair')]), 0)
         self.assertGreater(self.penalty(self.events + [self.events[0]]), 0)
+
+    def test_real_judge_keeps_the_authoritative_period_calendar(self):
+        full_dates = pd.DatetimeIndex(['2024-12-31', *self.dates, '2026-01-01'])
+        with patch.dict(judge['audit_core_constraints'].__globals__,
+                        TEST_START=str(self.dates[0].date()),
+                        TEST_END=str(self.dates[-1].date())):
+            def penalty(events):
+                return judge['audit_core_constraints'](
+                    [], [], {'rebalance_history': events}, full_dates
+                )[3]['rolling revaluation interval violation']
+            self.assertEqual(penalty(self.events), 0)
+            self.assertEqual(penalty([self.events[0], self.events[2]]), 2)
+            self.assertGreater(penalty(self.events + [
+                {'date': '2024-12-31', 'trigger': 'initial'}]), 0)
 
     def test_embedded_validator_equals_public_owner(self):
         import inspect

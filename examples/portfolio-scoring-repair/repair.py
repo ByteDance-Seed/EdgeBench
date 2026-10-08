@@ -115,8 +115,10 @@ def install_event_contract(source: bytes) -> bytes:
     if len(dates) != 1 or len(loops) != 1:
         raise ValueError('Unexpected interval audit shape')
     lines = text.splitlines(keepends=True)
-    replacement = """            interval_errors = validate_rebalance_history(
-                rebalance_history, [pd.Timestamp(d).strftime('%Y-%m-%d') for d in dates_for_audit])
+    replacement = """            event_dates = pd.DatetimeIndex(dates_for_audit)
+            event_dates = event_dates[evaluation_period_mask(event_dates)]
+            interval_errors = validate_rebalance_history(
+                rebalance_history, [d.strftime('%Y-%m-%d') for d in event_dates])
             for error in interval_errors:
                 warns.append('event contract: ' + error)
                 rebalance_penalty += 2
@@ -131,7 +133,15 @@ def install_event_contract(source: bytes) -> bytes:
     validator_tree = ast.parse(Path(__file__).with_name('event_contract.py').read_text())
     validator = next(n for n in validator_tree.body if isinstance(n, ast.FunctionDef)
                      and n.name == 'validate_rebalance_history')
-    lines[audit.lineno - 1] = ast.unparse(validator) + '\n\n' + lines[audit.lineno - 1]
+    # The evaluator restores wider market data for other audits. This mask is
+    # shared with the ledger adapter; submitted rows never choose the period.
+    period_view = '''def evaluation_period_mask(dates):
+    timestamps = pd.to_datetime(dates)
+    return ((timestamps >= pd.Timestamp(TEST_START)) &
+            (timestamps <= pd.Timestamp(TEST_END)))
+
+'''
+    lines[audit.lineno - 1] = period_view + ast.unparse(validator) + '\n\n' + lines[audit.lineno - 1]
     return ''.join(lines).encode('utf-8')
 
 

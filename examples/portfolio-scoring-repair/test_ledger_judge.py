@@ -1,6 +1,8 @@
 """Actual patched scorer entrypoint with synthetic data and frozen external effects."""
 import ast
+from contextlib import redirect_stdout
 from copy import deepcopy
+import io
 import inspect
 import json
 from pathlib import Path
@@ -18,6 +20,74 @@ runtime = judge['main'].__globals__
 
 
 class JudgeLedgerTests(unittest.TestCase):
+    def full_event_report(self, outside=(), missing_event=None, missing_session=None):
+        """Run through the actual report, not just the pre-performance gate."""
+        dates = [str(d.date()) for d in pd.bdate_range('2025-01-02', periods=42)]
+        assets = judge['ALL_ETFS']
+        result = dict(
+            accounting_contract='portfolio-ledger-v2', initial_capital=10_000_000,
+            trades=[], metrics={},
+            daily_nav=[dict(date=d, nav=1) for d in dates],
+            daily_weights=[dict(date=d, weights=dict.fromkeys(assets, 0)) for d in dates],
+            daily_accounting=[dict(date=d, cash=10_000_000, equity=10_000_000,
+                                   shares=dict.fromkeys(assets, 0), commission=0,
+                                   slippage_cost=0, borrow_cost=0) for d in dates],
+            risk_calibration=dict(rebalance_history=[
+                dict(date=dates[i], trigger='initial' if i == 0 else 'scheduled')
+                for i in (0, 20, 40) if i != missing_event]))
+        if missing_session is not None:
+            for field in ('daily_nav', 'daily_weights', 'daily_accounting'):
+                result[field].pop(missing_session)
+        market = [dict(date=d, stock_code=a, close=100, low=99, high=101)
+                  for d in sorted([*dates, *outside]) for a in assets]
+        with tempfile.TemporaryDirectory() as directory:
+            import os
+            previous = os.getcwd()
+            try:
+                os.chdir(directory)
+                pd.DataFrame(market).to_csv('etf_prices_test.csv', index=False)
+                def strategy():
+                    visible = pd.read_csv('etf_prices_test.csv')
+                    self.assertEqual(sorted(visible.date.unique()), dates)
+                    Path('backtest_results.json').write_text(json.dumps(result))
+                    return True, 1, 'synthetic'
+                with patch.dict(runtime, TEST_START=dates[0], TEST_END=dates[-1],
+                                map_platform_files=lambda: None,
+                                audit_strategy_code=lambda: (True, [], []),
+                                run_strategy_and_generate_output=strategy), redirect_stdout(io.StringIO()):
+                    judge['main']()
+                self.assertEqual(sorted(pd.read_csv('etf_prices_test.csv').date.unique()),
+                                 sorted([*dates, *outside]))
+                return json.loads(Path('score_report.json').read_text())
+            finally:
+                os.chdir(previous)
+
+    def test_full_report_events_keep_the_evaluator_period(self):
+        baseline = self.full_event_report()
+        # The existing missing-risk-trigger penalty is independent of this fix.
+        self.assertEqual(baseline['validation']['constraint_penalty'], 5)
+        for outside in (('2024-12-31',), ('2026-01-01',),
+                        ('2024-12-31', '2026-01-01'), ('2025-01-01', '2025-03-03')):
+            with self.subTest(outside=outside):
+                report = self.full_event_report(outside)
+                self.assertEqual(report['validation']['constraint_penalty'], 5)
+                self.assertFalse(any(w.startswith('event contract:') for w in report['warnings']))
+                self.assertEqual(report['final_total'], baseline['final_total'])
+
+    def test_full_report_still_penalizes_missing_in_period_events(self):
+        for missing in (0, 20, 40):
+            with self.subTest(missing=missing):
+                report = self.full_event_report(('2024-12-31', '2026-01-01'), missing)
+                self.assertEqual(report['validation']['constraint_penalty'], 7)
+                errors = [w for w in report['warnings'] if w.startswith('event contract:')]
+                self.assertEqual(len(errors), 1)
+                self.assertIn('initial' if missing == 0 else 'missing scheduled', errors[0])
+
+    def test_full_report_cannot_shrink_calendar_to_submitted_sessions(self):
+        report = self.full_event_report(('2024-12-31', '2026-01-01'), missing_session=20)
+        self.assertFalse(report['validation']['accounting_valid'])
+        self.assertTrue(any('calendar' in w for w in report['warnings']))
+
     def audit(self, result, market):
         with patch.dict(runtime, ALL_ETFS=['A', 'B']):
             return judge['audit_accounting_output'](result, pd.DataFrame(market))

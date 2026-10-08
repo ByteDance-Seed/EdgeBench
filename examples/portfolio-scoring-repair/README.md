@@ -111,6 +111,15 @@ missing updates, a partial final period and absence of transactions. An isolated
 work-image CLI check exercises success/error output without judge files or network.
 No long-run model adoption or scientific benefit is established by these checks.
 
+Event and ledger adapters share the evaluator-owned `TEST_START`/`TEST_END`
+period mask. Restored historical or future prices remain available to other
+audits, but cannot shift initialization or scheduled session offsets. The full
+ledger entrypoint tests run through metrics, event penalties and the final report:
+extra prefix/suffix prices leave valid events unchanged, while missing in-period
+events still receive penalties and omitted ledger sessions still fail. This fixes
+the enabled event variant; the default diagnostic scorer remains byte-identical.
+Previously built images and historical results retain their original versions.
+
 Task provenance: [EdgeBench dataset](https://huggingface.co/datasets/ByteDance-Seed/EdgeBench),
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). This candidate is
 submitted for maintainer review; the original task and scoring authors retain
