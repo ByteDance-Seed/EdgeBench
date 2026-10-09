@@ -117,7 +117,16 @@ class DockerBackend(ContainerBackend):
         mem_limit: str | None = None,
         user: str | None = None,
         annotations: dict[str, str] | None = None,
+        init: bool = True,
     ) -> DockerContainerHandle:
+        """Create a container with Docker's child reaper enabled by default.
+
+        Long-lived containers receive detached tool processes through exec.
+        Docker's init forwards signals and reaps children orphaned by those
+        commands; the default tail process cannot perform that PID 1 duty.
+        Pass init=False when an image requires its own process to be PID 1.
+        This option is Docker-specific and leaves other backends unchanged.
+        """
         kwargs: dict = {}
         if cpu_limit is not None:
             kwargs["nano_cpus"] = int(cpu_limit * 1e9)
@@ -136,6 +145,7 @@ class DockerBackend(ContainerBackend):
             detach=True,
             command=command,
             environment=environment or {},
+            init=init,
             **kwargs,
         )
         return DockerContainerHandle(container)
