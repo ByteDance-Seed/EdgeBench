@@ -44,6 +44,7 @@ def generate_submit_script() -> str:
     Flags:
       --details, -d    submit and show detailed per-test results
       --list, -l       list all previous submissions (no new submission)
+      --result ID     poll a submission from this run's history (no new submission)
     """
     return _generate_submit_script()
 
@@ -55,10 +56,21 @@ set -e
 
 LIST_MODE=0
 DETAILS_MODE=0
-for arg in "$@"; do
+SUBMISSION_ID=""
+while [ "$#" -gt 0 ]; do
+    arg="$1"
+    shift
     case "$arg" in
         --list|-l) LIST_MODE=1 ;;
         --details|-d) DETAILS_MODE=1 ;;
+        --result)
+            if [ "$#" -eq 0 ] || [ -z "$1" ]; then
+                echo "ERROR: --result requires a submission ID" >&2
+                exit 1
+            fi
+            SUBMISSION_ID="$1"
+            shift
+            ;;
         -h|--help)
             echo "Usage: sforge-submit [OPTIONS]"
             echo ""
@@ -68,6 +80,8 @@ for arg in "$@"; do
             echo "Options:"
             echo "  --list, -l      List all previous submissions and scores for this run"
             echo "  --details, -d   Submit and show detailed per-test results (triggers a new submission)"
+            echo "  --result ID     Read/poll an existing submission from this run without submitting again"
+            echo "                  Combine with --details for full test details"
             echo "  -h, --help      Show this help message"
             exit 0
             ;;
@@ -93,10 +107,37 @@ if [ -z "$TOKEN" ]; then
     exit 1
 fi
 
+if [ "$LIST_MODE" -eq 1 ] && [ -n "$SUBMISSION_ID" ]; then
+    echo "ERROR: Choose only one of --list or --result" >&2
+    exit 1
+fi
+
+umask 077
+REQUEST_TMP=$(mktemp -d)
+trap 'rm -rf "$REQUEST_TMP"' EXIT
+
+get_json() {
+    local code
+    if ! code=$(curl -sS -o "$REQUEST_TMP/response.json" -w '%{http_code}' -m 30 "$1"); then
+        echo "ERROR: Judge request failed; no evaluation was submitted by this read" >&2
+        return 1
+    fi
+    if [ "$code" != "200" ]; then
+        echo "ERROR: Judge request returned HTTP $code" >&2
+        cat "$REQUEST_TMP/response.json" >&2
+        return 1
+    fi
+    if ! jq -e 'type == "object"' "$REQUEST_TMP/response.json" >/dev/null; then
+        echo "ERROR: Malformed judge response" >&2
+        return 1
+    fi
+    cat "$REQUEST_TMP/response.json"
+}
+
 if [ "$LIST_MODE" -eq 1 ]; then
-    HIST=$(curl -s -m 30 "$JUDGE_URL/api/v1/history?token=$TOKEN")
-    if [ -z "$HIST" ]; then
-        echo "ERROR: No response from judge server" >&2
+    HIST=$(get_json "$JUDGE_URL/api/v1/history?token=$TOKEN")
+    if ! echo "$HIST" | jq -e '.entries | type == "array"' >/dev/null; then
+        echo "ERROR: Malformed submission history" >&2
         exit 1
     fi
     BEST_RATE=$(echo "$HIST" | jq -r '.best_pass_rate // 0')
@@ -113,13 +154,14 @@ if [ "$LIST_MODE" -eq 1 ]; then
     echo "========================================"
     echo ""
     if [ "$COUNT" -gt 0 ]; then
-        printf "  %-14s %-10s %-8s %-12s %-10s %s\n" "ROUND" "STATUS" "VALID" "PASS_RATE" "SCORE" "SUMMARY"
-        printf "  %-14s %-10s %-8s %-12s %-10s %s\n" "-----" "------" "-----" "---------" "-----" "-------"
+        printf "  %-14s %-14s %-10s %-8s %-12s %-10s %s\n" "SUBMISSION_ID" "ROUND" "STATUS" "VALID" "PASS_RATE" "SCORE" "SUMMARY"
+        printf "  %-14s %-14s %-10s %-8s %-12s %-10s %s\n" "-------------" "-----" "------" "-----" "---------" "-----" "-------"
         echo "$HIST" | jq -r '.entries[] | select(.type == "submission") |
             "  " +
+            ((.submission_id // "-") | . + " " * ([14 - length, 0] | max)) + " " +
             ((.round // "-") | . + " " * ([14 - length, 0] | max)) + " " +
             ((.status // "-") | . + " " * ([10 - length, 0] | max)) + " " +
-            (if .valid == false then "no" else "yes" end | . + " " * ([8 - length, 0] | max)) + " " +
+            (if .valid == false then "no" elif .valid == true then "yes" else "-" end | . + " " * ([8 - length, 0] | max)) + " " +
             (if .pass_rate != null then (.pass_rate * 100 * 10 | floor / 10 | tostring + "%") else "-" end | . + " " * ([12 - length, 0] | max)) + " " +
             (if .score != null then (.score | tostring) else "-" end | . + " " * ([10 - length, 0] | max)) + " " +
             ((.summary // "-") | if length > 40 then .[:37] + "..." else . end)'
@@ -128,10 +170,21 @@ if [ "$LIST_MODE" -eq 1 ]; then
     exit 0
 fi
 
+if [ -n "$SUBMISSION_ID" ]; then
+    # Respect token-visible history before reading a guessed ID; don't expose
+    # another run's result or reveal host-only automatic evaluations.
+    HIST=$(get_json "$JUDGE_URL/api/v1/history?token=$TOKEN")
+    ROUND_ID=$(echo "$HIST" | jq -r --arg sid "$SUBMISSION_ID" '.entries[]? | select(.type == "submission" and .submission_id == $sid) | .round // empty')
+    if [ -z "$ROUND_ID" ]; then
+        echo "ERROR: Submission ID is not in this token's visible history" >&2
+        exit 1
+    fi
+    echo "  Reading existing submission: $SUBMISSION_ID ($ROUND_ID)"
+else
 # ── Archive ──
 
 cd "$PATCH_DIR"
-ARCHIVE_FILE=$(mktemp --suffix=.tar.gz)
+ARCHIVE_FILE="$REQUEST_TMP/submission.tar.gz"
 TAR_PATHS="${SFORGE_SUBMIT_PATHS:-.}"
 if [ -n "${SFORGE_SUBMIT_PATHS:-}" ]; then
     EXISTING_PATHS=""
@@ -157,11 +210,14 @@ echo ""
 
 # ── Submit + poll ──
 
-HTTP_CODE=$(curl -s -o /tmp/_submit_resp.json -w '%{http_code}' -m 120 -X POST "$JUDGE_URL/api/v1/submit" \
+if ! HTTP_CODE=$(curl -sS -o "$REQUEST_TMP/submit.json" -w '%{http_code}' -m 120 -X POST "$JUDGE_URL/api/v1/submit" \
     -F "token=$TOKEN" \
-    -F "archive=@$ARCHIVE_FILE")
-rm -f "$ARCHIVE_FILE"
-SUBMIT_RESP=$(cat /tmp/_submit_resp.json)
+    -F "archive=@$ARCHIVE_FILE"); then
+    echo "ERROR: Submission response lost; acceptance is unknown. Do not automatically resubmit." >&2
+    echo "Use sforge-submit --list, then --result ID to recover an accepted result." >&2
+    exit 1
+fi
+SUBMIT_RESP=$(cat "$REQUEST_TMP/submit.json")
 
 if [ "$HTTP_CODE" = "429" ]; then
     DETAIL=$(echo "$SUBMIT_RESP" | jq -r '.detail // empty')
@@ -175,6 +231,11 @@ if [ "$HTTP_CODE" = "429" ]; then
     exit 1
 fi
 
+if [ "$HTTP_CODE" != "200" ]; then
+    echo "ERROR: Failed to submit to judge server (HTTP $HTTP_CODE)" >&2
+    echo "$SUBMIT_RESP" >&2
+    exit 1
+fi
 SUBMISSION_ID=$(echo "$SUBMIT_RESP" | jq -r '.submission_id // empty')
 ROUND_ID=$(echo "$SUBMIT_RESP" | jq -r '.round_id // empty')
 REMAINING=$(echo "$SUBMIT_RESP" | jq -r '.remaining_submissions // empty')
@@ -184,6 +245,9 @@ if [ -z "$SUBMISSION_ID" ]; then
     exit 1
 fi
 
+echo "  Submission ID: $SUBMISSION_ID"
+echo "  If interrupted: sforge-submit --result $SUBMISSION_ID"
+
 if [ -n "$ROUND_ID" ]; then
     if [ -n "$REMAINING" ] && [ "$REMAINING" != "null" ]; then
         echo "  Round: $ROUND_ID  (remaining submissions: $REMAINING)"
@@ -192,14 +256,19 @@ if [ -n "$ROUND_ID" ]; then
     fi
     echo ""
 fi
+fi
 
 for _ in $(seq 1 720); do
-    sleep 10
-    RESULT=$(curl -s -m 30 "$JUDGE_URL/api/v1/result/$SUBMISSION_ID" 2>/dev/null || true)
+    RESULT=$(get_json "$JUDGE_URL/api/v1/result/$SUBMISSION_ID")
     STATUS=$(echo "$RESULT" | jq -r '.status // empty')
     if [ "$STATUS" = "completed" ] || [ "$STATUS" = "error" ]; then
         break
     fi
+    if [ "$STATUS" != "queued" ] && [ "$STATUS" != "running" ]; then
+        echo "ERROR: Missing or unknown evaluation status; recover with --result $SUBMISSION_ID" >&2
+        exit 1
+    fi
+    sleep 10
 done
 
 STATUS=$(echo "$RESULT" | jq -r '.status // empty')
@@ -213,22 +282,23 @@ fi
 TS=$(date +%s)
 ERROR_MSG=$(echo "$RESULT" | jq -r '.error // empty')
 
-if [ -n "$ERROR_MSG" ]; then
-    CURRENT_RATE=0
-    CURRENT_SCORE="null"
-    PASSED=0
-    TOTAL=0
-    FAILED=0
-else
-    REPORT=$(echo "$RESULT" | jq -r '.report')
-    PASSED=$(echo "$REPORT" | jq -r '.passed')
-    TOTAL=$(echo "$REPORT" | jq -r '.total_tests')
-    FAILED=$(echo "$REPORT" | jq -r '.failed')
-    CURRENT_RATE=$(echo "$REPORT" | jq -r '.pass_rate')
-    CURRENT_SCORE=$(echo "$REPORT" | jq -r '.score // null')
-    VALID=$(echo "$REPORT" | jq -r '.valid // true')
-    SUMMARY=$(echo "$REPORT" | jq -r '.summary // empty')
+if [ "$STATUS" = "error" ]; then
+    echo "ERROR: $SUBMISSION_ID evaluation failed: ${ERROR_MSG:-no diagnostic returned}" >&2
+    exit 1
 fi
+if ! echo "$RESULT" | jq -e '.report | type == "object"' >/dev/null; then
+    echo "ERROR: $SUBMISSION_ID completed without a report; no score available" >&2
+    exit 1
+fi
+
+REPORT=$(echo "$RESULT" | jq -r '.report')
+PASSED=$(echo "$REPORT" | jq -r '.passed // 0')
+TOTAL=$(echo "$REPORT" | jq -r '.total_tests // 0')
+FAILED=$(echo "$REPORT" | jq -r '.failed // 0')
+CURRENT_RATE=$(echo "$REPORT" | jq -r '.pass_rate // 0')
+CURRENT_SCORE=$(echo "$REPORT" | jq -r '.score // null')
+VALID=$(echo "$REPORT" | jq -r 'if .valid == false then false else true end')
+SUMMARY=$(echo "$REPORT" | jq -r '.summary // empty')
 
 # Update local state file (display-only cache — not used for final scoring)
 if [ ! -f "$STATE_FILE" ]; then
@@ -236,80 +306,76 @@ if [ ! -f "$STATE_FILE" ]; then
 fi
 TMP=$(mktemp)
 jq --arg round "${ROUND_ID:-unknown}" \
+   --arg sid "$SUBMISSION_ID" \
    --argjson ts "$TS" \
    --argjson rate "$CURRENT_RATE" \
    --argjson score "$CURRENT_SCORE" \
+   --argjson valid "$VALID" \
    '
-   .submissions += [{kind: "agent", round: $round, at: $ts, pass_rate: $rate, score: $score}]
-   | if $rate > (.best_pass_rate // 0) then
+   .submissions = [.submissions[]? | select(.submission_id != $sid)]
+   | .submissions += [{kind: "agent", submission_id: $sid, round: $round, at: $ts, pass_rate: $rate, score: $score, valid: $valid}]
+   | if $valid and $rate > (.best_pass_rate // 0) then
        .best_pass_rate = $rate | .best_round = $round | .best_score = $score
      else . end
    ' "$STATE_FILE" > "$TMP" && mv "$TMP" "$STATE_FILE"
 
-if [ -n "$ERROR_MSG" ]; then
-    echo "========================================"
-    echo "  ${ROUND_ID:-submission}: ERROR"
-    echo "  $ERROR_MSG"
-    echo "========================================"
-else
-    echo "========================================"
-    echo "  ${ROUND_ID:-submission} Results"
-    echo "========================================"
-    if [ "$VALID" = "false" ]; then
-        echo "  Valid:       no"
-    fi
-    if [ "$CURRENT_SCORE" != "null" ]; then
-        echo "  Score:       $CURRENT_SCORE"
-    fi
-    if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
-        PASS_PCT=$(jq -n --argjson r "$CURRENT_RATE" '$r * 100 | . * 10 | floor / 10')
-        echo "  Pass rate:   ${PASS_PCT}%"
-        echo "  Passed:      $PASSED/$TOTAL"
-    fi
-    if [ -n "$SUMMARY" ]; then
-        echo ""
-        echo "  Summary:"
-        echo "    $SUMMARY"
-    fi
-    # Show metrics if present
-    METRICS=$(echo "$REPORT" | jq -r '.metrics // empty')
-    if [ -n "$METRICS" ] && [ "$METRICS" != "{}" ] && [ "$METRICS" != "null" ]; then
-        echo ""
-        echo "  Metrics:"
-        echo "$REPORT" | jq -r '.metrics | to_entries[] | "    \(.key): \(.value)"'
-    fi
-    echo ""
-    # Show failed items (from details if available, else from test_details)
-    DETAIL_FAILURES=$(echo "$REPORT" | jq -r '[.details[]? | select(.status != "PASSED")] | length')
-    if [ "$DETAIL_FAILURES" -gt 0 ] 2>/dev/null; then
-        echo "  Failed checks:"
-        echo "$REPORT" | jq -r '.details[] | select(.status != "PASSED") | .name' | head -20 | while read -r t; do echo "    - $t"; done
-        if [ "$DETAIL_FAILURES" -gt 20 ] 2>/dev/null; then
-            echo "    ... and $((DETAIL_FAILURES - 20)) more"
-        fi
-    else
-        FAILED_TESTS=$(echo "$REPORT" | jq -r '.test_details[]? | select(.status != "PASSED") | .name')
-        if [ -n "$FAILED_TESTS" ]; then
-            echo "  Failed tests:"
-            echo "$FAILED_TESTS" | head -20 | while read -r t; do echo "    - $t"; done
-        else
-            if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
-                echo "  All tests passed!"
-            fi
-        fi
-    fi
-    # Show full details if --details flag
-    if [ "$DETAILS_MODE" -eq 1 ]; then
-        HAS_DETAILS=$(echo "$REPORT" | jq -r '.details | length')
-        if [ "$HAS_DETAILS" -gt 0 ] 2>/dev/null; then
-            echo ""
-            echo "  Details:"
-            echo "$REPORT" | jq -r '.details[] | "    [\(.status)] \(.name)\(if .message then ": " + .message else "" end)"'
-        fi
-    fi
-    echo "========================================"
-    echo ""
+echo "========================================"
+echo "  ${ROUND_ID:-submission} Results"
+echo "========================================"
+if [ "$VALID" = "false" ]; then
+    echo "  Valid:       no"
 fi
+if [ "$CURRENT_SCORE" != "null" ]; then
+    echo "  Score:       $CURRENT_SCORE"
+fi
+if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
+    PASS_PCT=$(jq -n --argjson r "$CURRENT_RATE" '$r * 100 | . * 10 | floor / 10')
+    echo "  Pass rate:   ${PASS_PCT}%"
+    echo "  Passed:      $PASSED/$TOTAL"
+fi
+if [ -n "$SUMMARY" ]; then
+    echo ""
+    echo "  Summary:"
+    echo "    $SUMMARY"
+fi
+# Show metrics if present
+METRICS=$(echo "$REPORT" | jq -r '.metrics // empty')
+if [ -n "$METRICS" ] && [ "$METRICS" != "{}" ] && [ "$METRICS" != "null" ]; then
+    echo ""
+    echo "  Metrics:"
+    echo "$REPORT" | jq -r '.metrics | to_entries[] | "    \(.key): \(.value)"'
+fi
+echo ""
+# Show failed items (from details if available, else from test_details)
+DETAIL_FAILURES=$(echo "$REPORT" | jq -r '[.details[]? | select(.status != "PASSED")] | length')
+if [ "$DETAIL_FAILURES" -gt 0 ] 2>/dev/null; then
+    echo "  Failed checks:"
+    echo "$REPORT" | jq -r '.details[] | select(.status != "PASSED") | .name' | head -20 | while read -r t; do echo "    - $t"; done
+    if [ "$DETAIL_FAILURES" -gt 20 ] 2>/dev/null; then
+        echo "    ... and $((DETAIL_FAILURES - 20)) more"
+    fi
+else
+    FAILED_TESTS=$(echo "$REPORT" | jq -r '.test_details[]? | select(.status != "PASSED") | .name')
+    if [ -n "$FAILED_TESTS" ]; then
+        echo "  Failed tests:"
+        echo "$FAILED_TESTS" | head -20 | while read -r t; do echo "    - $t"; done
+    else
+        if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
+            echo "  All tests passed!"
+        fi
+    fi
+fi
+# Show full details if --details flag
+if [ "$DETAILS_MODE" -eq 1 ]; then
+    HAS_DETAILS=$(echo "$REPORT" | jq -r '.details | length')
+    if [ "$HAS_DETAILS" -gt 0 ] 2>/dev/null; then
+        echo ""
+        echo "  Details:"
+        echo "$REPORT" | jq -r '.details[] | "    [\(.status)] \(.name)\(if .message then ": " + .message else "" end)"'
+    fi
+fi
+echo "========================================"
+echo ""
 """
 
 
@@ -367,7 +433,10 @@ def generate_evolve_prompt(
         "results showing score, pass rate, and a summary of findings.\n"
         "- Run `sforge-submit --details` to submit and see detailed per-test results.\n"
         "- Run `sforge-submit --list` to view all previous submissions and "
-        "their scores for this run.\n\n"
+        "their scores and submission IDs for this run.\n"
+        "- If submission or polling is interrupted, run `sforge-submit --result ID --details` "
+        "to read the accepted submission's result without submitting again. "
+        "If its ID was not received, inspect `--list` first; do not blindly resubmit.\n\n"
         "You should use these regularly to check your progress and identify issues.\n"
     )
 
