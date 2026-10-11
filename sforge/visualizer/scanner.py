@@ -16,7 +16,8 @@
 
 Layout expected:
     <runs_dir>/<run_id>/<task_id>/
-        final_result.json           (optional – missing means run was aborted)
+        final_result.json           (optional – completed native result)
+        runtime-receipt.json        (optional – identity-bound adapter stop)
         evolve_state.json           (optional)
         submissions/<n>/report.json (optional; n is integer)
 
@@ -418,6 +419,32 @@ def _select_best_submission(
     return max(submissions, key=lambda s: s.pass_rate)
 
 
+def _stopped_runtime_seconds(task_dir: Path, run_id: str) -> float | None:
+    """Optional adapter receipt; it supplies stop state, never scores or completion.
+
+    A matching run/task with a stopped status and finite controller duration can
+    close liveness immediately when Docker is unavailable. Other receipts retain
+    the native probe/mtime behavior. Completed native results still take precedence.
+    """
+    receipt = _safe_load_json(task_dir / "runtime-receipt.json")
+    if not isinstance(receipt, dict):
+        return None
+    if receipt.get("run_id") != run_id or receipt.get("task") != task_dir.name:
+        return None
+    if receipt.get("status") not in ("cancelled", "runner_failed", "launch_failed"):
+        return None
+    elapsed = receipt.get("controller_elapsed_seconds")
+    if isinstance(elapsed, bool) or not isinstance(elapsed, (int, float)):
+        return None
+    try:
+        elapsed = float(elapsed)
+    except OverflowError:
+        return None
+    if not math.isfinite(elapsed) or elapsed < 0:
+        return None
+    return elapsed
+
+
 def _build_run(
     run_id: str,
     task_dir: Path,
@@ -509,7 +536,10 @@ def _build_run(
             if sub_t > last_activity:
                 last_activity = sub_t
 
-        if container_probe == "running":
+        stopped_runtime = _stopped_runtime_seconds(task_dir, run_id)
+        if stopped_runtime is not None:
+            is_aborted = True
+        elif container_probe == "running":
             is_aborted = False
         elif container_probe in ("missing", "exited", "dead", "created", "paused", "removing", "restarting"):
             is_aborted = True
@@ -518,7 +548,9 @@ def _build_run(
         else:
             is_aborted = (time.time() - last_activity) > ABORT_THRESHOLD_SEC
 
-        if is_aborted:
+        if stopped_runtime is not None:
+            live_runtime = stopped_runtime
+        elif is_aborted:
             live_runtime = max(last_activity - created_at, 0.0)
         else:
             live_runtime = max(time.time() - created_at, 0.0)
