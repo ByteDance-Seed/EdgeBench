@@ -197,9 +197,13 @@ class JudgeState:
     def __init__(self, config: SForgeConfig):
         if config.judge_max_concurrent < 1 or config.judge_max_pending < 0:
             raise ValueError("judge_max_concurrent must be >= 1 and judge_max_pending >= 0")
+        if config.judge_max_outstanding_per_run is not None and config.judge_max_outstanding_per_run < 1:
+            raise ValueError("judge_max_outstanding_per_run must be >= 1 or unset")
         self.config = config
-        self._admission_lock = threading.Lock()
+        # Synchronous failures release while holding this same admission lock.
+        self._admission_lock = threading.RLock()
         self._closed = False
+        self._outstanding_by_run: dict[tuple[str, str], int] = {}
         self._capacity = threading.BoundedSemaphore(
             config.judge_max_concurrent + config.judge_max_pending
         )
@@ -499,41 +503,61 @@ class JudgeState:
         self._executor.shutdown(wait=True)
         self._reaper_thread.join()
 
-    def _reserve(self) -> None:
+    def _reserve(self, run_id: str | None, task_id: str) -> None:
+        limit = self.config.judge_max_outstanding_per_run
+        key = (run_id, task_id) if run_id is not None and limit is not None else None
+        if key is not None and self._outstanding_by_run.get(key, 0) >= limit:
+            raise JudgeCapacityExceeded("Run/task evaluation capacity full; retry this snapshot later")
         if self._closed or not self._capacity.acquire(blocking=False):
             raise JudgeCapacityExceeded("Judge capacity full; retry this snapshot later")
+        if key is not None:
+            self._outstanding_by_run[key] = self._outstanding_by_run.get(key, 0) + 1
+
+    def _release(self, run_id: str | None, task_id: str) -> None:
+        with self._admission_lock:
+            if run_id is not None and self.config.judge_max_outstanding_per_run is not None:
+                key = (run_id, task_id)
+                remaining = self._outstanding_by_run[key] - 1
+                if remaining:
+                    self._outstanding_by_run[key] = remaining
+                else:
+                    del self._outstanding_by_run[key]
+            self._capacity.release()
 
     def submit_for_token(self, token: str, archive: bytes, kind: str) -> tuple[str, str, int | None]:
         """Reserve capacity before spending a round or starting its cooldown."""
         with self._admission_lock:
-            self.resolve_token(token)
-            self._reserve()
+            session = self.resolve_token(token)
+            run_id, task_id = session["run_id"], session["task_id"]
+            self._reserve(run_id, task_id)
             try:
                 # Spool before consuming budget: disk failure must not spend a round.
                 spool = self._spool(archive)
             except BaseException:
-                self._capacity.release()
+                self._release(run_id, task_id)
                 raise
             try:
                 task_id, run_id, round_id, cpu, mem, remaining = self.consume_round(token, kind)
             except BaseException:
-                spool.unlink()
-                self._capacity.release()
+                try:
+                    spool.unlink(missing_ok=True)
+                finally:
+                    self._release(run_id, task_id)
                 raise
             submission_id = self._enqueue(task_id, spool, run_id, round_id, cpu, mem)
             return submission_id, round_id, remaining
 
     def submit(self, task_id: str, archive: bytes, run_id: str | None = None, round: str | None = None,
                judge_cpu_limit: int | None = None, judge_mem_limit: str | None = None) -> str:
-        """Submit within the same aggregate limit as HTTP submissions."""
+        """Submit within the same aggregate and optional run/task limits as HTTP."""
         with self._admission_lock:
             if task_id not in self.tasks:
                 raise ValueError(f"Unknown task: {task_id}")
-            self._reserve()
+            self._reserve(run_id, task_id)
             try:
                 spool = self._spool(archive)
             except BaseException:
-                self._capacity.release()
+                self._release(run_id, task_id)
                 raise
             return self._enqueue(task_id, spool, run_id, round, judge_cpu_limit, judge_mem_limit)
 
@@ -559,19 +583,21 @@ class JudgeState:
             "run_id": run_id, "round": round_id, "report": None, "error": None,
             "submitted_at": time.time(),
         }
-        self._record_submission(run_id or submission_id, submission_id, task_id,
-                                round_id, None, None, status="queued")
         try:
+            self._record_submission(run_id or submission_id, submission_id, task_id,
+                                    round_id, None, None, status="queued")
             self._executor.submit(self._grade_spooled, submission_id, task_id,
                                   spool, run_id, round_id, cpu, mem)
         except BaseException as e:
             self.submissions[submission_id].update(status=SubmissionStatus.ERROR, error=str(e))
-            self._record_submission(run_id or submission_id, submission_id, task_id,
-                                    round_id, None, str(e), status="error")
             try:
-                spool.unlink(missing_ok=True)
+                self._record_submission(run_id or submission_id, submission_id, task_id,
+                                        round_id, None, str(e), status="error")
             finally:
-                self._capacity.release()
+                try:
+                    spool.unlink(missing_ok=True)
+                finally:
+                    self._release(run_id, task_id)
             raise
         return submission_id
 
@@ -588,7 +614,7 @@ class JudgeState:
             try:
                 spool.unlink(missing_ok=True)
             finally:
-                self._capacity.release()
+                self._release(run_id, task_id)
 
     def _grade_worker(self, submission_id: str, task_id: str, archive: bytes,
                       run_id: str | None = None, round: str | None = None,

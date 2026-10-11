@@ -72,6 +72,8 @@ class SForgeConfig:
     # Aggregate asynchronous judge capacity (per server process).
     judge_max_concurrent: int = 2
     judge_max_pending: int = 32
+    # Optional queued + running limit per (run_id, task_id); None keeps aggregate-only admission.
+    judge_max_outstanding_per_run: int | None = None
 
     # Docker build extra hosts (DNS overrides)
     extra_hosts: dict[str, str] | None = None
@@ -128,6 +130,7 @@ def load_config(cli_overrides: dict | None = None) -> SForgeConfig:
         "e2b_template_namespace": ["SFORGE_E2B_TEMPLATE_NAMESPACE"],
         "judge_max_concurrent": ["SFORGE_JUDGE_MAX_CONCURRENT"],
         "judge_max_pending": ["SFORGE_JUDGE_MAX_PENDING"],
+        "judge_max_outstanding_per_run": ["SFORGE_JUDGE_MAX_OUTSTANDING_PER_RUN"],
         "work_cpu_limit": ["SFORGE_WORK_CPU_LIMIT"],
         "work_mem_limit": ["SFORGE_WORK_MEM_LIMIT"],
         "log_dir": ["SFORGE_LOG_DIR"],
