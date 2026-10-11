@@ -118,8 +118,8 @@ completion latency or qualify the hardware's throughput. Settings are fixed for
 the server lifetime. To disable the per-run limit, drain and stop the server,
 remove both the flag and environment variable, then restart.
 
-Accepted snapshots are spooled under the log directory and evaluated in admission
-order by a fixed worker pool. Pending snapshots do not retain their archive bytes
+Accepted snapshots are spooled under the log directory and queued in admission
+order for a fixed worker pool; completion order can differ. Pending snapshots do not retain their archive bytes
 in RAM. Results transition from `queued` to `running` before reaching a terminal
 state. The visualizer excludes missing/invalid reports rather than plotting them as zeros.
 Reports retain the admission timestamp for timelines; runtime still measures
