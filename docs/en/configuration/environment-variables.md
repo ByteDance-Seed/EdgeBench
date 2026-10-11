@@ -99,6 +99,25 @@ cannot raise them. Multiple server processes have independent limits. They apply
 across tasks, runs and both agent/auto submissions; interactive game sessions
 and direct synchronous `sforge eval` are separate paths.
 
+To prevent a slow run from occupying several unfinished slots, optionally set
+`--judge-max-outstanding-per-run 1` or `SFORGE_JUDGE_MAX_OUTSTANDING_PER_RUN=1`
+(integer >= 1). This counts **queued plus running** evaluations per
+`(run_id, task_id)`, shared across all session tokens, agent/auto submissions and
+direct `JudgeState.submit` calls. Different tasks in the same run have independent
+counts; direct submissions without a run ID use only the aggregate limit. The
+default is unset, preserving aggregate-only admission. Lookups do not consume
+capacity, and completion, failure or graceful drain releases each reservation.
+
+The per-run limit rejects before spooling or spending a round, using the same
+503/Retry-After contract as aggregate capacity. A submission cooldown does not
+replace this limit: it can expire while an earlier evaluation is still unfinished.
+Setting aggregate capacity to at least the number of distinct active run/task
+pairs, with the per-run limit at one, prevents one pair's overlapping submissions
+from crowding out another pair's first submission. This does not guarantee equal
+completion latency or qualify the hardware's throughput. Settings are fixed for
+the server lifetime. To disable the per-run limit, drain and stop the server,
+remove both the flag and environment variable, then restart.
+
 Accepted snapshots are spooled under the log directory and evaluated in admission
 order by a fixed worker pool. Pending snapshots do not retain their archive bytes
 in RAM. Results transition from `queued` to `running` before reaching a terminal
