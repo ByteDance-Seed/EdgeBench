@@ -13,6 +13,8 @@
 # limitations under the License.
 
 """Run/task admission isolation using synthetic evaluations, never containers."""
+from __future__ import annotations
+
 import hashlib
 import socket
 import subprocess

@@ -13,6 +13,8 @@
 # limitations under the License.
 
 """Aggregate scheduling invariants, independent of any benchmark grader."""
+from __future__ import annotations
+
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
