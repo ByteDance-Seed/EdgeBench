@@ -295,7 +295,11 @@ def _scan_submissions_shallow(task_dir: Path) -> list[Submission]:
             )
             continue
         report_path = entry / "report.json"
-        data = _safe_load_json(report_path) or {}
+        data = _safe_load_json(report_path)
+        # A queued/running directory is not a scored zero. Likewise, an
+        # explicitly invalid evaluation must not become a curve observation.
+        if not data or data.get("valid") is False:
+            continue
         ts = data.get("submitted_at")
         if ts is not None:
             try:
