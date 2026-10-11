@@ -362,6 +362,8 @@ def run_agent(
     net_isolation = None
     install_parts: list[str] = []
     admin_secret = ""
+    auto_eval_stop = None
+    resume_count = 0
 
     try:
         admin_secret = get_admin_secret(config.log_dir)
@@ -553,7 +555,6 @@ def run_agent(
         #    the stop hook — otherwise the agent exits naturally as soon as
         #    the model decides it's "done", losing the full timeout budget.
         effective_eval_interval = 0 if disable_auto_eval else eval_interval
-        auto_eval_stop = None
         if not task_spec.game_mode:
             _install_tools(
                 backend,
@@ -624,7 +625,6 @@ def run_agent(
         # 6. Run agent (with auto-resume on abnormal exit)
         can_resume = not disable_auto_resume and agent.resume_cmd is not None
         remaining_timeout = effective_timeout
-        resume_count = 0
         total_runtime = 0.0
         agent_timed_out = False
         all_output_parts: list[str] = []
