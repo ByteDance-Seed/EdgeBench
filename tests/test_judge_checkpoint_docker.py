@@ -1,0 +1,255 @@
+"""Explicit isolated Docker/HTTP qualification; no agent/model/benchmark jobs."""
+
+import copy
+import io
+import json
+import os
+import shutil
+import socket
+import tarfile
+import threading
+import time
+import uuid
+from contextlib import contextmanager
+from dataclasses import replace
+from types import SimpleNamespace
+
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    os.environ.get("SFORGE_CHECKPOINT_DOCKER_TEST") != "1",
+    reason="Requires explicit isolated Docker qualification",
+)
+
+
+def wait_for(predicate, timeout=30):
+    until = time.monotonic() + timeout
+    while time.monotonic() < until:
+        value = predicate()
+        if value:
+            return value
+        time.sleep(0.05)
+    raise AssertionError("Isolated native HTTP operation did not finish")
+
+
+@contextmanager
+def server(app):
+    import uvicorn
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    host = uvicorn.Server(
+        uvicorn.Config(
+            app, host="127.0.0.1", port=port, log_level="error", access_log=False
+        )
+    )
+    thread = threading.Thread(target=host.run)
+    thread.start()
+    try:
+        wait_for(lambda: host.started)
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        host.should_exit = True
+        thread.join(timeout=10)
+        app.state.judge._reaper_stop.set()
+        app.state.judge._reaper_thread.join(timeout=1)
+        assert not thread.is_alive()
+
+
+def candidate(score):
+    raw = io.BytesIO()
+    with tarfile.open(fileobj=raw, mode="w:gz") as archive:
+        member = tarfile.TarInfo("candidate.json")
+        body = json.dumps({"score": score}).encode()
+        member.size = len(body)
+        archive.addfile(member, io.BytesIO(body))
+    return raw.getvalue()
+
+
+def test_real_native_checkpoint_continues_without_regrading_or_refill(
+    tmp_path, monkeypatch
+):
+    import docker
+    import requests
+    from sforge.harness import judge_server as native
+    from sforge.harness.config import SForgeConfig
+    from test_judge_checkpoint import task_files
+
+    name = "checkpoint-native-" + uuid.uuid4().hex[:10]
+    docker_client = docker.from_env()
+    base = docker_client.images.get("python:3.12-slim")
+    task_files(tmp_path / "tasks")
+    (tmp_path / "tasks/BENCHMARK.yaml").write_text(
+        f"name: {name}\nbase_images: {{python: {{}}}}\n"
+    )
+    image_tag = f"{name}.judge.fixture:fixture"
+    base.tag(f"{name}.judge.fixture", tag="fixture")
+    grades = []
+    release = threading.Event()
+    actual = native.judge_submission
+
+    def held_actual(**kwargs):
+        grades.append(kwargs["archive"])
+        assert release.wait(30)
+        return actual(**kwargs)
+
+    monkeypatch.setattr(native, "judge_submission", held_actual)
+    config = SForgeConfig(
+        tasks_dir=tmp_path / "tasks",
+        log_dir=tmp_path / "source",
+        judge_cpu_limit=1,
+        judge_mem_limit="256m",
+    )
+    source = native.create_app(config, checkpoints=True)
+
+    def post(url, route, body):
+        return requests.post(url + route, json=body, timeout=20)
+
+    def grade(url, token, archive):
+        return requests.post(
+            url + "/api/v1/submit",
+            data={"token": token},
+            files={"archive": ("candidate.tar.gz", archive)},
+            timeout=20,
+        )
+
+    def result(url, sid):
+        response = requests.get(url + "/api/v1/result/" + sid, timeout=10)
+        response.raise_for_status()
+        packet = response.json()
+        return packet if packet["status"] in ("completed", "error") else None
+
+    try:
+        with server(source) as source_url:
+            state = source.state.judge
+            registered = post(
+                source_url,
+                "/api/v1/register",
+                {
+                    "task_id": "fixture",
+                    "run_id": "source",
+                    "max_agent_submissions": 2,
+                    "submission_cooldown": 3600,
+                    "admin_secret": state.admin_secret,
+                },
+            )
+            registered.raise_for_status()
+            token = registered.json()["token"]
+            archive = candidate(7)
+            first = grade(source_url, token, archive)
+            first.raise_for_status()
+            assert first.json()["round_id"] == "agent-1"
+            pending = post(
+                source_url,
+                "/api/v1/checkpoint/capture",
+                {"token": token, "admin_secret": state.admin_secret},
+            )
+            assert pending.status_code == 409
+            release.set()
+            graded = wait_for(lambda: result(source_url, first.json()["submission_id"]))
+            assert graded["status"] == "completed" and graded["report"]["score"] == 7
+            point_response = post(
+                source_url,
+                "/api/v1/checkpoint/capture",
+                {"token": token, "admin_secret": state.admin_secret},
+            )
+            point_response.raise_for_status()
+            point = point_response.json()
+            assert point["opportunity"]["next_agent"] == 2
+            assert 0 < point["opportunity"]["remaining_cooldown_seconds"] <= 3600
+            before = copy.deepcopy((state.tokens, state.submissions, state.run_history))
+            new_config = replace(config, log_dir=tmp_path / "destination")
+            new_config.log_dir.mkdir()
+            shutil.copytree(
+                config.log_dir / "checkpoints", new_config.log_dir / "checkpoints"
+            )
+            destination = native.create_app(new_config, checkpoints=True)
+            with server(destination) as url:
+                fresh_state = destination.state.judge
+                assert fresh_state.admin_secret != state.admin_secret
+                restored = post(
+                    url,
+                    "/api/v1/checkpoint/restore",
+                    {
+                        "checkpoint_id": point["checkpoint_id"],
+                        "manifest_sha256": point["manifest_sha256"],
+                        "run_id": "branch",
+                        "admin_secret": fresh_state.admin_secret,
+                    },
+                )
+                restored.raise_for_status()
+                fresh = restored.json()["token"]
+                assert fresh != token and len(grades) == 1
+                history = requests.get(
+                    url + "/api/v1/history", params={"token": fresh}, timeout=10
+                ).json()
+                assert (
+                    history["best_round"],
+                    history["best_score"],
+                    history["agent_submissions"],
+                ) == ("agent-1", 7, 1)
+                sid = history["entries"][0]["submission_id"]
+                assert sid != first.json()["submission_id"]
+                assert result(url, sid)["report"] == graded["report"]
+                selected = (
+                    new_config.log_dir
+                    / "runs/branch/fixture/submissions/agent-1/submission.tar.gz"
+                )
+                assert selected.read_bytes() == archive
+                assert (
+                    grade(url, fresh, candidate(3)).status_code == 429
+                    and len(grades) == 1
+                )
+                # Advance only the native admission clock. Evaluation/container
+                # execution retains the real wall clock and real Docker backend.
+                monkeypatch.setattr(
+                    native, "time", SimpleNamespace(time=lambda: time.time() + 3601)
+                )
+                second = grade(url, fresh, candidate(3))
+                second.raise_for_status()
+                assert (
+                    second.json()["round_id"] == "agent-2"
+                    and second.json()["remaining_submissions"] == 0
+                )
+                second_result = wait_for(
+                    lambda: result(url, second.json()["submission_id"])
+                )
+                assert (
+                    second_result["status"] == "completed"
+                    and second_result["report"]["score"] == 3
+                )
+                assert (
+                    grade(url, fresh, candidate(11)).status_code == 429
+                    and len(grades) == 2
+                )
+                final = requests.get(
+                    url + "/api/v1/history", params={"token": fresh}, timeout=10
+                ).json()
+                assert (
+                    final["best_round"],
+                    final["best_score"],
+                    final["agent_submissions"],
+                ) == ("agent-1", 7, 2)
+                assert (
+                    post(
+                        url,
+                        "/api/v1/checkpoint/restore",
+                        {
+                            "checkpoint_id": point["checkpoint_id"],
+                            "manifest_sha256": point["manifest_sha256"],
+                            "run_id": "branch",
+                            "admin_secret": fresh_state.admin_secret,
+                        },
+                    ).status_code
+                    == 409
+                )
+            assert (state.tokens, state.submissions, state.run_history) == before
+    finally:
+        release.set()
+        leftovers = docker_client.containers.list(all=True, filters={"name": name})
+        for container in leftovers:
+            container.remove(force=True)
+        docker_client.images.remove(image_tag)
+        docker_client.close()
+        assert not leftovers, "Native grade failed to clean up its own containers"
