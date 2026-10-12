@@ -71,7 +71,7 @@ Token 是一个 32 字符的十六进制字符串，内部维护任务 ID、运�
 - `POST /api/v1/checkpoint/capture`：正文包含 `token`、`admin_secret`，可选 `capture_id`（调用者生成的 32 位十六进制操作 ID）。同一注册重试同一 ID 返回首次捕获的点，不采用后来的提交，也不重复保存；其他注册不能复用。省略该字段表示新的手动捕获。响应包含 `checkpoint_id`、`manifest_sha256`、题目/来源 run、已用轮次/剩余冷却，以及原生选优的 incumbent 轮次、大小和摘要。私有 capsule 保留已公开的 agent 历史、完整结果及被选中的归档，不包含提交或管理 token。归档按原始字节保留，不解包。
 - `POST /api/v1/checkpoint/restore`：正文包含 `checkpoint_id`、捕获响应中的 `manifest_sha256`、全新的 `run_id` 和当前 `admin_secret`。响应返回新的提交 token。通过原有 `/api/v1/history?token=...` 和 `/api/v1/result/{submission_id}` 读回。历史结果使用新的查询 ID，原报告保持不变；`logs/runs/新run/checkpoint-origin.json` 保存来源映射，incumbent 保留原轮次。
 
-恢复不会评测或多消费一轮。后续提交仍由原生 `consume_round`、预算、冷却及选优规则决定。冷却从捕获时剩余的**时长**重新计时，离线等待不会补发机会；旧 capsule 不包含来源后来取得的提升。
+恢复不会评测或多消费一轮。后续提交仍由原生 `consume_round`、预算、冷却及选优规则决定。冷却在新注册发布时，从捕获时剩余的**时长**重新计时；离线等待和 capsule 物化既不会补发机会，也不会消耗这段时长；旧 capsule 不包含来源后来取得的提升。
 
 当前版本支持配置的 Docker backend 上已结算的非 game 注册，不支持自动评测历史。绑定原生 Python 源码、完整题目规格、实际 Docker 评测镜像 ID、选优策略/方向及有效 CPU/内存限制。字节缺失或变化、来源/评测不符、未完成结果、已消费却无公开历史的轮次、结果/历史冲突及不支持的配置返回 409；管理授权错误返回 403，非法正文返回 422。已有 run、重复恢复和中断留下的目标占用会拒绝，不会重置预算。完成前的异常回滚可重试；进程崩溃遗留的占用需要控制器检查。开启期间，已恢复 run ID 也不能再次冷注册，且整个 run ID 均被占用。
 
