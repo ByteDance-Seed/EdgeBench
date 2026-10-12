@@ -62,6 +62,36 @@ Content-Type: application/json
 
 The token is a 32-character hex string. It tracks the task, run, and separate counters for agent submissions (`agent-1`, `agent-2`, ...) and auto-eval submissions (`auto-1`, `auto-2`, ...).
 
+### Preserving a settled judge registration (opt-in)
+
+Start `sforge serve --checkpoints --port 8080` to expose the two controller endpoints below. Without `--checkpoints`, both return 404 and no checkpoint bank is created. Disable them by restarting without the flag; retain the private bank and restored run reservations for diagnosis, and use a fresh run ID for a separate experiment.
+
+Both endpoints require the running judge's `admin_secret` in the JSON body. An agent's submission token identifies a capture source but cannot authorize capture or restore. For another controller, transfer only the authorized `logs/checkpoints/` bank into its own log directory; use that controller's independently created admin secret. Do not transfer the source admin-secret file or session tokens.
+
+```http
+POST /api/v1/checkpoint/capture
+Content-Type: application/json
+
+{"token":"SOURCE_SESSION_TOKEN","admin_secret":"CURRENT_CONTROLLER_SECRET","capture_id":"11111111111111111111111111111111"}
+```
+
+`capture_id` is an optional caller-generated 32-character hexadecimal operation ID. A retry for the same registration returns the original point, even after later submissions; it neither captures the later state nor writes another capsule. Another registration cannot reuse the ID. Omit it for a new manual capture. The response contains `checkpoint_id`, `manifest_sha256`, the task/source run, preserved opportunity counters and remaining cooldown, and the native-selected incumbent's round/size/digest. The private capsule contains all released agent history and full result reports plus the selected archive; it contains no session or admin token. Archive bytes remain opaque and are never extracted during capture/restore.
+
+```http
+POST /api/v1/checkpoint/restore
+Content-Type: application/json
+
+{"checkpoint_id":"11111111111111111111111111111111","manifest_sha256":"CAPTURED_64_CHARACTER_SHA256","run_id":"fresh-branch","admin_secret":"CURRENT_CONTROLLER_SECRET"}
+```
+
+The response issues a fresh submission token for `fresh-branch`. Read back using the existing `/api/v1/history?token=...` and `/api/v1/result/{submission_id}` endpoints. Retained results have fresh lookup IDs and unchanged original reports; `logs/runs/fresh-branch/checkpoint-origin.json` records their source mapping. The selected archive is retained under its original round. Restore performs **no evaluation**. The next `/submit` uses the existing native counter, budget, cooldown and selection rules. Cooldown resumes from the captured remaining **duration**; waiting offline does not refill evaluation opportunities. A later source improvement is absent from an earlier capsule.
+
+This version supports settled non-game registrations on the configured Docker backend, with no automatic evaluations. The native Python source, full task specification, actual Docker judge image ID, selection policy/direction and effective CPU/memory limits are bound. Missing/moved bytes, mismatched evaluator facts, queued/running results, consumed rounds without released history, conflicting result/history records and unsupported profiles return 409. Wrong admin authority returns 403; malformed request bodies return 422. Existing run identities, replayed restores and interrupted destination reservations are rejected rather than reset. An ordinary retry can recover an exception rolled back before completion; a process crash leaving a reservation fails closed and needs controller inspection. An accepted restore reserves the entire destination run ID, including against later cold registration while this feature is enabled.
+
+The bank is trusted private controller storage. SHA-256 detects disagreement with the controller's captured reference; it does not authenticate a malicious administrator, certify arbitrary report contents as credential-free, or make a worker checkpoint complete. Restore does not restore worker code beyond the incumbent archive, model sessions, research state, external-effect authority, or the runner's remaining total time budget. A continuation runner must preserve those separately before treating branches as comparable. Do not restart a restored run as a cold registration after disabling checkpoints.
+
+Two native consistency fixes also apply with the feature off: backend preparation failure publishes no token/resource row, and grading failures now release history with `status="error"`, matching `/result`, rather than labeling the history completed. Successful cold registration defaults, submission allocation and ranking are unchanged.
+
 ### Submit Archive
 
 Submit a code archive for evaluation. The server resolves the task ID and run ID from the token and assigns an incrementing round ID.
