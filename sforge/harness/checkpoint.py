@@ -469,6 +469,16 @@ class JudgeCheckpoints:
                 info["last_agent_submit_at"] = (
                     time.time() - cooldown + remaining if remaining else 0.0
                 )
+                if remaining and (
+                    not math.isfinite(info["last_agent_submit_at"])
+                    or info["last_agent_submit_at"] <= 0
+                ):
+                    # Native admission reserves zero/nonpositive timestamps for
+                    # no previous submission. Never turn precision loss or an
+                    # incompatible destination clock into an eligible round.
+                    raise CheckpointUnavailable(
+                        "Native cooldown cannot be anchored on the destination clock"
+                    )
                 history, results = [], {}
                 for entry in packet["history"]:
                     new_id = uuid.uuid4().hex[:12]

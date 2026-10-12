@@ -569,3 +569,16 @@ def test_capture_retry_rejects_damaged_original_capsule(service):
     path.write_bytes(_encode(packet))
     assert client.post("/api/v1/checkpoint/capture", json=body).status_code == 409
     assert len(list(path.parent.parent.iterdir())) == 1
+
+
+def test_unrepresentable_cooldown_anchor_fails_closed(service):
+    state, client = service
+    token = register(state, client, max_agent_submissions=2, submission_cooldown=10**20)
+    submit(client, token, 10)
+    point = capture(state, client, token)
+    response = restore(state, client, point)
+    assert response.status_code == 409
+    assert "destination clock" in response.json()["detail"]
+    assert len(state.tokens) == 1
+    assert not (state.config.log_dir / "runs/branch").exists()
+    assert submit(client, token, 11).status_code == 429
