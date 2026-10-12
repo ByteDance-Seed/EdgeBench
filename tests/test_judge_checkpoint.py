@@ -571,8 +571,11 @@ def test_capture_retry_rejects_damaged_original_capsule(service):
     assert len(list(path.parent.parent.iterdir())) == 1
 
 
-def test_unrepresentable_cooldown_anchor_fails_closed(service):
+def test_unrepresentable_cooldown_anchor_fails_closed(service, monkeypatch):
     state, client = service
+    # At this controlled positive epoch, float spacing at 10**20 erases
+    # the timestamp entirely. Current wall-clock rounding is not deterministic.
+    monkeypatch.setattr(time, "time", lambda: 1000.0)
     token = register(state, client, max_agent_submissions=2, submission_cooldown=10**20)
     submit(client, token, 10)
     point = capture(state, client, token)
