@@ -1,4 +1,20 @@
+# Copyright (c) 2026 ByteDance Ltd. and/or its affiliates
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Native HTTP/owner contracts; synthetic grading here, real Docker separately."""
+
+from __future__ import annotations
 
 import copy
 import json
@@ -585,3 +601,35 @@ def test_unrepresentable_cooldown_anchor_fails_closed(service, monkeypatch):
     assert len(state.tokens) == 1
     assert not (state.config.log_dir / "runs/branch").exists()
     assert submit(client, token, 11).status_code == 429
+
+
+def test_restore_materialization_does_not_spend_remaining_cooldown(
+    service, monkeypatch
+):
+    from sforge.harness import checkpoint
+
+    state, client = service
+    now = [10000.0]
+    monkeypatch.setattr(time, "time", lambda: now[0])
+    token = register(state, client, max_agent_submissions=2, submission_cooldown=3600)
+    submit(client, token, 10)
+    now[0] += 600
+    point = capture(state, client, token)
+    assert point["opportunity"]["remaining_cooldown_seconds"] == 3000
+    original_sync = checkpoint._sync_directory
+
+    def slow_materialization(path):
+        original_sync(path)
+        now[0] += 3600
+
+    with monkeypatch.context() as patch:
+        patch.setattr(checkpoint, "_sync_directory", slow_materialization)
+        response = restore(state, client, point)
+    assert response.status_code == 200, response.text
+    fresh = response.json()["token"]
+    assert submit(client, fresh, 11).status_code == 429
+    now[0] += 2999
+    assert submit(client, fresh, 11).status_code == 429
+    now[0] += 1
+    assert submit(client, fresh, 11).json()["round_id"] == "agent-2"
+    assert submit(client, fresh, 12).status_code == 429

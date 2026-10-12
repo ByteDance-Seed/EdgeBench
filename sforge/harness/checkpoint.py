@@ -1,5 +1,17 @@
 # Copyright (c) 2026 ByteDance Ltd. and/or its affiliates
-# Licensed under the Apache License, Version 2.0 (the "License").
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Controller-owned, opt-in preservation of a settled native judge registration.
 
 The bank is private judge state, not an agent upload endpoint. It contains no
@@ -465,20 +477,6 @@ class JudgeCheckpoints:
                 info["next_auto"] = packet["opportunity"]["next_auto"]
                 remaining = packet["opportunity"]["remaining_cooldown_seconds"]
                 cooldown = info["submission_cooldown"] or 0
-                # Pause duration is not elapsed research or an evaluation refill.
-                info["last_agent_submit_at"] = (
-                    time.time() - cooldown + remaining if remaining else 0.0
-                )
-                if remaining and (
-                    not math.isfinite(info["last_agent_submit_at"])
-                    or info["last_agent_submit_at"] <= 0
-                ):
-                    # Native admission reserves zero/nonpositive timestamps for
-                    # no previous submission. Never turn precision loss or an
-                    # incompatible destination clock into an eligible round.
-                    raise CheckpointUnavailable(
-                        "Native cooldown cannot be anchored on the destination clock"
-                    )
                 history, results = [], {}
                 for entry in packet["history"]:
                     new_id = uuid.uuid4().hex[:12]
@@ -538,9 +536,24 @@ class JudgeCheckpoints:
                 # Publish new authority and all retained facts together. Native
                 # counters, history and selection remain their existing owners.
                 with state._tokens_lock, state._history_lock:
-                    state._publish_session(info, prepared[1], token)
                     state.submissions.update(results)
                     state.run_history[state._run_key(run_id, task_id)] = history
+                    # Anchor only after staging: copying/fsyncing a capsule is not
+                    # resumed research and must not spend its retained cooldown.
+                    info["last_agent_submit_at"] = (
+                        time.time() - cooldown + remaining if remaining else 0.0
+                    )
+                    if remaining and (
+                        not math.isfinite(info["last_agent_submit_at"])
+                        or info["last_agent_submit_at"] <= 0
+                    ):
+                        # Native admission reserves zero/nonpositive timestamps for
+                        # no previous submission. Never turn precision loss or an
+                        # incompatible destination clock into an eligible round.
+                        raise CheckpointUnavailable(
+                            "Native cooldown cannot be anchored on the destination clock"
+                        )
+                    state._publish_session(info, prepared[1], token)
                     state._checkpoint_runs.add(run_id)
                 return token
             except BaseException:

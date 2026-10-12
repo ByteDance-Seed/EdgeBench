@@ -1,4 +1,20 @@
+# Copyright (c) 2026 ByteDance Ltd. and/or its affiliates
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Explicit isolated Docker/HTTP qualification; no agent/model/benchmark jobs."""
+
+from __future__ import annotations
 
 import copy
 import io
@@ -72,6 +88,7 @@ def test_real_native_checkpoint_continues_without_regrading_or_refill(
 ):
     import docker
     import requests
+    from sforge.harness import checkpoint
     from sforge.harness import judge_server as native
     from sforge.harness.config import SForgeConfig
     from test_judge_checkpoint import task_files
@@ -168,16 +185,30 @@ def test_real_native_checkpoint_continues_without_regrading_or_refill(
             with server(destination) as url:
                 fresh_state = destination.state.judge
                 assert fresh_state.admin_secret != state.admin_secret
-                restored = post(
-                    url,
-                    "/api/v1/checkpoint/restore",
-                    {
-                        "checkpoint_id": point["checkpoint_id"],
-                        "manifest_sha256": point["manifest_sha256"],
-                        "run_id": "branch",
-                        "admin_secret": fresh_state.admin_secret,
-                    },
-                )
+                # Inject elapsed staging time into only the native admission
+                # clock. HTTP, file synchronization and grading remain real.
+                admission_now = [time.time()]
+                admission_clock = SimpleNamespace(time=lambda: admission_now[0])
+                original_sync = checkpoint._sync_directory
+
+                def elapsed_staging(path):
+                    original_sync(path)
+                    admission_now[0] += 7200
+
+                monkeypatch.setattr(native, "time", admission_clock)
+                monkeypatch.setattr(checkpoint, "time", admission_clock)
+                with monkeypatch.context() as patch:
+                    patch.setattr(checkpoint, "_sync_directory", elapsed_staging)
+                    restored = post(
+                        url,
+                        "/api/v1/checkpoint/restore",
+                        {
+                            "checkpoint_id": point["checkpoint_id"],
+                            "manifest_sha256": point["manifest_sha256"],
+                            "run_id": "branch",
+                            "admin_secret": fresh_state.admin_secret,
+                        },
+                    )
                 restored.raise_for_status()
                 fresh = restored.json()["token"]
                 assert fresh != token and len(grades) == 1
@@ -203,9 +234,7 @@ def test_real_native_checkpoint_continues_without_regrading_or_refill(
                 )
                 # Advance only the native admission clock. Evaluation/container
                 # execution retains the real wall clock and real Docker backend.
-                monkeypatch.setattr(
-                    native, "time", SimpleNamespace(time=lambda: time.time() + 3601)
-                )
+                admission_now[0] += 3601
                 second = grade(url, fresh, candidate(3))
                 second.raise_for_status()
                 assert (
