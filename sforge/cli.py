@@ -786,7 +786,7 @@ def cmd_serve(args):
 
     from sforge.harness.judge_server import create_app
 
-    app = create_app(config)
+    app = create_app(config, checkpoints=args.checkpoints)
     print(f"Starting SForge judge server on port {args.port}")
     uvicorn.run(app, host=args.host, port=args.port)
 
@@ -1044,6 +1044,8 @@ def main():
     p_serve = subparsers.add_parser("serve", help="Start judge HTTP server")
     p_serve.add_argument("--host", default="0.0.0.0")
     p_serve.add_argument("--port", type=int, default=8080)
+    p_serve.add_argument("--checkpoints", action="store_true",
+                         help="Enable admin-only settled Docker registration checkpoints (default off)")
     p_serve.set_defaults(func=cmd_serve)
 
     # proxy
