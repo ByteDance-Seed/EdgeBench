@@ -56,7 +56,11 @@ def runtime(tmp_path, monkeypatch):
         assert release.wait(5), "synthetic judge was not released"
         return report()
     monkeypatch.setattr(js, "judge_submission", judge)
-    monkeypatch.setattr(js, "create_backend_from_config", lambda cfg: None)
+    monkeypatch.setattr(
+        js,
+        "create_backend_from_config",
+        lambda cfg: types.SimpleNamespace(backend_name="synthetic"),
+    )
     monkeypatch.setattr(js, "load_benchmark", lambda *args: None)
     monkeypatch.setattr(js, "load_all_tasks", lambda *args: [task()])
     cfg = SForgeConfig(log_dir=tmp_path, judge_max_concurrency=1,
@@ -220,7 +224,9 @@ def test_auto_loop_preserves_previous_until_terminal(tmp_path, monkeypatch, mode
 
 def _host_process(path, ready, release, active, peak, completed, lock, root):
     from sforge.harness import judge_server as child
-    child.create_backend_from_config = lambda cfg: None
+    child.create_backend_from_config = lambda cfg: types.SimpleNamespace(
+        backend_name="synthetic"
+    )
     def judge(**kwargs):
         with lock:
             active.value += 1

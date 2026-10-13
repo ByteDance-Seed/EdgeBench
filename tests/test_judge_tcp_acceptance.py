@@ -83,7 +83,11 @@ def live_judge(tmp_path, monkeypatch):
     monkeypatch.setenv("NO_PROXY", "127.0.0.1,localhost")
     monkeypatch.setenv("no_proxy", "127.0.0.1,localhost")
     monkeypatch.setattr(judge, "judge_submission", grade)
-    monkeypatch.setattr(judge, "create_backend_from_config", lambda _: None)
+    monkeypatch.setattr(
+        judge,
+        "create_backend_from_config",
+        lambda _: SimpleNamespace(backend_name="synthetic"),
+    )
     monkeypatch.setattr(judge, "load_benchmark", lambda *_: None)
     monkeypatch.setattr(judge, "load_all_tasks", lambda *_: [task])
     monkeypatch.setattr(judge, "get_admin_secret", lambda _: "synthetic-admin")
