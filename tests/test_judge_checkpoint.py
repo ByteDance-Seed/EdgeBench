@@ -154,6 +154,136 @@ def history(client, token):
     return client.get("/api/v1/history", params={"token": token}).json()
 
 
+def restore_result(state, client, point, run="branch", **options):
+    return client.post(
+        "/api/v1/checkpoint/restore-result",
+        json={
+            "checkpoint_id": point["checkpoint_id"],
+            "manifest_sha256": point["manifest_sha256"],
+            "run_id": run,
+            "admin_secret": state.admin_secret,
+            **options,
+        },
+    )
+
+
+def test_restore_result_recovers_existing_authority_without_replay(
+    service, monkeypatch
+):
+    state, client = service
+    token = register(state, client, max_agent_submissions=2, submission_cooldown=3600)
+    submit(client, token, 7)
+    point = capture(state, client, token)
+    accepted = restore(state, client, point)
+    assert accepted.status_code == 200
+    original = accepted.json()
+    before = copy.deepcopy((state.tokens, state.run_history, state.submissions))
+
+    # An original response may be lost after publication. Readback cannot
+    # prepare another backend, reanchor cooldown or issue another token.
+    def no_prepare(*args, **kwargs):
+        raise AssertionError("Readback must not allocate registration authority")
+
+    monkeypatch.setattr(state, "_prepare_session", no_prepare)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        responses = list(
+            pool.map(lambda _: restore_result(state, client, point), range(8))
+        )
+    assert all(r.status_code == 200 and r.json() == original for r in responses)
+    assert (state.tokens, state.run_history, state.submissions) == before
+    assert submit(client, original["token"], 9).status_code == 429
+    assert restore(state, client, point).status_code == 409
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "wrong_admin",
+        "wrong_point",
+        "wrong_digest",
+        "cold_run",
+        "missing_run",
+        "missing_marker",
+        "wrong_origin",
+        "lost_authority",
+        "malformed_marker",
+        "linked_marker",
+    ],
+)
+def test_restore_result_rejects_unbound_or_lost_authority(service, fault):
+    state, client = service
+    token = register(state, client)
+    point = capture(state, client, token)
+    fresh = restore(state, client, point).json()["token"]
+    args = {}
+    marker = state.config.log_dir / "runs/branch/checkpoint-origin.json"
+    if fault == "wrong_admin":
+        args["admin_secret"] = token
+    elif fault == "wrong_point":
+        args["checkpoint_id"] = "0" * 32
+    elif fault == "wrong_digest":
+        args["manifest_sha256"] = "0" * 64
+    elif fault == "cold_run":
+        args["run"] = "source"
+    elif fault == "missing_run":
+        args["run"] = "never-admitted"
+    elif fault == "missing_marker":
+        marker.unlink()
+    elif fault == "wrong_origin":
+        value = json.loads(marker.read_bytes())
+        value["task_id"] = "another-task"
+        marker.write_text(json.dumps(value))
+    elif fault == "malformed_marker":
+        marker.write_text("[]")
+    elif fault == "linked_marker":
+        saved = marker.with_suffix(".saved")
+        marker.rename(saved)
+        marker.symlink_to(saved)
+    else:
+        # A private origin file survives a server restart, but grants no token.
+        state.tokens.pop(fresh)
+    before = copy.deepcopy((state.tokens, state.run_history, state.submissions))
+    response = restore_result(state, client, point, **args)
+    assert response.status_code == (403 if fault == "wrong_admin" else 409)
+    assert "token" not in response.json()
+    assert (state.tokens, state.run_history, state.submissions) == before
+
+
+def test_restore_result_after_continuation_preserves_exhaustion(service):
+    state, client = service
+    source = register(state, client, max_agent_submissions=2, submission_cooldown=0)
+    submit(client, source, 7)
+    point = capture(state, client, source)
+    original = restore(state, client, point).json()
+    fresh = original["token"]
+    assert submit(client, fresh, 3).status_code == 200
+    before = copy.deepcopy((state.tokens, state.run_history, state.submissions))
+    recovered = restore_result(state, client, point)
+    assert recovered.status_code == 200 and recovered.json() == original
+    assert (state.tokens, state.run_history, state.submissions) == before
+    assert history(client, fresh)["agent_submissions"] == 2
+    assert history(client, fresh)["best_score"] == 7
+    assert submit(client, fresh, 99).status_code == 429
+
+
+def test_restore_result_does_not_recreate_authority_in_restarted_service(service):
+    state, client = service
+    source = register(state, client)
+    point = capture(state, client, source)
+    assert restore(state, client, point).status_code == 200
+    app = native.create_app(state.config, checkpoints=True)
+    restarted = app.state.judge
+    try:
+        with TestClient(app) as receiver:
+            assert restore_result(restarted, receiver, point).status_code == 409
+            assert restarted.tokens == {} and restarted.run_history == {}
+            assert restore(restarted, receiver, point).status_code == 409
+        assert (state.config.log_dir / "runs/branch/checkpoint-origin.json").is_file()
+    finally:
+        restarted._reaper_stop.set()
+        restarted._reaper_thread.join(timeout=1)
+
+
 def test_preserves_old_selected_archive_and_fresh_result_identity(service):
     state, client = service
     token = register(state, client, max_agent_submissions=3, submission_cooldown=0)
@@ -392,6 +522,7 @@ def test_default_off_and_cold_registration_contract(service):
     app = native.create_app(state.config)
     with TestClient(app) as off:
         assert off.post("/api/v1/checkpoint/capture", json={}).status_code == 404
+        assert off.post("/api/v1/checkpoint/restore-result", json={}).status_code == 404
         a = register(app.state.judge, off, run="cold", max_agent_submissions=2)
         b = register(app.state.judge, off, run="cold", max_agent_submissions=2)
         assert a != b

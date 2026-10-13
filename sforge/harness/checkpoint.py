@@ -436,6 +436,43 @@ class JudgeCheckpoints:
                     shutil.rmtree(temporary)
             return self._reference(identifier, encoded, packet)
 
+    def restore_result(self, identifier: str, manifest_sha256: str, run_id: str) -> str:
+        """Read an already published registration; never rehydrate authority.
+
+        The origin marker binds the requested operation. It alone is not proof
+        of activation: the live native registration must still exist. Holding
+        the existing registration lock also orders this read after publication.
+        """
+        state = self.state
+        identifier, run_id = _name(identifier), _name(run_id)
+        with state._registration_lock, state._tokens_lock:
+            if run_id not in state._checkpoint_runs:
+                raise CheckpointUnavailable(
+                    "No live restored registration for this run"
+                )
+            origin = json.loads(
+                _read(self.root, self.root / "runs" / run_id / RESTORE_MARKER)
+            )
+            if (
+                not isinstance(origin, dict)
+                or origin.get("schema_version") != SCHEMA
+                or origin.get("checkpoint_id") != identifier
+                or origin.get("manifest_sha256") != manifest_sha256
+            ):
+                raise CheckpointUnavailable(
+                    "Restore result does not match the requested origin"
+                )
+            matches = [
+                token
+                for token, info in state.tokens.items()
+                if info["run_id"] == run_id and info["task_id"] == origin.get("task_id")
+            ]
+            if len(matches) != 1:
+                raise CheckpointUnavailable(
+                    "Original restored authority is unavailable or ambiguous"
+                )
+            return matches[0]
+
     def restore(self, identifier: str, manifest_sha256: str, run_id: str) -> str:
         state = self.state
         identifier, run_id = _name(identifier), _name(run_id)
@@ -617,4 +654,24 @@ def install_routes(app, state: JudgeState) -> None:
             raise HTTPException(
                 409,
                 "Native checkpoint or fresh destination is unavailable or incompatible",
+            ) from error
+
+    @app.post("/api/v1/checkpoint/restore-result")
+    def restore_result(request: RestoreRequest) -> dict:
+        authorize(request.admin_secret)
+        try:
+            token = bank.restore_result(
+                request.checkpoint_id, request.manifest_sha256, request.run_id
+            )
+            return {
+                "token": token,
+                "run_id": request.run_id,
+                "checkpoint_id": request.checkpoint_id,
+                "manifest_sha256": request.manifest_sha256,
+            }
+        except CheckpointUnavailable as error:
+            raise HTTPException(409, str(error)) from error
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            raise HTTPException(
+                409, "Original restore result is unavailable"
             ) from error

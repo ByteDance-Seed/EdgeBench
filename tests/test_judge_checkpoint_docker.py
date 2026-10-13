@@ -83,8 +83,9 @@ def candidate(score):
     return raw.getvalue()
 
 
+@pytest.mark.parametrize("lose_restore_response", [False, True])
 def test_real_native_checkpoint_continues_without_regrading_or_refill(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, lose_restore_response
 ):
     import docker
     import requests
@@ -182,6 +183,21 @@ def test_real_native_checkpoint_continues_without_regrading_or_refill(
                 config.log_dir / "checkpoints", new_config.log_dir / "checkpoints"
             )
             destination = native.create_app(new_config, checkpoints=True)
+            if lose_restore_response:
+                from starlette.responses import Response
+
+                @destination.middleware("http")
+                async def lose_committed_reply(request, call_next):
+                    response = await call_next(request)
+                    if (
+                        request.url.path == "/api/v1/checkpoint/restore"
+                        and response.status_code == 200
+                    ):
+                        # Fault only the outbound HTTP result; real registration
+                        # publication, files, locking and subsequent grading run.
+                        return Response(status_code=502)
+                    return response
+
             with server(destination) as url:
                 fresh_state = destination.state.judge
                 assert fresh_state.admin_secret != state.admin_secret
@@ -209,8 +225,34 @@ def test_real_native_checkpoint_continues_without_regrading_or_refill(
                             "admin_secret": fresh_state.admin_secret,
                         },
                     )
-                restored.raise_for_status()
-                fresh = restored.json()["token"]
+                assert restored.status_code == (502 if lose_restore_response else 200)
+                published = copy.deepcopy(
+                    (
+                        fresh_state.tokens,
+                        fresh_state.submissions,
+                        fresh_state.run_history,
+                    )
+                )
+                recovered = post(
+                    url,
+                    "/api/v1/checkpoint/restore-result",
+                    {
+                        "checkpoint_id": point["checkpoint_id"],
+                        "manifest_sha256": point["manifest_sha256"],
+                        "run_id": "branch",
+                        "admin_secret": fresh_state.admin_secret,
+                    },
+                )
+                recovered.raise_for_status()
+                fresh = recovered.json()["token"]
+                assert (
+                    fresh_state.tokens,
+                    fresh_state.submissions,
+                    fresh_state.run_history,
+                ) == published
+                assert fresh in published[0]
+                if not lose_restore_response:
+                    assert recovered.json() == restored.json()
                 assert fresh != token and len(grades) == 1
                 history = requests.get(
                     url + "/api/v1/history", params={"token": fresh}, timeout=10
