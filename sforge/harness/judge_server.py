@@ -22,6 +22,7 @@ import secrets
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path, PurePosixPath
@@ -187,7 +188,10 @@ class GameSessionState:
 
 
 class JudgeState:
-    def __init__(self, config: SForgeConfig):
+    def __init__(
+        self, config: SForgeConfig, *,
+        backend_factory: Callable[[SForgeConfig], ContainerBackend] | None = None,
+    ):
         self.config = config
         self.admin_secret = get_admin_secret(config.log_dir)
         self.tasks: dict[str, TaskSpec] = {}
@@ -200,13 +204,23 @@ class JudgeState:
         self._game_lock = threading.Lock()
         self._history_lock = threading.Lock()
         self._tokens_lock = threading.Lock()
-        self.backend = create_backend_from_config(config)
+        self._custom_backend_factory = backend_factory
+        self._backend_factory = (
+            create_backend_from_config if backend_factory is None else backend_factory
+        )
+        self.backend = self._make_backend(config)
 
         self._reaper_stop = threading.Event()
         self._reaper_thread = threading.Thread(
             target=self._reaper_loop, daemon=True
         )
         self._reaper_thread.start()
+
+    def _make_backend(self, config: SForgeConfig) -> ContainerBackend:
+        backend = self._backend_factory(config)
+        if backend is None:
+            raise TypeError("backend factory must return a backend")
+        return backend
 
     def _reaper_loop(self) -> None:
         while not self._reaper_stop.is_set():
@@ -295,22 +309,7 @@ class JudgeState:
             raise ValueError(f"Unknown task: {task_id}")
         token = secrets.token_hex(16)
         with self._tokens_lock:
-            self.tokens[token] = {
-                "task_id": task_id,
-                "run_id": run_id,
-                "next_agent": 1,
-                "next_auto": 1,
-                "judge_cpu_limit": judge_cpu_limit,
-                "judge_mem_limit": judge_mem_limit,
-                "max_agent_submissions": max_agent_submissions,
-                "submission_cooldown": submission_cooldown,
-                "last_agent_submit_at": 0.0,
-            }
             run_key = self._run_key(run_id, task_id)
-            self.run_resource_limits[run_key] = {
-                "judge_cpu_limit": judge_cpu_limit,
-                "judge_mem_limit": judge_mem_limit,
-            }
             effective_e2b_template_map = (
                 self.config.e2b_template_map
                 if not e2b_template_map
@@ -332,12 +331,13 @@ class JudgeState:
                 != self.config.e2b_template_namespace
                 or effective_e2b_sandbox_ttl != self.config.e2b_sandbox_ttl
             )
-            if backend and (
+            run_backend = None
+            if self._custom_backend_factory is not None or (backend and (
                 backend != self.backend.backend_name or e2b_config_changed
-            ):
-                from sforge.harness.backend.factory import create_backend
-                self.run_backends[run_key] = create_backend(
-                    backend,
+            )):
+                effective_config = replace(
+                    self.config,
+                    backend=backend or self.config.backend,
                     k8s_namespace=k8s_namespace or self.config.k8s_namespace,
                     k8s_node_selector=k8s_node_selector or self.config.k8s_node_selector,
                     k8s_image_registry=k8s_image_registry or self.config.k8s_image_registry,
@@ -345,7 +345,32 @@ class JudgeState:
                     e2b_template_map=effective_e2b_template_map,
                     e2b_template_namespace=effective_e2b_template_namespace,
                     e2b_sandbox_ttl=effective_e2b_sandbox_ttl,
+                    judge_cpu_limit=(self.config.judge_cpu_limit
+                                     if judge_cpu_limit is None else judge_cpu_limit),
+                    judge_mem_limit=(self.config.judge_mem_limit
+                                     if judge_mem_limit is None else judge_mem_limit),
                 )
+                # A supplied factory owns all registrations, including unchanged
+                # backend names. It may enforce template/resource policy. Failure
+                # must not publish a token or replace a prior run's configuration.
+                run_backend = self._make_backend(effective_config)
+            if run_backend is not None:
+                self.run_backends[run_key] = run_backend
+            self.tokens[token] = {
+                "task_id": task_id,
+                "run_id": run_id,
+                "next_agent": 1,
+                "next_auto": 1,
+                "judge_cpu_limit": judge_cpu_limit,
+                "judge_mem_limit": judge_mem_limit,
+                "max_agent_submissions": max_agent_submissions,
+                "submission_cooldown": submission_cooldown,
+                "last_agent_submit_at": 0.0,
+            }
+            self.run_resource_limits[run_key] = {
+                "judge_cpu_limit": judge_cpu_limit,
+                "judge_mem_limit": judge_mem_limit,
+            }
         return token
 
     @staticmethod
@@ -876,12 +901,21 @@ class JudgeState:
 # --- FastAPI app factory ---
 
 
-def create_app(config: SForgeConfig | None = None) -> FastAPI:
+def create_app(
+    config: SForgeConfig | None = None, *,
+    backend_factory: Callable[[SForgeConfig], ContainerBackend] | None = None,
+) -> FastAPI:
+    """Create one judge with an optional app-local backend construction policy.
+
+    The factory receives the effective configuration at startup and registration.
+    It must either return a backend or raise; no fallback bypasses its policy.
+    Container execution, grading and result selection remain the native paths.
+    """
     if config is None:
         config = load_config()
 
     app = FastAPI(title="SForge Judge", version=__version__)
-    state = JudgeState(config)
+    state = JudgeState(config, backend_factory=backend_factory)
     state.load_tasks()
 
     @app.get("/api/v1/result/{submission_id}")
