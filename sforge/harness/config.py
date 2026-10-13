@@ -50,6 +50,14 @@ class SForgeConfig:
     agent_effort: str | None = None
     agent_timeout: int | None = None
     agent_extra_env: dict[str, str] = field(default_factory=dict)
+    # Judge execution capacity (see judge_server.JUDGE_MAX_CONCURRENCY). These live
+    # on the real config so callers and the environment can set them; the judge
+    # server must never invent a default behind the caller's back.
+    judge_max_concurrency: int | None = None
+    judge_max_backlog: int | None = None
+    # Total judge slots shared by every launcher process on this host. Process-local
+    # pools multiply otherwise, so the cross-process bound is the one that matters.
+    judge_host_capacity: int | None = None
 
     # Claude Code cache optimization — suppress the random cch attribution
     # header and dynamic system prompt sections that break prompt caching on
@@ -162,6 +170,25 @@ def load_config(cli_overrides: dict | None = None) -> SForgeConfig:
             if "=" in item:
                 k, v = item.split("=", 1)
                 config.judge_extra_env[k.strip()] = v.strip()
+
+    # Parse judge capacity: SFORGE_JUDGE_MAX_CONCURRENCY / SFORGE_JUDGE_MAX_BACKLOG /
+    # SFORGE_JUDGE_HOST_CAPACITY. Values must be positive integers; anything else is
+    # rejected loudly rather than silently ignored.
+    for env_name, field_name in (
+        ("SFORGE_JUDGE_MAX_CONCURRENCY", "judge_max_concurrency"),
+        ("SFORGE_JUDGE_MAX_BACKLOG", "judge_max_backlog"),
+        ("SFORGE_JUDGE_HOST_CAPACITY", "judge_host_capacity"),
+    ):
+        raw = os.environ.get(env_name, "").strip()
+        if not raw:
+            continue
+        try:
+            value = int(raw)
+        except ValueError:
+            raise ValueError(f"{env_name} must be a positive integer, got {raw!r}") from None
+        if value < 1:
+            raise ValueError(f"{env_name} must be >= 1, got {value}")
+        setattr(config, field_name, value)
 
     # Parse SFORGE_EXTRA_HOSTS: "host1:ip1,host2:ip2"
     extra_hosts_str = os.environ.get("SFORGE_EXTRA_HOSTS", "")

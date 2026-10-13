@@ -40,6 +40,11 @@ class StreamingExecResult:
     exit_code: int = 0
     timed_out: bool = False
     elapsed_seconds: float = 0.0
+    # Optional evidence; legacy return codes (including timeout sentinels) alone
+    # do not attest that a native process terminal status was observed.
+    terminal_observed: bool | None = None
+    native_exit_code: int | None = None
+    termination_signal: int | None = None
 
 
 @dataclass(frozen=True)

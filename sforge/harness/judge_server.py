@@ -17,7 +17,10 @@
 from __future__ import annotations
 
 import json
+import fcntl
 import logging
+import os
+import queue
 import secrets
 import threading
 import time
@@ -183,6 +186,87 @@ class GameSessionState:
     last_active: float = field(default_factory=time.time)
 
 
+#: Default cap on concurrently executing judge containers. A long-running judge
+#: (e.g. a search-heavy benchmark) otherwise overlaps with every auto snapshot.
+JUDGE_MAX_CONCURRENCY = 4
+#: Default cap on accepted-but-not-yet-running submissions. Only `auto` production
+#: is rejected at this bound; `agent`/final submissions are always accepted so the
+#: final grading can never be starved by auto snapshots.
+JUDGE_MAX_BACKLOG = 8
+
+
+#: Host-wide slot file. Every launcher process on this machine contends for the
+#: same file, so the total number of concurrently running judges is bounded once
+#: instead of once per process.
+JUDGE_HOST_SLOT_FILE = os.environ.get(
+    "SFORGE_JUDGE_HOST_SLOT_FILE", "/tmp/sforge-judge-host-slots.json")
+#: Default host-wide total. Chosen so several launchers share one machine budget.
+JUDGE_HOST_CAPACITY = 8
+
+
+class HostJudgeCapacity:
+    """Cross-process judge slot budget backed by an flock-guarded file.
+
+    A per-process pool multiplies with the number of launcher processes; this is the
+    bound that actually limits the host. The first writer fixes the capacity.
+    A dead launcher does not prove its judge containers stopped, so slots remain
+    reserved until explicit release or operator-confirmed cleanup.
+    """
+
+    def __init__(self, capacity: int, path: str | None = None) -> None:
+        self.capacity = max(1, int(capacity))
+        self.path = Path(path or os.environ.get("SFORGE_JUDGE_HOST_SLOT_FILE", JUDGE_HOST_SLOT_FILE))
+        self._lock_path = self.path.with_suffix(self.path.suffix + ".lock")
+
+    def _read(self) -> dict:
+        try:
+            state = json.loads(self.path.read_text())
+        except FileNotFoundError:
+            return {"version": 1, "capacity": self.capacity, "holders": {}}
+        except (OSError, ValueError) as exc:
+            raise RuntimeError("Cannot read judge host capacity state") from exc
+        if (not isinstance(state, dict) or state.get("version") != 1
+                or type(state.get("capacity")) is not int or state["capacity"] < 1
+                or not isinstance(state.get("holders"), dict)
+                or any(not isinstance(k, str) or not isinstance(v, (int, float))
+                       for k, v in state["holders"].items())):
+            raise RuntimeError("Invalid judge host capacity state; explicit recovery required")
+        return state
+
+    def _write(self, state: dict) -> None:
+        tmp = self.path.with_suffix(self.path.suffix + ".tmp")
+        tmp.write_text(json.dumps(state))
+        tmp.replace(self.path)
+
+    def try_acquire(self, token: str) -> bool:
+        self._lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self._lock_path, "a+") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            try:
+                state = self._read()
+                if state["capacity"] != self.capacity:
+                    raise RuntimeError("Judge host capacity configuration mismatch")
+                holders = state["holders"]
+                if token in holders or len(holders) < state["capacity"]:
+                    holders[token] = time.time()
+                    self._write(state)
+                    return True
+                return False
+            finally:
+                fcntl.flock(lock, fcntl.LOCK_UN)
+
+    def release(self, token: str) -> None:
+        self._lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self._lock_path, "a+") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            try:
+                state = self._read()
+                state["holders"].pop(token, None)
+                self._write(state)
+            finally:
+                fcntl.flock(lock, fcntl.LOCK_UN)
+
+
 # --- Server state ---
 
 
@@ -197,6 +281,22 @@ class JudgeState:
         self.tokens: dict[str, dict] = {}  # token -> {task_id, run_id, next_agent, next_auto, judge_cpu_limit, judge_mem_limit}
         self.run_resource_limits: dict[str, dict] = {}  # run/task -> limits
         self.run_backends: dict[str, ContainerBackend] = {}  # run/task -> backend
+        # Bounded judge execution: accepted submissions are never dropped, but at
+        # most `judge_max_concurrency` run at once. `auto` production is additionally
+        # rejected *before* a round is consumed when the backlog is already full, so
+        # a long judge cannot turn the host into an unbounded fan-out.
+        self.judge_max_concurrency = max(1, int(getattr(config, "judge_max_concurrency", 0) or JUDGE_MAX_CONCURRENCY))
+        self.host_capacity = HostJudgeCapacity(
+            int(getattr(config, "judge_host_capacity", 0) or JUDGE_HOST_CAPACITY))
+        self.judge_max_backlog = max(self.judge_max_concurrency,
+                                     int(getattr(config, "judge_max_backlog", 0) or JUDGE_MAX_BACKLOG))
+        self._judge_queue: "queue.Queue[str | None]" = queue.Queue()
+        self._judge_pending: dict[str, tuple] = {}
+        self._judge_pending_lock = threading.Lock()
+        self._judge_workers: list[threading.Thread] = []
+        self._judge_workers_lock = threading.Lock()
+        self._submission_lock = threading.RLock()
+        self._judge_queue_drained = threading.Event()
         self._game_lock = threading.Lock()
         self._history_lock = threading.Lock()
         self._tokens_lock = threading.Lock()
@@ -429,6 +529,11 @@ class JudgeState:
             entry["total_tests"] = report_dict.get("total_tests", 0)
             entry["valid"] = report_dict.get("valid", True)
             entry["summary"] = report_dict.get("summary")
+            if status == "completed":
+                # Missing fields in older reports are unknown, not success/zero.
+                for key in ("timed_out", "runtime_seconds"):
+                    if key in report_dict:
+                        entry[key] = report_dict[key]
         if error:
             entry["error"] = error
         history_key = f"{run_id}/{task_id}"
@@ -474,6 +579,69 @@ class JudgeState:
         task_list = load_all_tasks(self.config.tasks_dir, benchmark)
         self.tasks = {t.task_id: t for t in task_list}
 
+    def auto_capacity_available(self) -> bool:
+        """Whether an `auto` submission may be accepted right now.
+
+        The HTTP layer asks this *before* `consume_round`, so a capacity refusal
+        never burns an agent round or a cooldown window.
+        """
+        # Backlog = accepted but not yet terminal (queued + running). Counting only
+        # the not-yet-started queue would report capacity while judges are actually
+        # still executing, which is exactly the overlap we are bounding.
+        with self._submission_lock:
+            in_flight = sum(
+                1 for sub in self.submissions.values()
+                if sub.get("status") in (SubmissionStatus.QUEUED, SubmissionStatus.RUNNING)
+            )
+        return in_flight < self.judge_max_backlog
+
+    def _ensure_judge_workers(self) -> None:
+        with self._judge_workers_lock:
+            while len(self._judge_workers) < self.judge_max_concurrency:
+                thread = threading.Thread(target=self._judge_worker_loop,
+                                          name=f"sforge-judge-{len(self._judge_workers)}", daemon=True)
+                thread.start()
+                self._judge_workers.append(thread)
+
+    def _judge_worker_loop(self) -> None:
+        while True:
+            submission_id = self._judge_queue.get()
+            if submission_id is None:
+                self._judge_queue.task_done()
+                return
+            try:
+                with self._judge_pending_lock:
+                    payload = self._judge_pending.pop(submission_id, None)
+                if payload is None:
+                    continue
+                token = f"{os.getpid()}:{submission_id}"
+                while not self.host_capacity.try_acquire(token):
+                    if self._judge_queue_drained.is_set():
+                        raise RuntimeError("Judge capacity wait cancelled before grading")
+                    time.sleep(0.2)
+                try:
+                    self._grade_worker(submission_id, *payload)
+                finally:
+                    try:
+                        self.host_capacity.release(token)
+                    except Exception:
+                        # Preserve the actual grading outcome; a failed release
+                        # retains capacity and must not kill the worker pool.
+                        logger.exception("Could not release judge slot %s", token)
+            except Exception as exc:
+                self._transition_submission(submission_id, SubmissionStatus.ERROR, error=str(exc))
+            finally:
+                self._judge_queue.task_done()
+
+    def _transition_submission(self, submission_id: str, status: SubmissionStatus,
+                               report: dict | None = None, error: str | None = None) -> None:
+        with self._submission_lock:
+            sub = self.submissions[submission_id]
+            sub.update(status=status, report=report, error=error)
+            self._record_submission(sub["run_id"] or submission_id, submission_id,
+                                    sub["task_id"], sub["round"], report, error,
+                                    status=status.value)
+
     def submit(self, task_id: str, archive: bytes, run_id: str | None = None, round: str | None = None,
                judge_cpu_limit: int | None = None, judge_mem_limit: str | None = None) -> str:
         """Submit and grade asynchronously. Returns submission_id for polling."""
@@ -482,29 +650,27 @@ class JudgeState:
 
         submission_id = uuid.uuid4().hex[:12]
         log_run_id = run_id or submission_id
-        self.submissions[submission_id] = {
-            "status": SubmissionStatus.QUEUED,
-            "task_id": task_id,
-            "run_id": run_id,
-            "round": round,
-            "report": None,
-            "error": None,
-        }
-        self._record_submission(log_run_id, submission_id, task_id, round, None, None, status="running")
-
-        thread = threading.Thread(
-            target=self._grade_worker,
-            args=(submission_id, task_id, archive, run_id, round,
-                  judge_cpu_limit, judge_mem_limit),
-            daemon=True,
-        )
-        thread.start()
+        self._ensure_judge_workers()
+        with self._submission_lock:
+            self.submissions[submission_id] = {
+                "status": SubmissionStatus.QUEUED,
+                "task_id": task_id,
+                "run_id": run_id,
+                "round": round,
+                "report": None,
+                "error": None,
+            }
+            self._record_submission(log_run_id, submission_id, task_id, round, None, None, status="queued")
+        with self._judge_pending_lock:
+            self._judge_pending[submission_id] = (
+                task_id, archive, run_id, round, judge_cpu_limit, judge_mem_limit)
+        self._judge_queue.put(submission_id)
         return submission_id
 
     def _grade_worker(self, submission_id: str, task_id: str, archive: bytes,
                       run_id: str | None = None, round: int | None = None,
                       judge_cpu_limit: int | None = None, judge_mem_limit: str | None = None) -> None:
-        self.submissions[submission_id]["status"] = SubmissionStatus.RUNNING
+        self._transition_submission(submission_id, SubmissionStatus.RUNNING)
         try:
             task_spec = self.tasks[task_id]
             log_run_id = run_id or submission_id
@@ -529,16 +695,14 @@ class JudgeState:
             )
             report_dict = report.to_dict()
             report_dict.pop("score_0_100", None)
-            self.submissions[submission_id]["status"] = SubmissionStatus.COMPLETED
-            self.submissions[submission_id]["report"] = report_dict
-            self._record_submission(log_run_id, submission_id, task_id, round, report_dict, None)
+            self._transition_submission(submission_id, SubmissionStatus.COMPLETED, report=report_dict)
         except Exception as e:
-            self.submissions[submission_id]["status"] = SubmissionStatus.ERROR
-            self.submissions[submission_id]["error"] = str(e)
-            self._record_submission(log_run_id, submission_id, task_id, round, None, str(e))
+            self._transition_submission(submission_id, SubmissionStatus.ERROR, error=str(e))
 
     def get_result(self, submission_id: str) -> dict | None:
-        return self.submissions.get(submission_id)
+        with self._submission_lock:
+            result = self.submissions.get(submission_id)
+            return dict(result) if result is not None else None
 
     # --- Game session management ---
 
@@ -938,27 +1102,35 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail="kind must be 'agent' or 'auto'")
         if kind == "auto" and admin_secret != state.admin_secret:
             raise HTTPException(status_code=403, detail="admin_secret required for auto submissions")
-        try:
-            task_id, run_id, round_id, judge_cpu_limit, judge_mem_limit, remaining = state.consume_round(token, kind)
-        except KeyError:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        except SubmissionBudgetExceeded as e:
-            raise HTTPException(status_code=429, detail=str(e))
-        except SubmissionCooldownActive as e:
-            raise HTTPException(status_code=429, detail=str(e))
         archive_data = archive.file.read()
-        try:
-            submission_id = state.submit(task_id, archive_data, run_id, round_id,
-                                         judge_cpu_limit=judge_cpu_limit,
-                                         judge_mem_limit=judge_mem_limit)
-            return SubmitResponse(
-                submission_id=submission_id,
-                round_id=round_id,
-                status=SubmissionStatus.QUEUED,
-                remaining_submissions=remaining,
-            )
-        except ValueError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+        with state._submission_lock:
+            # Capacity is checked *before* a round is allocated: an auto snapshot that
+            # cannot be accepted must not burn an agent round or open a cooldown.
+            # `agent` submissions are never refused here, so final grading cannot be
+            # starved by auto production.
+            if kind == "auto" and not state.auto_capacity_available():
+                raise HTTPException(status_code=429,
+                                    detail="judge backlog is full; auto submission deferred")
+            try:
+                task_id, run_id, round_id, judge_cpu_limit, judge_mem_limit, remaining = state.consume_round(token, kind)
+            except KeyError:
+                raise HTTPException(status_code=401, detail="Invalid token")
+            except SubmissionBudgetExceeded as e:
+                raise HTTPException(status_code=429, detail=str(e))
+            except SubmissionCooldownActive as e:
+                raise HTTPException(status_code=429, detail=str(e))
+            try:
+                submission_id = state.submit(task_id, archive_data, run_id, round_id,
+                                             judge_cpu_limit=judge_cpu_limit,
+                                             judge_mem_limit=judge_mem_limit)
+                return SubmitResponse(
+                    submission_id=submission_id,
+                    round_id=round_id,
+                    status=SubmissionStatus.QUEUED,
+                    remaining_submissions=remaining,
+                )
+            except ValueError as e:
+                raise HTTPException(status_code=404, detail=str(e))
 
     @app.get("/api/v1/history")
     def history(token: str = Query(...), admin_secret: str = Query("")) -> dict:
