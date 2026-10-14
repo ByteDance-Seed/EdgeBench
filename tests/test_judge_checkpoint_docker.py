@@ -49,7 +49,7 @@ def wait_for(predicate, timeout=30):
 
 
 @contextmanager
-def server(app):
+def server(app, host="127.0.0.1"):
     import uvicorn
 
     with socket.socket() as probe:
@@ -57,7 +57,7 @@ def server(app):
         port = probe.getsockname()[1]
     host = uvicorn.Server(
         uvicorn.Config(
-            app, host="127.0.0.1", port=port, log_level="error", access_log=False
+            app, host=host, port=port, log_level="error", access_log=False
         )
     )
     thread = threading.Thread(target=host.run)
@@ -89,12 +89,14 @@ def test_real_native_checkpoint_continues_without_regrading_or_refill(
 ):
     import docker
     import requests
+    from test_judge_checkpoint import task_files
+
     from sforge.harness import checkpoint
     from sforge.harness import judge_server as native
     from sforge.harness.config import SForgeConfig
-    from test_judge_checkpoint import task_files
 
     name = "checkpoint-native-" + uuid.uuid4().hex[:10]
+    destination_run = name + "-branch"
     docker_client = docker.from_env()
     base = docker_client.images.get("python:3.12-slim")
     task_files(tmp_path / "tasks")
@@ -102,6 +104,8 @@ def test_real_native_checkpoint_continues_without_regrading_or_refill(
         f"name: {name}\nbase_images: {{python: {{}}}}\n"
     )
     image_tag = f"{name}.judge.fixture:fixture"
+    work_tag = f"{name}.work.fixture:fixture"
+    base.tag(f"{name}.work.fixture", tag="fixture")
     base.tag(f"{name}.judge.fixture", tag="fixture")
     grades = []
     release = threading.Event()
@@ -198,7 +202,7 @@ def test_real_native_checkpoint_continues_without_regrading_or_refill(
                         return Response(status_code=502)
                     return response
 
-            with server(destination) as url:
+            with server(destination, host="0.0.0.0") as url:
                 fresh_state = destination.state.judge
                 assert fresh_state.admin_secret != state.admin_secret
                 # Inject elapsed staging time into only the native admission
@@ -221,7 +225,7 @@ def test_real_native_checkpoint_continues_without_regrading_or_refill(
                         {
                             "checkpoint_id": point["checkpoint_id"],
                             "manifest_sha256": point["manifest_sha256"],
-                            "run_id": "branch",
+                            "run_id": destination_run,
                             "admin_secret": fresh_state.admin_secret,
                         },
                     )
@@ -239,7 +243,7 @@ def test_real_native_checkpoint_continues_without_regrading_or_refill(
                     {
                         "checkpoint_id": point["checkpoint_id"],
                         "manifest_sha256": point["manifest_sha256"],
-                        "run_id": "branch",
+                        "run_id": destination_run,
                         "admin_secret": fresh_state.admin_secret,
                     },
                 )
@@ -267,7 +271,7 @@ def test_real_native_checkpoint_continues_without_regrading_or_refill(
                 assert result(url, sid)["report"] == graded["report"]
                 selected = (
                     new_config.log_dir
-                    / "runs/branch/fixture/submissions/agent-1/submission.tar.gz"
+                    / f"runs/{destination_run}/fixture/submissions/agent-1/submission.tar.gz"
                 )
                 assert selected.read_bytes() == archive
                 assert (
@@ -277,19 +281,80 @@ def test_real_native_checkpoint_continues_without_regrading_or_refill(
                 # Advance only the native admission clock. Evaluation/container
                 # execution retains the real wall clock and real Docker backend.
                 admission_now[0] += 3601
-                second = grade(url, fresh, candidate(3))
-                second.raise_for_status()
-                assert (
-                    second.json()["round_id"] == "agent-2"
-                    and second.json()["remaining_submissions"] == 0
-                )
-                second_result = wait_for(
-                    lambda: result(url, second.json()["submission_id"])
-                )
-                assert (
-                    second_result["status"] == "completed"
-                    and second_result["report"]["score"] == 3
-                )
+                # The production runner must reuse this registration, install
+                # the retained candidate, execute next work, drain and clean up.
+                # Synthetic agent code performs one real native submission;
+                # no model or benchmark task is used.
+                import base64
+                import shlex
+
+                from sforge.harness.agent import Agent
+                from sforge.harness.backend.docker_backend import DockerBackend
+                from sforge.harness.restored_registration import RestoredRegistration
+                from sforge.harness.run_agent import run_agent
+
+                program = """
+import io, json, os, tarfile, time, urllib.request
+assert json.load(open('/tmp/candidate.json'))['score'] == 7
+open('/tmp/candidate.json','w').write('{"score":3}')
+raw=io.BytesIO()
+with tarfile.open(fileobj=raw,mode='w:gz') as archive:
+    archive.add('/tmp/candidate.json',arcname='candidate.json')
+boundary='native-fixture-boundary'
+body=('--'+boundary+'\\r\\nContent-Disposition: form-data; name="token"\\r\\n\\r\\n'+os.environ['SFORGE_TOKEN']+'\\r\\n--'+boundary+'\\r\\nContent-Disposition: form-data; name="archive"; filename="candidate.tar.gz"\\r\\nContent-Type: application/gzip\\r\\n\\r\\n').encode()+raw.getvalue()+('\\r\\n--'+boundary+'--\\r\\n').encode()
+url=os.environ['SFORGE_JUDGE_URL']
+request=urllib.request.Request(url+'/api/v1/submit',data=body,headers={'Content-Type':'multipart/form-data; boundary='+boundary})
+reply=json.load(urllib.request.urlopen(request,timeout=15))
+assert reply['round_id']=='agent-2' and reply['remaining_submissions']==0
+for _ in range(200):
+    result=json.load(urllib.request.urlopen(url+'/api/v1/result/'+reply['submission_id'],timeout=5))
+    if result['status'] in ('completed','error'): break
+    time.sleep(.1)
+assert result['status']=='completed' and result['report']['score']==3
+print('native next work and grade completed')
+"""
+                class FixtureAgent(Agent):
+                    name = "synthetic-continuation"
+                    api_key_env = "UNUSED_FIXTURE_KEY"
+                    def __init__(self, config):
+                        super().__init__(config)
+                        encoded = base64.b64encode(selected.read_bytes()).decode()
+                        install = (
+                            "import base64,io,tarfile; "
+                            f"archive=tarfile.open(fileobj=io.BytesIO(base64.b64decode({encoded!r}))); "
+                            "open('/tmp/candidate.json','wb').write(archive.extractfile('candidate.json').read())"
+                        )
+                        self.install_cmds = ["sleep 2; python3 -c " + shlex.quote(install)]
+                    run_cmd = "python3 -c " + shlex.quote(program)
+                    def format_run_cmd(self, *args, **kwargs):
+                        return self.run_cmd
+
+                deadline = time.time() + 120
+                work_backend = DockerBackend(client=docker_client)
+                with monkeypatch.context() as patch:
+                    # Host firewall housekeeping is outside this isolated test.
+                    patch.setattr("sforge.harness.network_isolation.cleanup_stale_chains", lambda logger: None)
+                    ordinary_exec = work_backend.exec_run_with_timeout
+                    work_timeouts = []
+                    def observe_exec(handle, cmd, *args, **kwargs):
+                        if isinstance(cmd, list) and cmd[-1].startswith("python3 -c "):
+                            work_timeouts.append(kwargs["timeout"])
+                        return ordinary_exec(handle, cmd, *args, **kwargs)
+                    patch.setattr(work_backend, "exec_run_with_timeout", observe_exec)
+                    outcome = run_agent(
+                        fresh_state.tasks["fixture"], FixtureAgent(new_config), new_config,
+                        work_backend, destination_run, judge_url=url.replace("127.0.0.1", "host.docker.internal"),
+                        disable_auto_eval=True, disable_auto_resume=True, disable_stop_hook=True,
+                        restored_registration=RestoredRegistration(
+                            point["checkpoint_id"], point["manifest_sha256"], deadline,
+                            new_config.log_dir / "checkpoints" / point["checkpoint_id"] / "manifest.json",
+                        ),
+                    )
+                assert "native next work and grade completed" in outcome.agent_output
+                assert outcome.agent_submissions == 2 and outcome.best_score == 7
+                assert len(work_timeouts) == 1 and 0 < work_timeouts[0] <= 117
+                assert not docker_client.containers.list(all=True,filters={"name":f"sforge.run.fixture.{destination_run}"})
+                assert len(grades) == 2
                 assert (
                     grade(url, fresh, candidate(11)).status_code == 429
                     and len(grades) == 2
@@ -309,7 +374,7 @@ def test_real_native_checkpoint_continues_without_regrading_or_refill(
                         {
                             "checkpoint_id": point["checkpoint_id"],
                             "manifest_sha256": point["manifest_sha256"],
-                            "run_id": "branch",
+                            "run_id": destination_run,
                             "admin_secret": fresh_state.admin_secret,
                         },
                     ).status_code
@@ -322,5 +387,6 @@ def test_real_native_checkpoint_continues_without_regrading_or_refill(
         for container in leftovers:
             container.remove(force=True)
         docker_client.images.remove(image_tag)
+        docker_client.images.remove(work_tag)
         docker_client.close()
         assert not leftovers, "Native grade failed to clean up its own containers"
