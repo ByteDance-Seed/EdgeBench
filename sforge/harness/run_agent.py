@@ -56,6 +56,7 @@ from sforge.harness.evolve_scripts import (
     generate_game_prompt,
     generate_submit_script,
 )
+from sforge.harness.restored_registration import RestoredExecution, RestoredRegistration
 from sforge.harness.task_spec import TaskSpec
 
 
@@ -327,6 +328,7 @@ def run_agent(
     shutdown_event: threading.Event | None = None,
     max_submissions: int | None = None,
     submission_cooldown: int | None = None,
+    restored_registration: RestoredRegistration | None = None,
 ) -> RunResult:
     """Run an agent on a task with iterative evaluation.
 
@@ -337,16 +339,46 @@ def run_agent(
     3. Install agent + tools (submit script, stop hook, auto-eval daemon)
     4. Run agent (high max-turns for iterative work)
     5. Read final state, extract archive
+
+    ``restored_registration`` opts into an already activated native checkpoint.
+    Supply the controller's original absolute activation deadline, not a new
+    duration. Setup and every resume consume that deadline; terminal collection
+    may drain previously accepted evaluations after work stops. Mismatched or
+    unavailable authority fails before work, with no cold-registration fallback.
+    The Agent must install its corresponding retained code/session/research state
+    through its ordinary installation path. Judge recovery alone does not prove
+    full worker continuity. This entry neither creates nor restores authority.
+    Periodic auto-evaluation must be disabled for this agent-only continuation.
     """
+    # Warm admission is explicit and does not invoke checkpoint restore itself.
+    # The caller must admit the matching worker state and arrange its installation.
+    if restored_registration is not None and (backend.backend_name != "docker" or task_spec.game_mode):
+        raise ValueError("Restored registration execution requires a non-game Docker task")
+    if restored_registration is not None and timeout is not None:
+        raise ValueError("Restored execution uses its original absolute deadline, not a new timeout")
+    if restored_registration is not None and not disable_auto_eval and eval_interval > 0:
+        raise ValueError("Restored agent-only execution requires automatic evaluation disabled")
     effective_timeout = timeout or config.agent_timeout or agent.timeout
 
     log_dir = config.log_dir / "runs" / run_id / task_spec.task_id
     log_dir.mkdir(parents=True, exist_ok=True)
-    logger = setup_logger(
-        f"agent.{task_spec.task_id}.{run_id}",
-        log_dir / "run_agent.log",
-        verbose=verbose,
+    # Admit exclusively before opening any run artifacts. Rejected retries must
+    # neither truncate evidence nor close a concurrent invocation's log handlers.
+    restored_execution = (
+        RestoredExecution(restored_registration, log_dir, run_id, task_spec.task_id, shutdown_event)
+        if restored_registration is not None else None
     )
+    try:
+        logger = setup_logger(
+            f"agent.{task_spec.task_id}.{run_id}",
+            log_dir / "run_agent.log",
+            mode="a" if restored_execution else "w",
+            verbose=verbose,
+        )
+    except BaseException:
+        if restored_execution is not None:
+            restored_execution.close()
+        raise
 
     # judge_url is for container use; derive a host-local URL for registration/polling
     parsed_judge = urlparse(judge_url)
@@ -362,6 +394,9 @@ def run_agent(
     net_isolation = None
     install_parts: list[str] = []
     admin_secret = ""
+    auto_eval_stop = None
+    session_token = ""
+    resume_count = 0
 
     try:
         admin_secret = get_admin_secret(config.log_dir)
@@ -385,46 +420,64 @@ def run_agent(
                 )
         logger.info("Images ready")
 
-        # 1b. Register session with judge server
-        reg_body: dict = {"task_id": task_spec.task_id, "run_id": run_id, "admin_secret": admin_secret}
-        if config.judge_cpu_limit is not None:
-            reg_body["judge_cpu_limit"] = config.judge_cpu_limit
-        if config.judge_mem_limit is not None:
-            reg_body["judge_mem_limit"] = config.judge_mem_limit
-        if max_submissions is not None:
-            reg_body["max_agent_submissions"] = max_submissions
-        if submission_cooldown is not None:
-            reg_body["submission_cooldown"] = submission_cooldown
-        if backend.backend_name == "k8s":
-            reg_body["backend"] = backend.backend_name
-            reg_body["k8s_image_registry"] = config.k8s_image_registry
-            reg_body["k8s_namespace"] = config.k8s_namespace
-            if config.k8s_node_selector:
-                reg_body["k8s_node_selector"] = config.k8s_node_selector
-            if config.k8s_kubeconfig:
-                reg_body["k8s_kubeconfig"] = config.k8s_kubeconfig
-        elif backend.backend_name == "e2b":
-            reg_body["backend"] = "e2b"
-            reg_body["e2b_template_map"] = config.e2b_template_map
-            reg_body["e2b_template_namespace"] = config.e2b_template_namespace
-            reg_body["e2b_sandbox_ttl"] = config.e2b_sandbox_ttl
-        for _reg_attempt in range(1, 6):
-            try:
-                reg_resp = requests.post(
-                    f"{host_judge_url}/api/v1/register",
-                    json=reg_body,
-                    timeout=10,
-                )
-                reg_resp.raise_for_status()
-                break
-            except (requests.ConnectionError, requests.Timeout, requests.HTTPError) as exc:
-                if _reg_attempt == 5:
-                    raise
-                wait = 2 * _reg_attempt
-                logger.warning("Register attempt %d/5 failed (%s), retrying in %ds...", _reg_attempt, exc, wait)
-                time.sleep(wait)
-        session_token = reg_resp.json()["token"]
-        logger.info("Registered session with judge server")
+        if restored_execution is not None:
+            registered = restored_execution.registration_result(host_judge_url, admin_secret)
+            for key, expected in (
+                ("max_agent_submissions", max_submissions),
+                ("submission_cooldown", submission_cooldown),
+                ("judge_cpu_limit", config.judge_cpu_limit),
+                ("judge_mem_limit", config.judge_mem_limit),
+            ):
+                if expected is not None and registered.get(key) != expected:
+                    raise ValueError(f"Restored registration conflicts with requested {key}")
+            session_token = registered["token"]
+            max_submissions = registered["max_agent_submissions"]
+            submission_cooldown = registered["submission_cooldown"]
+            logger.info("Reusing the exact live restored judge registration")
+        else:
+            # 1b. Register session with judge server
+            reg_body: dict = {"task_id": task_spec.task_id, "run_id": run_id, "admin_secret": admin_secret}
+            if config.judge_cpu_limit is not None:
+                reg_body["judge_cpu_limit"] = config.judge_cpu_limit
+            if config.judge_mem_limit is not None:
+                reg_body["judge_mem_limit"] = config.judge_mem_limit
+            if max_submissions is not None:
+                reg_body["max_agent_submissions"] = max_submissions
+            if submission_cooldown is not None:
+                reg_body["submission_cooldown"] = submission_cooldown
+            if backend.backend_name == "k8s":
+                reg_body["backend"] = backend.backend_name
+                reg_body["k8s_image_registry"] = config.k8s_image_registry
+                reg_body["k8s_namespace"] = config.k8s_namespace
+                if config.k8s_node_selector:
+                    reg_body["k8s_node_selector"] = config.k8s_node_selector
+                if config.k8s_kubeconfig:
+                    reg_body["k8s_kubeconfig"] = config.k8s_kubeconfig
+            elif backend.backend_name == "e2b":
+                reg_body["backend"] = "e2b"
+                reg_body["e2b_template_map"] = config.e2b_template_map
+                reg_body["e2b_template_namespace"] = config.e2b_template_namespace
+                reg_body["e2b_sandbox_ttl"] = config.e2b_sandbox_ttl
+            for _reg_attempt in range(1, 6):
+                try:
+                    reg_resp = requests.post(
+                        f"{host_judge_url}/api/v1/register",
+                        json=reg_body,
+                        timeout=10,
+                    )
+                    reg_resp.raise_for_status()
+                    break
+                except (requests.ConnectionError, requests.Timeout, requests.HTTPError) as exc:
+                    if _reg_attempt == 5:
+                        raise
+                    wait = 2 * _reg_attempt
+                    logger.warning("Register attempt %d/5 failed (%s), retrying in %ds...", _reg_attempt, exc, wait)
+                    time.sleep(wait)
+            session_token = reg_resp.json()["token"]
+            logger.info("Registered session with judge server")
+
+        if restored_execution is not None:
+            restored_execution.remaining()
 
         # 2. Create container
         container_name = f"sforge.run.{task_spec.task_id}.{run_id}"
@@ -533,7 +586,8 @@ def run_agent(
                 f"Install step {i + 1}/{len(agent.install_cmds)}: {cmd}"
             )
             result = backend.exec_run_with_exit_code(
-                handle, f"/bin/bash -c {shlex.quote(cmd)}", timeout=600
+                handle, f"/bin/bash -c {shlex.quote(cmd)}",
+                timeout=restored_execution.timeout(600) if restored_execution else 600
             )
             install_parts.append(result.output)
             if result.timed_out:
@@ -546,6 +600,9 @@ def run_agent(
 
         (log_dir / "install_output.txt").write_text("\n".join(install_parts))
         logger.info("Agent installation complete")
+
+        if restored_execution is not None:
+            restored_execution.remaining()
 
         # 4. Install tools.
         #    Game-mode tasks skip sforge-submit (scoring is built into the
@@ -623,7 +680,7 @@ def run_agent(
 
         # 6. Run agent (with auto-resume on abnormal exit)
         can_resume = not disable_auto_resume and agent.resume_cmd is not None
-        remaining_timeout = effective_timeout
+        remaining_timeout = restored_execution.remaining() if restored_execution else effective_timeout
         resume_count = 0
         total_runtime = 0.0
         agent_timed_out = False
@@ -640,6 +697,14 @@ def run_agent(
         on_chunk_cb = None
 
         while remaining_timeout > 0:
+            if restored_execution is not None:
+                try:
+                    remaining_timeout = restored_execution.remaining()
+                except TimeoutError:
+                    agent_timed_out = True
+                    break
+                if resume_count == 0:
+                    restored_execution.start_work()
             is_resume = resume_count > 0
             run_cmd = agent.format_run_cmd(
                 prompt_path, model=model,
@@ -653,6 +718,8 @@ def run_agent(
             else:
                 logger.info(f"Running agent: {run_cmd[:200]}... (timeout={remaining_timeout:.0f}s)")
 
+            if restored_execution is not None:
+                remaining_timeout = restored_execution.remaining()
             seg_result = backend.exec_run_with_timeout(
                 handle,
                 ["/bin/bash", "-c", run_cmd],
@@ -684,7 +751,8 @@ def run_agent(
                 logger.warning(f"Max resume attempts ({MAX_RESUMES}) reached")
                 break
 
-            remaining_timeout -= seg_result.elapsed_seconds
+            if restored_execution is None:
+                remaining_timeout -= seg_result.elapsed_seconds
             resume_count += 1
             logger.info(f"Agent exited after {seg_result.elapsed_seconds:.1f}s, will resume")
 
@@ -932,7 +1000,8 @@ def run_agent(
         )
     except Exception as e:
         logger.error(f"Error: {e}\n{traceback.format_exc()}")
-        if backend.backend_name == "e2b":
+        if restored_registration is not None or backend.backend_name == "e2b":
+            # Warm admission/setup failures must not masquerade as a valid run.
             # E2B transport or lifecycle failures must remain visible to the
             # caller instead of being reported as a successful zero score.
             raise
@@ -978,11 +1047,17 @@ def run_agent(
             except Exception as exc:
                 if logger:
                     logger.warning(f"Failed to cleanup network isolation: {exc}")
-        if threading.current_thread() is threading.main_thread():
-            prev_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
-            print("\nStopping container, please wait... (Ctrl+C disabled during cleanup)")
-            backend.cleanup_container(handle, logger)
-            signal.signal(signal.SIGINT, prev_handler)
-        else:
-            backend.cleanup_container(handle, logger)
-        close_logger(logger)
+        try:
+            if threading.current_thread() is threading.main_thread():
+                prev_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
+                try:
+                    print("\nStopping container, please wait... (Ctrl+C disabled during cleanup)")
+                    backend.cleanup_container(handle, logger)
+                finally:
+                    signal.signal(signal.SIGINT, prev_handler)
+            else:
+                backend.cleanup_container(handle, logger)
+        finally:
+            if restored_execution is not None:
+                restored_execution.close()
+            close_logger(logger)

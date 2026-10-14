@@ -183,6 +183,28 @@ class GameSessionState:
     last_active: float = field(default_factory=time.time)
 
 
+def submission_history_entry(submission_id: str, task_id: str, round_id: str | None,
+                             report_dict: dict | None, error: str | None, status: str) -> dict:
+    entry: dict[str, Any] = {
+        "type": "submission",
+        "status": status,
+        "submission_id": submission_id,
+        "task_id": task_id,
+        "round": round_id,
+    }
+    if report_dict:
+        entry["pass_rate"] = report_dict.get("pass_rate", 0.0)
+        entry["score"] = report_dict.get("score")
+        entry["passed"] = report_dict.get("passed", 0)
+        entry["failed"] = report_dict.get("failed", 0)
+        entry["total_tests"] = report_dict.get("total_tests", 0)
+        entry["valid"] = report_dict.get("valid", True)
+        entry["summary"] = report_dict.get("summary")
+    if error:
+        entry["error"] = error
+    return entry
+
+
 # --- Server state ---
 
 
@@ -200,6 +222,9 @@ class JudgeState:
         self._game_lock = threading.Lock()
         self._history_lock = threading.Lock()
         self._tokens_lock = threading.Lock()
+        self._registration_lock = threading.RLock()
+        self._checkpoint_runs: set[str] = set()
+        self._checkpoint_enabled = False
         self.backend = create_backend_from_config(config)
 
         self._reaper_stop = threading.Event()
@@ -291,62 +316,105 @@ class JudgeState:
                          e2b_template_map: dict[str, str] | None = None,
                          e2b_template_namespace: str | None = None,
                          e2b_sandbox_ttl: int | None = None) -> str:
+        with self._registration_lock:
+            if run_id in self._checkpoint_runs:
+                raise ValueError("A restored run cannot be cold-registered again")
+            if self._checkpoint_enabled:
+                from sforge.harness.checkpoint import RESTORE_MARKER
+                if (self.config.log_dir / "runs" / run_id / RESTORE_MARKER).exists():
+                    raise ValueError("A restored run cannot be cold-registered again")
+            info, prepared_backend, token = self._prepare_session(task_id, run_id,
+                judge_cpu_limit=judge_cpu_limit,
+                judge_mem_limit=judge_mem_limit,
+                backend=backend,
+                k8s_image_registry=k8s_image_registry,
+                k8s_namespace=k8s_namespace,
+                k8s_node_selector=k8s_node_selector,
+                k8s_kubeconfig=k8s_kubeconfig,
+                max_agent_submissions=max_agent_submissions,
+                submission_cooldown=submission_cooldown,
+                e2b_template_map=e2b_template_map,
+                e2b_template_namespace=e2b_template_namespace,
+                e2b_sandbox_ttl=e2b_sandbox_ttl,
+            )
+            with self._tokens_lock:
+                return self._publish_session(info, prepared_backend, token)
+
+    def _publish_session(self, info: dict, prepared_backend: ContainerBackend | None, token: str) -> str:
+        """Called under the native registration and token locks after preparation."""
+        run_key = self._run_key(info["run_id"], info["task_id"])
+        self.run_resource_limits[run_key] = {
+            "judge_cpu_limit": info["judge_cpu_limit"], "judge_mem_limit": info["judge_mem_limit"],
+        }
+        if prepared_backend is not None:
+            self.run_backends[run_key] = prepared_backend
+        self.tokens[token] = info
+        return token
+
+    def _prepare_session(self, task_id: str, run_id: str,
+                         judge_cpu_limit: int | None = None,
+                         judge_mem_limit: str | None = None,
+                         backend: str | None = None,
+                         k8s_image_registry: str | None = None,
+                         k8s_namespace: str | None = None,
+                         k8s_node_selector: dict[str, str] | None = None,
+                         k8s_kubeconfig: str | None = None,
+                         max_agent_submissions: int | None = None,
+                         submission_cooldown: int | None = None,
+                         e2b_template_map: dict[str, str] | None = None,
+                         e2b_template_namespace: str | None = None,
+                         e2b_sandbox_ttl: int | None = None) -> tuple[dict, ContainerBackend | None, str]:
         if task_id not in self.tasks:
             raise ValueError(f"Unknown task: {task_id}")
-        token = secrets.token_hex(16)
-        with self._tokens_lock:
-            self.tokens[token] = {
-                "task_id": task_id,
-                "run_id": run_id,
-                "next_agent": 1,
-                "next_auto": 1,
-                "judge_cpu_limit": judge_cpu_limit,
-                "judge_mem_limit": judge_mem_limit,
-                "max_agent_submissions": max_agent_submissions,
-                "submission_cooldown": submission_cooldown,
-                "last_agent_submit_at": 0.0,
-            }
-            run_key = self._run_key(run_id, task_id)
-            self.run_resource_limits[run_key] = {
-                "judge_cpu_limit": judge_cpu_limit,
-                "judge_mem_limit": judge_mem_limit,
-            }
-            effective_e2b_template_map = (
-                self.config.e2b_template_map
-                if not e2b_template_map
-                else e2b_template_map
+        backend_override = None
+        info = {
+            "task_id": task_id,
+            "run_id": run_id,
+            "registration_id": uuid.uuid4().hex,
+            "next_agent": 1,
+            "next_auto": 1,
+            "judge_cpu_limit": judge_cpu_limit,
+            "judge_mem_limit": judge_mem_limit,
+            "max_agent_submissions": max_agent_submissions,
+            "submission_cooldown": submission_cooldown,
+            "last_agent_submit_at": 0.0,
+        }
+        effective_e2b_template_map = (
+            self.config.e2b_template_map
+            if not e2b_template_map
+            else e2b_template_map
+        )
+        effective_e2b_template_namespace = (
+            self.config.e2b_template_namespace
+            if not e2b_template_namespace
+            else e2b_template_namespace
+        )
+        effective_e2b_sandbox_ttl = (
+            self.config.e2b_sandbox_ttl
+            if e2b_sandbox_ttl is None
+            else e2b_sandbox_ttl
+        )
+        e2b_config_changed = backend == "e2b" and (
+            effective_e2b_template_map != self.config.e2b_template_map
+            or effective_e2b_template_namespace
+            != self.config.e2b_template_namespace
+            or effective_e2b_sandbox_ttl != self.config.e2b_sandbox_ttl
+        )
+        if backend and (
+            backend != self.backend.backend_name or e2b_config_changed
+        ):
+            from sforge.harness.backend.factory import create_backend
+            backend_override = create_backend(
+                backend,
+                k8s_namespace=k8s_namespace or self.config.k8s_namespace,
+                k8s_node_selector=k8s_node_selector or self.config.k8s_node_selector,
+                k8s_image_registry=k8s_image_registry or self.config.k8s_image_registry,
+                k8s_kubeconfig=k8s_kubeconfig or self.config.k8s_kubeconfig,
+                e2b_template_map=effective_e2b_template_map,
+                e2b_template_namespace=effective_e2b_template_namespace,
+                e2b_sandbox_ttl=effective_e2b_sandbox_ttl,
             )
-            effective_e2b_template_namespace = (
-                self.config.e2b_template_namespace
-                if not e2b_template_namespace
-                else e2b_template_namespace
-            )
-            effective_e2b_sandbox_ttl = (
-                self.config.e2b_sandbox_ttl
-                if e2b_sandbox_ttl is None
-                else e2b_sandbox_ttl
-            )
-            e2b_config_changed = backend == "e2b" and (
-                effective_e2b_template_map != self.config.e2b_template_map
-                or effective_e2b_template_namespace
-                != self.config.e2b_template_namespace
-                or effective_e2b_sandbox_ttl != self.config.e2b_sandbox_ttl
-            )
-            if backend and (
-                backend != self.backend.backend_name or e2b_config_changed
-            ):
-                from sforge.harness.backend.factory import create_backend
-                self.run_backends[run_key] = create_backend(
-                    backend,
-                    k8s_namespace=k8s_namespace or self.config.k8s_namespace,
-                    k8s_node_selector=k8s_node_selector or self.config.k8s_node_selector,
-                    k8s_image_registry=k8s_image_registry or self.config.k8s_image_registry,
-                    k8s_kubeconfig=k8s_kubeconfig or self.config.k8s_kubeconfig,
-                    e2b_template_map=effective_e2b_template_map,
-                    e2b_template_namespace=effective_e2b_template_namespace,
-                    e2b_sandbox_ttl=effective_e2b_sandbox_ttl,
-                )
-        return token
+        return info, backend_override, secrets.token_hex(16)
 
     @staticmethod
     def _run_key(run_id: str, task_id: str) -> str:
@@ -375,7 +443,7 @@ class JudgeState:
         Raises SubmissionBudgetExceeded or SubmissionCooldownActive on violation.
         Auto submissions are never limited.
         """
-        with self._tokens_lock:
+        with self._registration_lock, self._tokens_lock:
             info = self.tokens.get(token)
             if info is None:
                 raise KeyError("Invalid token")
@@ -414,23 +482,7 @@ class JudgeState:
         return info["task_id"], info["run_id"], round_id, info.get("judge_cpu_limit"), info.get("judge_mem_limit"), remaining
 
     def _record_submission(self, run_id: str, submission_id: str, task_id: str, round_id: str | None, report_dict: dict | None, error: str | None, status: str = "completed") -> None:
-        entry: dict[str, Any] = {
-            "type": "submission",
-            "status": status,
-            "submission_id": submission_id,
-            "task_id": task_id,
-            "round": round_id,
-        }
-        if report_dict:
-            entry["pass_rate"] = report_dict.get("pass_rate", 0.0)
-            entry["score"] = report_dict.get("score")
-            entry["passed"] = report_dict.get("passed", 0)
-            entry["failed"] = report_dict.get("failed", 0)
-            entry["total_tests"] = report_dict.get("total_tests", 0)
-            entry["valid"] = report_dict.get("valid", True)
-            entry["summary"] = report_dict.get("summary")
-        if error:
-            entry["error"] = error
+        entry = submission_history_entry(submission_id, task_id, round_id, report_dict, error, status)
         history_key = f"{run_id}/{task_id}"
         with self._history_lock:
             entries = self.run_history.setdefault(history_key, [])
@@ -529,13 +581,15 @@ class JudgeState:
             )
             report_dict = report.to_dict()
             report_dict.pop("score_0_100", None)
-            self.submissions[submission_id]["status"] = SubmissionStatus.COMPLETED
-            self.submissions[submission_id]["report"] = report_dict
-            self._record_submission(log_run_id, submission_id, task_id, round, report_dict, None)
+            with self._registration_lock:
+                self.submissions[submission_id]["status"] = SubmissionStatus.COMPLETED
+                self.submissions[submission_id]["report"] = report_dict
+                self._record_submission(log_run_id, submission_id, task_id, round, report_dict, None)
         except Exception as e:
-            self.submissions[submission_id]["status"] = SubmissionStatus.ERROR
-            self.submissions[submission_id]["error"] = str(e)
-            self._record_submission(log_run_id, submission_id, task_id, round, None, str(e))
+            with self._registration_lock:
+                self.submissions[submission_id]["status"] = SubmissionStatus.ERROR
+                self.submissions[submission_id]["error"] = str(e)
+                self._record_submission(log_run_id, submission_id, task_id, round, None, str(e), status=SubmissionStatus.ERROR)
 
     def get_result(self, submission_id: str) -> dict | None:
         return self.submissions.get(submission_id)
@@ -876,13 +930,20 @@ class JudgeState:
 # --- FastAPI app factory ---
 
 
-def create_app(config: SForgeConfig | None = None) -> FastAPI:
+def create_app(config: SForgeConfig | None = None, *, checkpoints: bool = False) -> FastAPI:
     if config is None:
         config = load_config()
 
+    if type(checkpoints) is not bool:
+        raise ValueError("checkpoints must be an explicit boolean")
     app = FastAPI(title="SForge Judge", version=__version__)
     state = JudgeState(config)
     state.load_tasks()
+    app.state.judge = state
+    state._checkpoint_enabled = checkpoints
+    if checkpoints:
+        from sforge.harness.checkpoint import install_routes
+        install_routes(app, state)
 
     @app.get("/api/v1/result/{submission_id}")
     def get_result(submission_id: str) -> ResultResponse:
