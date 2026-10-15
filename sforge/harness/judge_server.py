@@ -535,7 +535,7 @@ class JudgeState:
         except Exception as e:
             self.submissions[submission_id]["status"] = SubmissionStatus.ERROR
             self.submissions[submission_id]["error"] = str(e)
-            self._record_submission(log_run_id, submission_id, task_id, round, None, str(e))
+            self._record_submission(log_run_id, submission_id, task_id, round, None, str(e), status="error")
 
     def get_result(self, submission_id: str) -> dict | None:
         return self.submissions.get(submission_id)

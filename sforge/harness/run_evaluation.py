@@ -20,7 +20,6 @@ import fnmatch
 import json
 import logging
 import time
-import traceback
 import uuid
 from pathlib import Path, PurePosixPath
 
@@ -32,7 +31,6 @@ from sforge.harness.config import (
 )
 from sforge.harness.constants import DOCKER_USER
 from sforge.harness.docker_build import (
-    BuildImageError,
     build_judge_image,
     close_logger,
     setup_logger,
@@ -147,6 +145,7 @@ def judge_submission(
     )
 
     handle = None
+    stage = "prepare_image"
     try:
         # 1. Ensure judge image exists (Docker builds locally; K8s requires pre-built images in CR)
         if backend.backend_name == "docker":
@@ -163,6 +162,7 @@ def judge_submission(
         # Resolve resource limits: config > task defaults
         cpu = config.judge_cpu_limit if config.judge_cpu_limit is not None else task_spec.judge.cpu_limit
         mem = config.judge_mem_limit if config.judge_mem_limit is not None else task_spec.judge.mem_limit
+        stage = "create_container"
         handle = backend.create_container(
             task_spec.judge_image_key,
             container_name,
@@ -172,10 +172,12 @@ def judge_submission(
             mem_limit=mem,
             user=DOCKER_USER,
         )
+        stage = "start_container"
         backend.start_container(handle)
         logger.info(f"Judge container started: {handle.id}")
 
         # 3. Extract archive into patch_dir (filtered by submit_paths/submit_exclude)
+        stage = "extract_submission"
         if archive:
             local_tar = log_dir / "submission.tar.gz"
             local_tar.write_bytes(archive)
@@ -240,6 +242,7 @@ def judge_submission(
             logger.info("Empty archive — running eval on unmodified skeleton")
 
         # 4. Inject eval.sh dynamically (not baked into the image)
+        stage = "prepare_evaluation"
         eval_script_local = log_dir / "eval.sh"
         eval_script_local.write_text(task_spec.eval_script)
         backend.copy_to_container(handle, eval_script_local, PurePosixPath("/tmp/eval.sh"))
@@ -248,6 +251,7 @@ def judge_submission(
         # paths: docker defaults to the image WORKDIR but envd execs land in
         # the user's home, so pin the task cwd explicitly.
         logger.info("Running eval script...")
+        stage = "execute_evaluation"
         result = backend.exec_run_with_timeout(
             handle, "/bin/bash /tmp/eval.sh", timeout, workdir=task_spec.cwd
         )
@@ -258,11 +262,13 @@ def judge_submission(
         logger.info(f"Test runtime: {runtime:.2f}s, timed_out: {timed_out}")
 
         # 6. Grade
+        stage = "grade_output"
         report = grade_output(
             task_spec, test_output, submission_id, timed_out, runtime
         )
         report.submitted_at = submitted_at
         report.score_0_100 = rescale_score(task_spec.judge.rescale, report.score)
+        stage = "record_report"
         (log_dir / "report.json").write_text(
             json.dumps(report.to_dict(), indent=2, ensure_ascii=False)
         )
@@ -272,22 +278,15 @@ def judge_submission(
         )
         return report
 
-    except (EvaluationError, BuildImageError) as e:
-        logger.error(traceback.format_exc())
-        return EvalReport(
-            task_id=task_spec.task_id,
-            submission_id=submission_id,
-            submitted_at=submitted_at,
-            raw_output=str(e),
-        )
     except Exception as e:
-        logger.error(f"Unexpected error: {e}\n{traceback.format_exc()}")
-        return EvalReport(
-            task_id=task_spec.task_id,
-            submission_id=submission_id,
-            submitted_at=submitted_at,
-            raw_output=str(e),
-        )
+        # An empty EvalReport defaults to valid=True. Returning it here makes
+        # the async judge mark an unevaluated submission COMPLETED. Let its
+        # existing ERROR transition retain the request identity instead. Raw
+        # backend details stay in the private log, not solver-visible history.
+        logger.exception("Judge execution failed during %s", stage)
+        raise EvaluationError(
+            task_spec.task_id, f"judge_execution_failed:{stage}", logger,
+        ) from e
     finally:
         try:
             backend.cleanup_container(handle, logger)
