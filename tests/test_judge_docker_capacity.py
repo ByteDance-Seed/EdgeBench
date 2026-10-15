@@ -26,6 +26,7 @@ import docker
 import pytest
 
 from sforge.harness import judge_server as js
+from sforge.harness.backend.docker_backend import DockerBackend
 from sforge.harness.config import SForgeConfig
 
 
@@ -37,6 +38,7 @@ def _launch_judge(image, label, root, ready, orphan):
         owned = client.containers.run(
             image, ["sleep", "60" if orphan else "0.2"], detach=True,
             network_disabled=True, labels={"sforge-capacity-test": label},
+            name=f"synthetic.judge.synthetic.{kwargs['submission_id']}",
         )
         token = f"{os.getpid()}:{kwargs['submission_id']}"
         ready.put({"container_id": owned.id, "slot_token": token})
@@ -88,11 +90,11 @@ def test_slot_release_requires_judge_cleanup(tmp_path, orphan):
             assert owned.labels.get("sforge-capacity-test") == label
             assert owned.status == "running"
             assert not slots.try_acquire("replacement")
-            owned.remove(force=True)
+            backend = DockerBackend(client)
+            assert slots.reconcile_stale_holders(
+                backend.reconcile_judge_capacity_holder
+            ) == [receipt["slot_token"]]
             assert not client.containers.list(all=True, filters={"id": owned_id})
-            # Cleanup evidence must be followed by an explicit reconciliation.
-            assert not slots.try_acquire("replacement")
-            slots.release(receipt["slot_token"])
         else:
             process.join(15)
             assert process.exitcode == 0

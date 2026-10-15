@@ -58,6 +58,9 @@ class SForgeConfig:
     # Total judge slots shared by every launcher process on this host. Process-local
     # pools multiply otherwise, so the cross-process bound is the one that matters.
     judge_host_capacity: int | None = None
+    # Optional host-wide judge memory budget. Unknown judge memory is charged the
+    # full budget so unbounded tasks run one at a time.
+    judge_host_memory_capacity: str | None = None
 
     # Claude Code cache optimization — suppress the random cch attribution
     # header and dynamic system prompt sections that break prompt caching on
@@ -132,6 +135,7 @@ def load_config(cli_overrides: dict | None = None) -> SForgeConfig:
         "e2b_template_namespace": ["SFORGE_E2B_TEMPLATE_NAMESPACE"],
         "work_cpu_limit": ["SFORGE_WORK_CPU_LIMIT"],
         "work_mem_limit": ["SFORGE_WORK_MEM_LIMIT"],
+        "judge_host_memory_capacity": ["SFORGE_JUDGE_HOST_MEMORY_CAPACITY"],
         "log_dir": ["SFORGE_LOG_DIR"],
         "tasks_dir": ["SFORGE_TASKS_DIR"],
     }

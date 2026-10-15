@@ -91,6 +91,7 @@ class DockerBackend(ContainerBackend):
 
     def __init__(self, client: docker.DockerClient | None = None) -> None:
         self._client = client or docker.from_env()
+        self._judge_capacity_owner_id: str | None = None
 
     @property
     def backend_name(self) -> str:
@@ -200,6 +201,45 @@ class DockerBackend(ContainerBackend):
             c.remove(force=True)
         except docker.errors.NotFound:
             pass
+
+    def judge_capacity_owner_id(self) -> str | None:
+        if self._judge_capacity_owner_id is None:
+            engine_id = self._client.info().get("ID")
+            if not engine_id:
+                return None
+            self._judge_capacity_owner_id = f"docker:{engine_id}"
+        return self._judge_capacity_owner_id
+
+    def reconcile_judge_capacity_holder(
+        self, token: str, owner_id: str | None,
+    ) -> bool:
+        current_owner_id = self.judge_capacity_owner_id()
+        if owner_id is not None and owner_id != current_owner_id:
+            return False
+        _, separator, submission_id = token.partition(":")
+        if not separator or not submission_id:
+            return False
+        suffix = f".{submission_id}"
+        candidates = self._client.containers.list(
+            all=True, filters={"name": submission_id}
+        )
+        owned = [
+            container for container in candidates
+            if ".judge." in container.name and container.name.endswith(suffix)
+        ]
+        if owner_id is None and not owned:
+            return False
+        for container in owned:
+            self.cleanup_container(
+                DockerContainerHandle(container), logging.getLogger(__name__)
+            )
+        remaining = self._client.containers.list(
+            all=True, filters={"name": submission_id}
+        )
+        return not any(
+            ".judge." in container.name and container.name.endswith(suffix)
+            for container in remaining
+        )
 
     # --- Image ---
 

@@ -14,6 +14,7 @@
 
 """Independent real-entry tests; synthetic tasks, no containers or model calls."""
 from __future__ import annotations
+
 import concurrent.futures
 import contextlib
 import json
@@ -27,9 +28,11 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+
 from sforge.harness import judge_server as js
 from sforge.harness import run_agent as ra
 from sforge.harness.config import SForgeConfig, load_config
+
 
 def task():
     return types.SimpleNamespace(task_id="t", judge=types.SimpleNamespace(
@@ -173,6 +176,33 @@ def test_host_capacity_cannot_be_enlarged_by_a_second_launcher(tmp_path):
         small.release(a)
         large.release(b)
 
+
+def test_host_capacity_accounts_for_weighted_resource_units(tmp_path):
+    capacity = js.HostJudgeCapacity(10, str(tmp_path / "capacity.json"))
+    first = f"{os.getpid()}:first"
+    second = f"{os.getpid()}:second"
+    assert capacity.try_acquire(first, "docker:synthetic", units=7)
+    try:
+        assert not capacity.try_acquire(second, "docker:synthetic", units=4)
+        assert capacity.try_acquire(second, "docker:synthetic", units=3)
+    finally:
+        capacity.release(first)
+        capacity.release(second)
+
+
+def test_single_slot_holder_remains_legacy_reader_compatible(tmp_path):
+    path = tmp_path / "slots.json"
+    capacity = js.HostJudgeCapacity(2, str(path))
+    token = f"{os.getpid()}:owned"
+    assert capacity.try_acquire(token, "docker:synthetic")
+    try:
+        holder = json.loads(path.read_text())["holders"][token]
+        assert isinstance(holder, (int, float))
+        owners = json.loads((tmp_path / "slots.json.owners").read_text())
+        assert owners["owners"] == {token: "docker:synthetic"}
+    finally:
+        capacity.release(token)
+
 def test_corrupt_slot_state_does_not_grant_new_capacity(tmp_path):
     path = tmp_path / "slots.json"
     slots = js.HostJudgeCapacity(1, str(path))
@@ -290,7 +320,13 @@ def _reserve_and_exit(path):
     assert js.HostJudgeCapacity(1, path).try_acquire(f"{os.getpid()}:orphan")
 
 
-def test_dead_launcher_does_not_prove_judge_cleanup(tmp_path):
+def _reserve_owned_and_exit(path):
+    assert js.HostJudgeCapacity(1, path).try_acquire(
+        f"{os.getpid()}:orphan", "synthetic:engine"
+    )
+
+
+def test_dead_launcher_requires_cleanup_evidence_before_reclaim(tmp_path):
     path = str(tmp_path / "slots.json")
     ctx = mp.get_context("spawn")
     process = ctx.Process(target=_reserve_and_exit, args=(path,))
@@ -300,12 +336,99 @@ def test_dead_launcher_does_not_prove_judge_cleanup(tmp_path):
         assert process.exitcode == 0
         slots = js.HostJudgeCapacity(1, path)
         assert not slots.try_acquire(f"{os.getpid()}:next")
-        slots.release(f"{process.pid}:orphan")
+        observed = []
+        assert slots.reconcile_stale_holders(
+            lambda token, _owner_id: observed.append(token) is None and False
+        ) == []
+        assert observed == [f"{process.pid}:orphan"]
+        assert not slots.try_acquire(f"{os.getpid()}:next")
+        assert slots.reconcile_stale_holders(lambda _token, _owner_id: True) == [
+            f"{process.pid}:orphan"
+        ]
         assert slots.try_acquire(f"{os.getpid()}:next")
     finally:
         if process.is_alive():
             process.terminate()
         process.join(2)
+
+
+def test_live_capacity_owner_is_never_reconciled(tmp_path):
+    slots = js.HostJudgeCapacity(1, str(tmp_path / "slots.json"))
+    token = f"{os.getpid()}:live"
+    assert slots.try_acquire(token)
+    cleanup_calls = []
+    try:
+        assert slots.reconcile_stale_holders(
+            lambda token, _owner_id: cleanup_calls.append(token)
+        ) == []
+        assert cleanup_calls == []
+        assert not slots.try_acquire(f"{os.getpid()}:other")
+    finally:
+        slots.release(token)
+
+
+def test_state_startup_reconciles_backend_owned_dead_holder(tmp_path, monkeypatch):
+    path = str(tmp_path / "slots.json")
+    ctx = mp.get_context("spawn")
+    process = ctx.Process(target=_reserve_owned_and_exit, args=(path,))
+    process.start()
+    process.join(4)
+    assert process.exitcode == 0
+    monkeypatch.setenv("SFORGE_JUDGE_HOST_SLOT_FILE", path)
+    monkeypatch.setenv("SFORGE_JUDGE_HOST_OWNER_FILE", path + ".owners")
+    cleaned = []
+
+    class Backend:
+        backend_name = "synthetic"
+
+        def reconcile_judge_capacity_holder(self, token, owner_id):
+            cleaned.append((token, owner_id))
+            return owner_id == "synthetic:engine"
+
+    state = js.JudgeState(
+        SForgeConfig(log_dir=tmp_path, judge_host_capacity=1),
+        backend_factory=lambda _config: Backend(),
+    )
+    try:
+        assert cleaned == [(f"{process.pid}:orphan", "synthetic:engine")]
+        replacement = f"{os.getpid()}:replacement"
+        assert state.host_capacity.try_acquire(replacement)
+        state.host_capacity.release(replacement)
+    finally:
+        state._reaper_stop.set()
+        state._reaper_thread.join(2)
+
+
+def test_judge_memory_budget_uses_declared_limit_and_serializes_unknown(
+    tmp_path, monkeypatch,
+):
+    monkeypatch.setenv("SFORGE_JUDGE_HOST_SLOT_FILE", str(tmp_path / "slots.json"))
+    monkeypatch.setenv("SFORGE_JUDGE_HOST_MEMORY_FILE", str(tmp_path / "memory.json"))
+    backend = types.SimpleNamespace(backend_name="synthetic")
+    state = js.JudgeState(
+        SForgeConfig(
+            log_dir=tmp_path,
+            judge_host_capacity=2,
+            judge_host_memory_capacity="10g",
+        ),
+        backend_factory=lambda _config: backend,
+    )
+    state.tasks = {
+        "declared": types.SimpleNamespace(
+            task_id="declared", judge=types.SimpleNamespace(mem_limit="3g")
+        ),
+        "unknown": types.SimpleNamespace(
+            task_id="unknown", judge=types.SimpleNamespace(mem_limit=None)
+        ),
+    }
+    try:
+        assert state._judge_memory_requirement("declared", None) == 3 * 1024**3
+        assert state._judge_memory_requirement("unknown", None) == 10 * 1024**3
+        with pytest.raises(RuntimeError, match="exceeds host memory capacity"):
+            state._judge_memory_requirement("declared", "11g")
+    finally:
+        state._reaper_stop.set()
+        state._reaper_thread.join(2)
 
 
 def test_capacity_read_error_is_terminal_and_worker_recovers(runtime):
@@ -368,8 +491,14 @@ def test_real_configuration_accepts_caps_and_rejects_invalid_values(monkeypatch)
     monkeypatch.setenv("SFORGE_JUDGE_MAX_CONCURRENCY", "2")
     monkeypatch.setenv("SFORGE_JUDGE_MAX_BACKLOG", "3")
     monkeypatch.setenv("SFORGE_JUDGE_HOST_CAPACITY", "4")
+    monkeypatch.setenv("SFORGE_JUDGE_HOST_MEMORY_CAPACITY", "24g")
     cfg = load_config()
-    assert (cfg.judge_max_concurrency, cfg.judge_max_backlog, cfg.judge_host_capacity) == (2, 3, 4)
+    assert (
+        cfg.judge_max_concurrency,
+        cfg.judge_max_backlog,
+        cfg.judge_host_capacity,
+        cfg.judge_host_memory_capacity,
+    ) == (2, 3, 4, "24g")
     for invalid in ("abc", "0", "-1"):
         monkeypatch.setenv("SFORGE_JUDGE_HOST_CAPACITY", invalid)
         with pytest.raises(ValueError):

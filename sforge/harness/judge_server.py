@@ -16,8 +16,8 @@
 
 from __future__ import annotations
 
-import json
 import fcntl
+import json
 import logging
 import os
 import queue
@@ -32,6 +32,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 import requests
+from docker.utils import parse_bytes
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
@@ -201,6 +202,10 @@ JUDGE_MAX_BACKLOG = 8
 #: instead of once per process.
 JUDGE_HOST_SLOT_FILE = os.environ.get(
     "SFORGE_JUDGE_HOST_SLOT_FILE", "/tmp/sforge-judge-host-slots.json")
+JUDGE_HOST_MEMORY_FILE = os.environ.get(
+    "SFORGE_JUDGE_HOST_MEMORY_FILE", "/tmp/sforge-judge-host-memory.json")
+JUDGE_HOST_OWNER_FILE = os.environ.get(
+    "SFORGE_JUDGE_HOST_OWNER_FILE", "/tmp/sforge-judge-host-owners.json")
 #: Default host-wide total. Chosen so several launchers share one machine budget.
 JUDGE_HOST_CAPACITY = 8
 
@@ -211,13 +216,23 @@ class HostJudgeCapacity:
     A per-process pool multiplies with the number of launcher processes; this is the
     bound that actually limits the host. The first writer fixes the capacity.
     A dead launcher does not prove its judge containers stopped, so slots remain
-    reserved until explicit release or operator-confirmed cleanup.
+    reserved until explicit release or backend-confirmed cleanup.
     """
 
-    def __init__(self, capacity: int, path: str | None = None) -> None:
+    def __init__(
+        self, capacity: int, path: str | None = None, owner_path: str | None = None,
+    ) -> None:
         self.capacity = max(1, int(capacity))
         self.path = Path(path or os.environ.get("SFORGE_JUDGE_HOST_SLOT_FILE", JUDGE_HOST_SLOT_FILE))
         self._lock_path = self.path.with_suffix(self.path.suffix + ".lock")
+        if owner_path is not None:
+            self._owner_path = Path(owner_path)
+        elif path is not None:
+            self._owner_path = self.path.with_suffix(self.path.suffix + ".owners")
+        else:
+            self._owner_path = Path(
+                os.environ.get("SFORGE_JUDGE_HOST_OWNER_FILE", JUDGE_HOST_OWNER_FILE)
+            )
 
     def _read(self) -> dict:
         try:
@@ -229,8 +244,20 @@ class HostJudgeCapacity:
         if (not isinstance(state, dict) or state.get("version") != 1
                 or type(state.get("capacity")) is not int or state["capacity"] < 1
                 or not isinstance(state.get("holders"), dict)
-                or any(not isinstance(k, str) or not isinstance(v, (int, float))
-                       for k, v in state["holders"].items())):
+                or any(
+                    not isinstance(k, str)
+                    or not (
+                        isinstance(v, (int, float))
+                        or (
+                            isinstance(v, dict)
+                            and isinstance(v.get("acquired_at"), (int, float))
+                            and (v.get("owner_id") is None or isinstance(v.get("owner_id"), str))
+                            and type(v.get("units", 1)) is int
+                            and v.get("units", 1) >= 1
+                        )
+                    )
+                    for k, v in state["holders"].items()
+                )):
             raise RuntimeError("Invalid judge host capacity state; explicit recovery required")
         return state
 
@@ -239,7 +266,37 @@ class HostJudgeCapacity:
         tmp.write_text(json.dumps(state))
         tmp.replace(self.path)
 
-    def try_acquire(self, token: str) -> bool:
+    def _read_owners(self) -> dict[str, str]:
+        try:
+            state = json.loads(self._owner_path.read_text())
+        except FileNotFoundError:
+            return {}
+        except (OSError, ValueError) as exc:
+            raise RuntimeError("Cannot read judge host owner state") from exc
+        owners = state.get("owners") if isinstance(state, dict) else None
+        if (
+            not isinstance(state, dict)
+            or state.get("version") != 1
+            or not isinstance(owners, dict)
+            or any(not isinstance(k, str) or not isinstance(v, str) for k, v in owners.items())
+        ):
+            raise RuntimeError("Invalid judge host owner state; explicit recovery required")
+        return owners
+
+    def _write_owners(self, owners: dict[str, str]) -> None:
+        tmp = self._owner_path.with_suffix(self._owner_path.suffix + ".tmp")
+        tmp.write_text(json.dumps({"version": 1, "owners": owners}))
+        tmp.replace(self._owner_path)
+
+    @staticmethod
+    def _holder_units(holder: float | dict) -> int:
+        return holder.get("units", 1) if isinstance(holder, dict) else 1
+
+    def try_acquire(
+        self, token: str, owner_id: str | None = None, *, units: int = 1,
+    ) -> bool:
+        if type(units) is not int or units < 1:
+            raise ValueError("Judge host capacity units must be a positive integer")
         self._lock_path.parent.mkdir(parents=True, exist_ok=True)
         with open(self._lock_path, "a+") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
@@ -248,9 +305,27 @@ class HostJudgeCapacity:
                 if state["capacity"] != self.capacity:
                     raise RuntimeError("Judge host capacity configuration mismatch")
                 holders = state["holders"]
-                if token in holders or len(holders) < state["capacity"]:
-                    holders[token] = time.time()
+                owners = self._read_owners()
+                current = holders.get(token)
+                if current is not None:
+                    current_owner = (
+                        current.get("owner_id") if isinstance(current, dict)
+                        else owners.get(token)
+                    )
+                    if self._holder_units(current) != units or current_owner != owner_id:
+                        raise RuntimeError("Judge host capacity holder identity mismatch")
+                used = sum(self._holder_units(holder) for holder in holders.values())
+                if current is not None or used + units <= state["capacity"]:
+                    holders[token] = (
+                        {"acquired_at": time.time(), "owner_id": owner_id, "units": units}
+                        if units != 1 else time.time()
+                    )
+                    if owner_id is not None:
+                        owners[token] = owner_id
+                    else:
+                        owners.pop(token, None)
                     self._write(state)
+                    self._write_owners(owners)
                     return True
                 return False
             finally:
@@ -262,10 +337,79 @@ class HostJudgeCapacity:
             fcntl.flock(lock, fcntl.LOCK_EX)
             try:
                 state = self._read()
+                owners = self._read_owners()
                 state["holders"].pop(token, None)
+                owners.pop(token, None)
                 self._write(state)
+                self._write_owners(owners)
             finally:
                 fcntl.flock(lock, fcntl.LOCK_UN)
+
+    @staticmethod
+    def _owner_is_alive(token: str) -> bool:
+        owner, separator, _ = token.partition(":")
+        if not separator:
+            return True
+        try:
+            pid = int(owner)
+        except ValueError:
+            return True
+        if pid < 1:
+            return True
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        return True
+
+    def reconcile_stale_holders(
+        self, cleanup: Callable[[str, str | None], bool],
+    ) -> list[str]:
+        """Release dead owners only after their backend resources are gone."""
+        self._lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self._lock_path, "a+") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            try:
+                state = self._read()
+                if state["capacity"] != self.capacity:
+                    raise RuntimeError("Judge host capacity configuration mismatch")
+                snapshot = dict(state["holders"])
+                owner_snapshot = self._read_owners()
+            finally:
+                fcntl.flock(lock, fcntl.LOCK_UN)
+
+        reconciled = []
+        for token, holder in sorted(snapshot.items()):
+            if self._owner_is_alive(token):
+                continue
+            owner_id = (
+                holder.get("owner_id") if isinstance(holder, dict)
+                else owner_snapshot.get(token)
+            )
+            try:
+                cleaned = cleanup(token, owner_id)
+            except Exception:
+                logger.exception("Could not clean stale judge slot %s", token)
+                continue
+            if not cleaned:
+                continue
+            with open(self._lock_path, "a+") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                try:
+                    state = self._read()
+                    if state["holders"].get(token) != holder:
+                        continue
+                    owners = self._read_owners()
+                    state["holders"].pop(token)
+                    owners.pop(token, None)
+                    self._write(state)
+                    self._write_owners(owners)
+                    reconciled.append(token)
+                finally:
+                    fcntl.flock(lock, fcntl.LOCK_UN)
+        return reconciled
 
 
 # --- Server state ---
@@ -292,9 +436,27 @@ class JudgeState:
         self.judge_max_concurrency = max(1, int(getattr(config, "judge_max_concurrency", 0) or JUDGE_MAX_CONCURRENCY))
         self.host_capacity = HostJudgeCapacity(
             int(getattr(config, "judge_host_capacity", 0) or JUDGE_HOST_CAPACITY))
+        memory_capacity = getattr(config, "judge_host_memory_capacity", None)
+        if memory_capacity:
+            try:
+                memory_capacity_bytes = parse_bytes(memory_capacity)
+            except Exception as exc:
+                raise ValueError(
+                    "SFORGE_JUDGE_HOST_MEMORY_CAPACITY must be a positive memory size"
+                ) from exc
+            if memory_capacity_bytes < 1:
+                raise ValueError(
+                    "SFORGE_JUDGE_HOST_MEMORY_CAPACITY must be a positive memory size"
+                )
+            self.host_memory_capacity = HostJudgeCapacity(
+                memory_capacity_bytes,
+                os.environ.get("SFORGE_JUDGE_HOST_MEMORY_FILE", JUDGE_HOST_MEMORY_FILE),
+            )
+        else:
+            self.host_memory_capacity = None
         self.judge_max_backlog = max(self.judge_max_concurrency,
                                      int(getattr(config, "judge_max_backlog", 0) or JUDGE_MAX_BACKLOG))
-        self._judge_queue: "queue.Queue[str | None]" = queue.Queue()
+        self._judge_queue: queue.Queue[str | None] = queue.Queue()
         self._judge_pending: dict[str, tuple] = {}
         self._judge_pending_lock = threading.Lock()
         self._judge_workers: list[threading.Thread] = []
@@ -309,6 +471,16 @@ class JudgeState:
             create_backend_from_config if backend_factory is None else backend_factory
         )
         self.backend = self._make_backend(config)
+        reconcile = getattr(self.backend, "reconcile_judge_capacity_holder", None)
+        if callable(reconcile):
+            for capacity in (self.host_capacity, self.host_memory_capacity):
+                if capacity is None:
+                    continue
+                reconciled = capacity.reconcile_stale_holders(reconcile)
+                if reconciled:
+                    logger.info(
+                        "Reconciled %d stale judge capacity holders", len(reconciled)
+                    )
 
         self._reaper_stop = threading.Event()
         self._reaper_thread = threading.Thread(
@@ -628,34 +800,82 @@ class JudgeState:
                 thread.start()
                 self._judge_workers.append(thread)
 
+    def _judge_memory_requirement(
+        self, task_id: str, requested_limit: str | None,
+    ) -> int:
+        assert self.host_memory_capacity is not None
+        task_limit = getattr(self.tasks[task_id].judge, "mem_limit", None)
+        memory_limit = requested_limit or self.config.judge_mem_limit or task_limit
+        if memory_limit is None:
+            return self.host_memory_capacity.capacity
+        try:
+            required = parse_bytes(memory_limit)
+        except Exception as exc:
+            raise RuntimeError(f"Invalid judge memory limit: {memory_limit!r}") from exc
+        if required < 1:
+            raise RuntimeError("Judge memory limit must be positive")
+        if required > self.host_memory_capacity.capacity:
+            raise RuntimeError(
+                "Judge memory requirement exceeds host memory capacity"
+            )
+        return required
+
     def _judge_worker_loop(self) -> None:
         while True:
             submission_id = self._judge_queue.get()
             if submission_id is None:
                 self._judge_queue.task_done()
                 return
+            slot_acquired = False
+            memory_acquired = False
+            token = f"{os.getpid()}:{submission_id}"
             try:
                 with self._judge_pending_lock:
                     payload = self._judge_pending.pop(submission_id, None)
                 if payload is None:
                     continue
-                token = f"{os.getpid()}:{submission_id}"
-                while not self.host_capacity.try_acquire(token):
+                task_id, _, run_id, _, _, judge_mem_limit = payload
+                backend = self._get_backend(run_id, task_id)
+                owner_identity = getattr(backend, "judge_capacity_owner_id", None)
+                owner_id = owner_identity() if callable(owner_identity) else None
+                memory_units = (
+                    self._judge_memory_requirement(task_id, judge_mem_limit)
+                    if self.host_memory_capacity is not None else None
+                )
+                while True:
                     if self._judge_queue_drained.is_set():
                         raise RuntimeError("Judge capacity wait cancelled before grading")
+                    slot_acquired = self.host_capacity.try_acquire(token, owner_id)
+                    if not slot_acquired:
+                        time.sleep(0.2)
+                        continue
+                    if self.host_memory_capacity is None:
+                        break
+                    memory_acquired = self.host_memory_capacity.try_acquire(
+                        token, owner_id, units=memory_units
+                    )
+                    if memory_acquired:
+                        break
+                    self.host_capacity.release(token)
+                    slot_acquired = False
                     time.sleep(0.2)
-                try:
-                    self._grade_worker(submission_id, *payload)
-                finally:
+                self._grade_worker(submission_id, *payload)
+            except Exception as exc:
+                self._transition_submission(submission_id, SubmissionStatus.ERROR, error=str(exc))
+            finally:
+                if memory_acquired:
+                    try:
+                        assert self.host_memory_capacity is not None
+                        self.host_memory_capacity.release(token)
+                    except Exception:
+                        logger.exception("Could not release judge memory %s", token)
+                if slot_acquired:
                     try:
                         self.host_capacity.release(token)
                     except Exception:
                         # Preserve the actual grading outcome; a failed release
                         # retains capacity and must not kill the worker pool.
                         logger.exception("Could not release judge slot %s", token)
-            except Exception as exc:
-                self._transition_submission(submission_id, SubmissionStatus.ERROR, error=str(exc))
-            finally:
                 self._judge_queue.task_done()
 
     def _transition_submission(self, submission_id: str, status: SubmissionStatus,

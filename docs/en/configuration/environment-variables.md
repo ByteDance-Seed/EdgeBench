@@ -80,8 +80,16 @@ host allowlist directly.
 |----------|---------|
 | `SFORGE_WORK_CPU_LIMIT` | Number of CPUs for work containers (e.g., `4`) |
 | `SFORGE_WORK_MEM_LIMIT` | Memory limit for work containers (e.g., `8g`) |
+| `SFORGE_JUDGE_MAX_CONCURRENCY` | Maximum judges executing in one SForge server process (default: `4`) |
+| `SFORGE_JUDGE_MAX_BACKLOG` | Maximum queued plus running submissions in one server process (default: `8`) |
+| `SFORGE_JUDGE_HOST_CAPACITY` | Host-wide judge slot count shared across SForge server processes (default: `8`) |
+| `SFORGE_JUDGE_HOST_MEMORY_CAPACITY` | Optional host-wide judge memory budget (for example, `24g`). Declared judge memory limits are charged against this budget; a judge without a limit is charged the full budget and therefore runs alone. |
+| `SFORGE_JUDGE_HOST_SLOT_FILE` | Override the host-wide slot ledger path (default: `/tmp/sforge-judge-host-slots.json`) |
+| `SFORGE_JUDGE_HOST_OWNER_FILE` | Override the backend-owner sidecar path used for crash recovery (default: `/tmp/sforge-judge-host-owners.json`) |
+| `SFORGE_JUDGE_HOST_MEMORY_FILE` | Override the host-wide memory ledger path (default: `/tmp/sforge-judge-host-memory.json`) |
 
 Judge CPU/memory limits are currently set through CLI flags (`--judge-cpu-limit`, `--judge-mem-limit`) or experiment YAML (`judge_cpu_limit`, `judge_mem_limit`), not environment variables.
+The memory budget is admission control rather than a container limit. Set an actual judge memory limit when concurrent judges should share the budget. SForge recovers dead Docker owners only after the same Docker engine confirms that the orphan judge container has been removed.
 
 ## Container Backend Variables
 
