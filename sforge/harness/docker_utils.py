@@ -132,7 +132,12 @@ set -m
     child=$!
     wait "$child" 2>/dev/null
     code=$?
-    printf "%s\n" "$code" > "$control/result"
+    # Existence is the supervisor completion signal. Publish only after the
+    # complete code is written; opening result directly races the group kill.
+    if ! { printf "%s\n" "$code" > "$control/result.tmp" &&
+           mv -- "$control/result.tmp" "$control/result"; }; then
+        : > "$control/stop"
+    fi
     # Stay alive as the process-group anchor until the final group kill.
     read -r -u 3
 ' sforge-exec-group "$control" "$@" &
@@ -372,10 +377,10 @@ def _exec_run(
         if (thread is None or thread.ident is None) and log_fh:
             log_fh.close()
         if terminal or exec_id is None:
-            # Only remove this invocation's four known control entries.
+            # Only remove this invocation's known control entries.
             try:
                 control_command(
-                    'rm -f -- "$1/hold" "$1/result" "$1/stop" "$1/settled"; rmdir -- "$1"'
+                    'rm -f -- "$1/hold" "$1/result" "$1/result.tmp" "$1/stop" "$1/settled"; rmdir -- "$1"'
                 )
             except Exception:  # noqa: BLE001 -- private control cleanup must not mask the exec outcome
                 logging.getLogger(__name__).warning(
