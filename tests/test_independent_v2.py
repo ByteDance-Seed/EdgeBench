@@ -399,6 +399,53 @@ def test_state_startup_reconciles_backend_owned_dead_holder(tmp_path, monkeypatc
         state._reaper_thread.join(2)
 
 
+def test_capacity_wait_reconciles_holder_orphaned_after_startup(
+    tmp_path, monkeypatch,
+):
+    path = str(tmp_path / "slots.json")
+    monkeypatch.setenv("SFORGE_JUDGE_HOST_SLOT_FILE", path)
+    monkeypatch.setenv("SFORGE_JUDGE_HOST_OWNER_FILE", path + ".owners")
+    cleaned = []
+
+    class Backend:
+        backend_name = "synthetic"
+
+        def reconcile_judge_capacity_holder(self, token, owner_id):
+            cleaned.append((token, owner_id))
+            return owner_id == "synthetic:engine"
+
+    state = js.JudgeState(
+        SForgeConfig(
+            log_dir=tmp_path, judge_max_concurrency=1, judge_host_capacity=1,
+        ),
+        backend_factory=lambda _config: Backend(),
+    )
+    state.tasks = {"t": task()}
+    entered = threading.Event()
+    monkeypatch.setattr(
+        js, "judge_submission", lambda **_kwargs: (entered.set(), report())[1],
+    )
+    orphan = "999999999:orphan"
+    assert state.host_capacity.try_acquire(orphan, "synthetic:engine")
+    state._capacity_reconciled_at = (
+        time.monotonic() - js.JUDGE_CAPACITY_RECONCILE_INTERVAL
+    )
+    try:
+        submission_id = state.submit("t", b"x", "r", "auto-1")
+        assert entered.wait(2), "stale capacity holder kept the judge queued"
+        assert wait_for(
+            lambda: state.get_result(submission_id)["status"] == "completed"
+        )
+        assert cleaned == [(orphan, "synthetic:engine")]
+    finally:
+        state._reaper_stop.set()
+        for _ in state._judge_workers:
+            state._judge_queue.put(None)
+        for worker in state._judge_workers:
+            worker.join(1)
+        state._reaper_thread.join(1)
+
+
 def test_judge_memory_budget_uses_declared_limit_and_serializes_unknown(
     tmp_path, monkeypatch,
 ):

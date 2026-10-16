@@ -208,6 +208,10 @@ JUDGE_HOST_OWNER_FILE = os.environ.get(
     "SFORGE_JUDGE_HOST_OWNER_FILE", "/tmp/sforge-judge-host-owners.json")
 #: Default host-wide total. Chosen so several launchers share one machine budget.
 JUDGE_HOST_CAPACITY = 8
+#: A launcher can disappear after another server has already completed its one-time
+#: startup reconciliation.  Capacity waiters periodically retry backend-confirmed
+#: cleanup so an orphan cannot stall every later judge indefinitely.
+JUDGE_CAPACITY_RECONCILE_INTERVAL = 5.0
 
 
 class HostJudgeCapacity:
@@ -461,6 +465,8 @@ class JudgeState:
         self._judge_pending_lock = threading.Lock()
         self._judge_workers: list[threading.Thread] = []
         self._judge_workers_lock = threading.Lock()
+        self._capacity_reconcile_lock = threading.Lock()
+        self._capacity_reconciled_at = 0.0
         self._submission_lock = threading.RLock()
         self._judge_queue_drained = threading.Event()
         self._game_lock = threading.Lock()
@@ -471,16 +477,7 @@ class JudgeState:
             create_backend_from_config if backend_factory is None else backend_factory
         )
         self.backend = self._make_backend(config)
-        reconcile = getattr(self.backend, "reconcile_judge_capacity_holder", None)
-        if callable(reconcile):
-            for capacity in (self.host_capacity, self.host_memory_capacity):
-                if capacity is None:
-                    continue
-                reconciled = capacity.reconcile_stale_holders(reconcile)
-                if reconciled:
-                    logger.info(
-                        "Reconciled %d stale judge capacity holders", len(reconciled)
-                    )
+        self._reconcile_stale_capacity_holders(self.backend, force=True)
 
         self._reaper_stop = threading.Event()
         self._reaper_thread = threading.Thread(
@@ -493,6 +490,45 @@ class JudgeState:
         if backend is None:
             raise TypeError("backend factory must return a backend")
         return backend
+
+    def _reconcile_stale_capacity_holders(
+        self, backend: ContainerBackend, *, force: bool = False,
+    ) -> int:
+        """Reclaim dead-launcher capacity after backend resource cleanup.
+
+        This is safe to call from every capacity waiter.  A process-local lock and
+        monotonic interval bound backend queries, while ``HostJudgeCapacity`` keeps
+        the cross-process compare-and-remove atomic.
+        """
+        reconcile = getattr(backend, "reconcile_judge_capacity_holder", None)
+        if not callable(reconcile):
+            return 0
+        if not self._capacity_reconcile_lock.acquire(blocking=False):
+            return 0
+        try:
+            now = time.monotonic()
+            if (
+                not force
+                and now - self._capacity_reconciled_at
+                < JUDGE_CAPACITY_RECONCILE_INTERVAL
+            ):
+                return 0
+            # Record the attempt before invoking the backend so concurrent waiters
+            # do not fan out if cleanup is slow or raises.
+            self._capacity_reconciled_at = now
+            count = 0
+            for capacity in (self.host_capacity, self.host_memory_capacity):
+                if capacity is None:
+                    continue
+                reconciled = capacity.reconcile_stale_holders(reconcile)
+                count += len(reconciled)
+                if reconciled:
+                    logger.info(
+                        "Reconciled %d stale judge capacity holders", len(reconciled)
+                    )
+            return count
+        finally:
+            self._capacity_reconcile_lock.release()
 
     def _reaper_loop(self) -> None:
         while not self._reaper_stop.is_set():
@@ -847,6 +883,7 @@ class JudgeState:
                         raise RuntimeError("Judge capacity wait cancelled before grading")
                     slot_acquired = self.host_capacity.try_acquire(token, owner_id)
                     if not slot_acquired:
+                        self._reconcile_stale_capacity_holders(backend)
                         time.sleep(0.2)
                         continue
                     if self.host_memory_capacity is None:
@@ -858,6 +895,7 @@ class JudgeState:
                         break
                     self.host_capacity.release(token)
                     slot_acquired = False
+                    self._reconcile_stale_capacity_holders(backend)
                     time.sleep(0.2)
                 self._grade_worker(submission_id, *payload)
             except Exception as exc:
