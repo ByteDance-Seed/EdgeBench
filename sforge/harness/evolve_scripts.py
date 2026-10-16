@@ -43,7 +43,7 @@ def generate_submit_script() -> str:
 
     Flags:
       --details, -d    submit and show detailed per-test results
-      --list, -l       list all previous submissions (no new submission)
+      --list, -l       show submission history and current limits (no new submission)
     """
     return _generate_submit_script()
 
@@ -66,7 +66,8 @@ for arg in "$@"; do
             echo "Results include score, pass rate, and a summary of findings."
             echo ""
             echo "Options:"
-            echo "  --list, -l      List all previous submissions and scores for this run"
+            echo "  --list, -l      Show previous scores, remaining submissions and current cooldown"
+            echo "                   Read-only; does not submit or reserve a round"
             echo "  --details, -d   Submit and show detailed per-test results (triggers a new submission)"
             echo "  -h, --help      Show this help message"
             exit 0
@@ -384,8 +385,10 @@ def generate_evolve_prompt(
         "It will package the files, send them to the judge server, and return "
         "results showing score, pass rate, and a summary of findings.\n"
         "- Run `sforge-submit --details` to submit and see detailed per-test results.\n"
-        "- Run `sforge-submit --list` to view all previous submissions and "
-        "their scores for this run.\n\n"
+        "- Run `sforge-submit --list` to view previous submissions and scores, "
+        "remaining submissions, and current cooldown for this run. This read-only "
+        "query does not submit or reserve a round; the server checks limits again "
+        "when you submit. Older servers may report limits unavailable.\n\n"
         "You should use these regularly to check your progress and identify issues.\n"
     )
 
