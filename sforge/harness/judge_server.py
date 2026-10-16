@@ -364,9 +364,41 @@ class JudgeState:
     def resolve_token(self, token: str) -> dict:
         with self._tokens_lock:
             info = self.tokens.get(token)
-        if info is None:
-            raise KeyError("Invalid token")
-        return dict(info)
+            if info is None:
+                raise KeyError("Invalid token")
+            return dict(info)
+
+    @staticmethod
+    def _agent_cooldown_wait(info: dict, now: float) -> int:
+        """Use the same conservative whole-second wait for admission and readback."""
+        cooldown = info.get("submission_cooldown")
+        last_submit = info.get("last_agent_submit_at", 0.0)
+        if cooldown is not None and last_submit > 0:
+            elapsed = now - last_submit
+            if elapsed < cooldown:
+                return int(cooldown - elapsed) + 1
+        return 0
+
+    def agent_submission_availability(self, token: str) -> dict:
+        """Read current token limits, not timestamps copied into result history.
+
+        This snapshot reserves nothing. Submission admission still checks the
+        token under its lock; other admission constraints can reject a request.
+        observed_at is server Unix time; null remaining_submissions means no
+        submission-count limit. Cooldown seconds use admission's rounding.
+        """
+        with self._tokens_lock:
+            info = self.tokens.get(token)
+            if info is None:
+                raise KeyError("Invalid token")
+            now = time.time()
+            maximum = info.get("max_agent_submissions")
+            used = info.get("next_agent", 1) - 1
+            return {
+                "observed_at": now,
+                "remaining_submissions": None if maximum is None else max(0, maximum - used),
+                "cooldown_remaining_seconds": self._agent_cooldown_wait(info, now),
+            }
 
     def consume_round(self, token: str, kind: str = "agent") -> tuple[str, str, str, int | None, str | None, int | None]:
         """Allocate the next round ID for a token. Returns (task_id, run_id, round_id, cpu, mem, remaining).
@@ -382,21 +414,18 @@ class JudgeState:
 
             if kind == "agent":
                 max_subs = info.get("max_agent_submissions")
-                cooldown = info.get("submission_cooldown")
                 next_n = info.get("next_agent", 1)
 
                 if max_subs is not None and next_n > max_subs:
                     raise SubmissionBudgetExceeded(
                         f"Submission budget exhausted ({max_subs}/{max_subs} used)"
                     )
-                if cooldown is not None:
-                    elapsed = time.time() - info.get("last_agent_submit_at", 0.0)
-                    if elapsed < cooldown and info.get("last_agent_submit_at", 0.0) > 0:
-                        remaining_wait = int(cooldown - elapsed) + 1
-                        raise SubmissionCooldownActive(
-                            f"Submission cooldown active — wait {remaining_wait}s before next submission. "
-                            f"Continue working on improvements and submit again later."
-                        )
+                remaining_wait = self._agent_cooldown_wait(info, time.time())
+                if remaining_wait:
+                    raise SubmissionCooldownActive(
+                        f"Submission cooldown active — wait {remaining_wait}s before next submission. "
+                        f"Continue working on improvements and submit again later."
+                    )
 
                 info["last_agent_submit_at"] = time.time()
 
@@ -964,7 +993,10 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
     def history(token: str = Query(...), admin_secret: str = Query("")) -> dict:
         """Get run history using a session token.
 
-        Without admin_secret: returns only agent submissions (agent-visible view).
+        Without admin_secret: returns only agent submissions and a read-only
+        snapshot of current agent submission limits. History timestamps need
+        not share the current session's cooldown clock. A snapshot is not a
+        reservation or a guarantee of admission.
         With valid admin_secret: returns all entries including auto-eval (host-side view).
         """
         try:
@@ -974,6 +1006,10 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
         full = state.get_run_history(info["run_id"], info["task_id"])
         if admin_secret == state.admin_secret:
             return full
+        try:
+            availability = state.agent_submission_availability(token)
+        except KeyError:
+            raise HTTPException(status_code=401, detail="Invalid token")
         # Filter to agent-only view: hide auto-eval entries
         agent_entries = [
             e for e in full.get("entries", [])
@@ -991,6 +1027,7 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
             "best_round": best["best_round"],
             "agent_submissions": sum(1 for e in agent_entries if e.get("type") == "submission"),
             "auto_submissions": 0,
+            "agent_submission_availability": availability,
             "entries": agent_entries,
         }
 

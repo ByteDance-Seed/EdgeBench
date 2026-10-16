@@ -43,7 +43,7 @@ def generate_submit_script() -> str:
 
     Flags:
       --details, -d    submit and show detailed per-test results
-      --list, -l       list all previous submissions (no new submission)
+      --list, -l       show submission history and current limits (no new submission)
     """
     return _generate_submit_script()
 
@@ -66,7 +66,8 @@ for arg in "$@"; do
             echo "Results include score, pass rate, and a summary of findings."
             echo ""
             echo "Options:"
-            echo "  --list, -l      List all previous submissions and scores for this run"
+            echo "  --list, -l      Show previous scores, remaining submissions and current cooldown"
+            echo "                   Read-only; does not submit or reserve a round"
             echo "  --details, -d   Submit and show detailed per-test results (triggers a new submission)"
             echo "  -h, --help      Show this help message"
             exit 0
@@ -94,9 +95,16 @@ if [ -z "$TOKEN" ]; then
 fi
 
 if [ "$LIST_MODE" -eq 1 ]; then
-    HIST=$(curl -s -m 30 "$JUDGE_URL/api/v1/history?token=$TOKEN")
+    if ! HIST=$(curl -fsS -m 30 "$JUDGE_URL/api/v1/history?token=$TOKEN"); then
+        echo "ERROR: Could not read submission history" >&2
+        exit 1
+    fi
     if [ -z "$HIST" ]; then
         echo "ERROR: No response from judge server" >&2
+        exit 1
+    fi
+    if ! echo "$HIST" | jq -e '.entries | type == "array"' >/dev/null; then
+        echo "ERROR: Malformed submission history" >&2
         exit 1
     fi
     BEST_RATE=$(echo "$HIST" | jq -r '.best_pass_rate // 0')
@@ -109,6 +117,17 @@ if [ "$LIST_MODE" -eq 1 ]; then
     echo "  Best pass rate: $(jq -n --argjson r "$BEST_RATE" '$r * 100 | . * 10 | floor / 10')%"
     if [ "$BEST_SCORE" != "N/A" ] && [ "$BEST_SCORE" != "null" ]; then
         echo "  Best score: $BEST_SCORE"
+    fi
+    if echo "$HIST" | jq -e '.agent_submission_availability != null' >/dev/null; then
+        echo "$HIST" | jq -r '.agent_submission_availability |
+            "  Agent submission limits (server snapshot):",
+            ("  Remaining submissions: " + (if .remaining_submissions == null then "unlimited" else (.remaining_submissions | tostring) end)),
+            (if .remaining_submissions == 0 then "  Submission budget exhausted."
+             elif .cooldown_remaining_seconds > 0 then "  Cooldown: wait " + (.cooldown_remaining_seconds | tostring) + "s from this read."
+             else "  Cooldown: ready at this read." end),
+            "  Read-only; does not reserve or guarantee submission admission."'
+    else
+        echo "  Current submission limits unavailable from this server."
     fi
     echo "========================================"
     echo ""
@@ -366,8 +385,10 @@ def generate_evolve_prompt(
         "It will package the files, send them to the judge server, and return "
         "results showing score, pass rate, and a summary of findings.\n"
         "- Run `sforge-submit --details` to submit and see detailed per-test results.\n"
-        "- Run `sforge-submit --list` to view all previous submissions and "
-        "their scores for this run.\n\n"
+        "- Run `sforge-submit --list` to view previous submissions and scores, "
+        "remaining submissions, and current cooldown for this run. This read-only "
+        "query does not submit or reserve a round; the server checks limits again "
+        "when you submit. Older servers may report limits unavailable.\n\n"
         "You should use these regularly to check your progress and identify issues.\n"
     )
 
