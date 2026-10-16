@@ -31,8 +31,11 @@ from sforge.harness.config import SForgeConfig
 
 
 def _launch_judge(image, label, root, ready, orphan):
-    js.create_backend_from_config = lambda _cfg: None
     client = docker.from_env()
+    os.environ["SFORGE_JUDGE_HOST_SLOT_FILE"] = str(Path(root) / "slots.json")
+    os.environ["SFORGE_JUDGE_HOST_OWNER_FILE"] = str(
+        Path(root) / "slots.json.owners"
+    )
 
     def judge(**kwargs):
         owned = client.containers.run(
@@ -50,8 +53,12 @@ def _launch_judge(image, label, root, ready, orphan):
             owned.remove(force=True)
 
     js.judge_submission = judge
-    state = js.JudgeState(SForgeConfig(log_dir=Path(root), judge_max_concurrency=1,
-                                      judge_host_capacity=1))
+    state = js.JudgeState(
+        SForgeConfig(
+            log_dir=Path(root), judge_max_concurrency=1, judge_host_capacity=1,
+        ),
+        backend_factory=lambda _cfg: DockerBackend(client),
+    )
     state.host_capacity = js.HostJudgeCapacity(1, str(Path(root) / "slots.json"))
     state.tasks = {"synthetic": types.SimpleNamespace(task_id="synthetic")}
     sid = state.submit("synthetic", b"synthetic", "run", "auto-1")

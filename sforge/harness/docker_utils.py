@@ -29,6 +29,7 @@ import uuid
 from collections.abc import Callable
 from pathlib import Path
 
+from docker.errors import NotFound
 from docker.models.containers import Container
 from docker.utils import split_command
 
@@ -248,10 +249,43 @@ def _exec_run(
     def inspect():
         return container.client.api.exec_inspect(exec_id)
 
+    def read_shutdown_receipt():
+        receipt = control_command('cat -- "$1/settled"')
+        try:
+            return int(receipt)
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError(
+                "Docker exec shutdown receipt is missing or invalid"
+            ) from exc
+
     def wait_stopped():
         limit = time.monotonic() + _EXEC_SHUTDOWN_GRACE + _EXEC_DRAIN_GRACE
         while True:
-            state = inspect()
+            try:
+                state = inspect()
+            except NotFound as missing:
+                # Docker may garbage-collect old exec metadata before a long
+                # caller performs its final inspect.  The in-container supervisor
+                # publishes ``settled`` only after the owned process group has
+                # drained, so that receipt remains authoritative even when the
+                # daemon no longer remembers the exec object.
+                try:
+                    exit_code = read_shutdown_receipt()
+                except RuntimeError:
+                    if time.monotonic() >= limit:
+                        raise RuntimeError(
+                            "Docker exec metadata disappeared before shutdown "
+                            "could be confirmed"
+                        ) from missing
+                    time.sleep(0.05)
+                    continue
+                if thread is not None:
+                    thread.join(max(0, limit - time.monotonic()))
+                if thread is not None and thread.is_alive():
+                    raise RuntimeError(
+                        "Docker exec stopped but output stream did not drain"
+                    )
+                return {"Running": False, "ExitCode": exit_code}
             if not state["Running"] and state.get("ExitCode") is not None:
                 if thread is not None:
                     thread.join(max(0, limit - time.monotonic()))
@@ -343,8 +377,7 @@ def _exec_run(
             raise errors[0]
         state = wait_stopped()
         try:
-            receipt = control_command('cat -- "$1/settled"')
-            if int(receipt) != state["ExitCode"]:
+            if read_shutdown_receipt() != state["ExitCode"]:
                 raise ValueError("exit-code mismatch")
         except Exception as exc:
             raise RuntimeError(

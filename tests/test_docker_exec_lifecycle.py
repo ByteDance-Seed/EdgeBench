@@ -328,6 +328,36 @@ def test_missing_shutdown_receipt_is_not_success(container, execute, monkeypatch
     assert container.exec_run(["test", "!", "-e", "/tmp/dispatched"]).exit_code == 0
 
 
+@pytest.mark.parametrize("exit_code", [0, 19])
+def test_missing_exec_metadata_recovers_from_settled_receipt(
+    container, execute, monkeypatch, exit_code
+):
+    create = container.client.api.exec_create
+    inspect = container.client.api.exec_inspect
+    main_exec = {}
+
+    def remember_main(*args, **kwargs):
+        result = create(*args, **kwargs)
+        if "sforge-exec-supervisor" in str(args):
+            main_exec["id"] = result["Id"]
+        return result
+
+    def forget_completed_main(exec_id):
+        if exec_id == main_exec.get("id"):
+            raise docker.errors.NotFound("synthetic expired exec metadata")
+        return inspect(exec_id)
+
+    monkeypatch.setattr(container.client.api, "exec_create", remember_main)
+    monkeypatch.setattr(container.client.api, "exec_inspect", forget_completed_main)
+    result = execute(
+        ["bash", "-c", f"printf RECOVERED; exit {exit_code}"], timeout=5
+    )
+    assert result[:3] == ("RECOVERED", exit_code, False)
+    assert container.exec_run(
+        ["bash", "-c", 'compgen -G "/tmp/sforge-exec-*"']
+    ).exit_code == 1
+
+
 def test_cancel_before_remote_start_preserves_no_dispatch(
     container, execute, monkeypatch
 ):
