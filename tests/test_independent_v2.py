@@ -31,6 +31,7 @@ from fastapi.testclient import TestClient
 
 from sforge.harness import judge_server as js
 from sforge.harness import run_agent as ra
+from sforge.harness.backend.docker_backend import DockerBackend
 from sforge.harness.config import SForgeConfig, load_config
 
 
@@ -365,6 +366,28 @@ def test_live_capacity_owner_is_never_reconciled(tmp_path):
         assert not slots.try_acquire(f"{os.getpid()}:other")
     finally:
         slots.release(token)
+
+
+def test_docker_reconciles_legacy_dead_holder_without_container():
+    class Containers:
+        def __init__(self):
+            self.queries = []
+
+        def list(self, **kwargs):
+            self.queries.append(kwargs)
+            return []
+
+    containers = Containers()
+    client = types.SimpleNamespace(
+        info=lambda: {"ID": "synthetic-engine"}, containers=containers,
+    )
+    backend = DockerBackend(client)
+
+    assert backend.reconcile_judge_capacity_holder("123:legacy-submission", None)
+    assert containers.queries == [
+        {"all": True, "filters": {"name": "legacy-submission"}},
+        {"all": True, "filters": {"name": "legacy-submission"}},
+    ]
 
 
 def test_state_startup_reconciles_backend_owned_dead_holder(tmp_path, monkeypatch):

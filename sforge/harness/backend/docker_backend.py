@@ -227,8 +227,12 @@ class DockerBackend(ContainerBackend):
             container for container in candidates
             if ".judge." in container.name and container.name.endswith(suffix)
         ]
-        if owner_id is None and not owned:
-            return False
+        # Holder rows created before the owner sidecar was introduced have no
+        # engine identity. HostJudgeCapacity calls this method only after the
+        # launcher PID in the token is confirmed dead. On this host, an absent
+        # matching container is therefore positive cleanup evidence: the dead
+        # launcher owns neither a process nor a Docker resource. Keeping that
+        # legacy row forever would permanently reduce the shared judge budget.
         for container in owned:
             self.cleanup_container(
                 DockerContainerHandle(container), logging.getLogger(__name__)
