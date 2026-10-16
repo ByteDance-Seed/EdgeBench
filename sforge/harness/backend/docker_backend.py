@@ -22,6 +22,7 @@ import os
 import signal
 import tarfile
 import threading
+import time
 import traceback
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
@@ -39,6 +40,17 @@ from sforge.harness.backend.base import (
 )
 
 HEREDOC_DELIMITER = "EOF_SFORGE_1399519320"
+RECONCILE_DELETE_POLL_SECONDS = 0.05
+RECONCILE_DELETE_POLL_ATTEMPTS = 20
+
+
+def _container_disappearance_race(error: Exception) -> bool:
+    """Return whether another owner has already removed this container."""
+    if isinstance(error, docker.errors.NotFound):
+        return True
+    status = getattr(getattr(error, "response", None), "status_code", None)
+    detail = str(error).lower()
+    return status == 409 and "removal" in detail and "already in progress" in detail
 
 
 class DockerContainerHandle(ContainerHandle):
@@ -158,29 +170,38 @@ class DockerBackend(ContainerBackend):
         log_info = logger.info if logger else print
         log_error = logger.error if logger else print
 
+        container_disappeared = False
         try:
             log_info(f"Stopping container {container.name}...")
             container.stop(timeout=15)
         except Exception as e:
-            log_error(f"Failed to stop container {container.name}: {e}")
-            try:
-                container_info = self._client.api.inspect_container(container.id)
-                pid = container_info["State"].get("Pid", 0)
-                if pid > 0:
-                    log_info(f"Forcefully killing container PID {pid}...")
-                    os.kill(pid, signal.SIGKILL)
-            except Exception as e2:
-                log_error(f"Failed to kill container {container.name}: {e2}")
+            if _container_disappearance_race(e):
+                log_info(f"Container {container.name} is already being removed.")
+                container_disappeared = True
+            else:
+                log_error(f"Failed to stop container {container.name}: {e}")
+                try:
+                    container_info = self._client.api.inspect_container(container.id)
+                    pid = container_info["State"].get("Pid", 0)
+                    if pid > 0:
+                        log_info(f"Forcefully killing container PID {pid}...")
+                        os.kill(pid, signal.SIGKILL)
+                except Exception as e2:
+                    log_error(f"Failed to kill container {container.name}: {e2}")
 
-        try:
-            log_info(f"Removing container {container.name}...")
-            container.remove(force=True)
-            log_info(f"Container {container.name} removed.")
-        except Exception as e:
-            log_error(
-                f"Failed to remove container {container.name}: {e}\n"
-                f"{traceback.format_exc()}"
-            )
+        if not container_disappeared:
+            try:
+                log_info(f"Removing container {container.name}...")
+                container.remove(force=True)
+                log_info(f"Container {container.name} removed.")
+            except Exception as e:
+                if _container_disappearance_race(e):
+                    log_info(f"Container {container.name} is already being removed.")
+                else:
+                    log_error(
+                        f"Failed to remove container {container.name}: {e}\n"
+                        f"{traceback.format_exc()}"
+                    )
 
         if old_handler is not None:
             try:
@@ -220,9 +241,7 @@ class DockerBackend(ContainerBackend):
         if not separator or not submission_id:
             return False
         suffix = f".{submission_id}"
-        candidates = self._client.containers.list(
-            all=True, filters={"name": submission_id}
-        )
+        candidates = self._list_containers_during_reconciliation(submission_id)
         owned = [
             container for container in candidates
             if ".judge." in container.name and container.name.endswith(suffix)
@@ -237,13 +256,29 @@ class DockerBackend(ContainerBackend):
             self.cleanup_container(
                 DockerContainerHandle(container), logging.getLogger(__name__)
             )
-        remaining = self._client.containers.list(
-            all=True, filters={"name": submission_id}
-        )
-        return not any(
-            ".judge." in container.name and container.name.endswith(suffix)
-            for container in remaining
-        )
+        for attempt in range(RECONCILE_DELETE_POLL_ATTEMPTS):
+            remaining = self._list_containers_during_reconciliation(submission_id)
+            if not any(
+                ".judge." in container.name and container.name.endswith(suffix)
+                for container in remaining
+            ):
+                return True
+            if attempt + 1 < RECONCILE_DELETE_POLL_ATTEMPTS:
+                time.sleep(RECONCILE_DELETE_POLL_SECONDS)
+        return False
+
+    def _list_containers_during_reconciliation(self, submission_id: str):
+        """List candidates despite Docker's list-then-inspect deletion race."""
+        for attempt in range(RECONCILE_DELETE_POLL_ATTEMPTS):
+            try:
+                return self._client.containers.list(
+                    all=True, filters={"name": submission_id}
+                )
+            except docker.errors.NotFound:
+                if attempt + 1 == RECONCILE_DELETE_POLL_ATTEMPTS:
+                    raise
+                time.sleep(RECONCILE_DELETE_POLL_SECONDS)
+        raise AssertionError("unreachable")
 
     # --- Image ---
 
