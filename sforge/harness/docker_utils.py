@@ -32,6 +32,8 @@ from pathlib import Path
 from docker.errors import NotFound
 from docker.models.containers import Container
 from docker.utils import split_command
+from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import Timeout as RequestsTimeout
 
 HEREDOC_DELIMITER = "EOF_SFORGE_1399519320"
 
@@ -115,6 +117,8 @@ def exec_run_with_exit_code(
 # through this invocation's private directory, never through Docker's host PID.
 _EXEC_SHUTDOWN_GRACE = 20
 _EXEC_DRAIN_GRACE = 5
+_EXEC_DAEMON_READ_ATTEMPTS = 3
+_EXEC_DAEMON_RETRY_DELAY = 0.25
 _EXEC_SUPERVISOR = r"""
 control=$1; grace=$2; drain=$3; shift 3
 [[ -d "$control" && -p "$control/hold" ]] || exit 125
@@ -249,8 +253,32 @@ def _exec_run(
     def inspect():
         return container.client.api.exec_inspect(exec_id)
 
+    def retry_daemon_read(operation, description):
+        """Retry idempotent Docker reads across transient daemon transport loss.
+
+        Docker SDK reads can each consume the client's full socket timeout
+        (normally 60 seconds).  Count attempts instead of fitting them inside
+        the much shorter in-container shutdown grace: that grace controls the
+        owned process group, while these retries only recover its terminal
+        evidence after the daemon is responsive again.
+        """
+        last_error = None
+        for attempt in range(_EXEC_DAEMON_READ_ATTEMPTS):
+            try:
+                return operation()
+            except (RequestsTimeout, RequestsConnectionError) as exc:
+                last_error = exc
+                if attempt + 1 < _EXEC_DAEMON_READ_ATTEMPTS:
+                    time.sleep(_EXEC_DAEMON_RETRY_DELAY * (attempt + 1))
+        raise RuntimeError(
+            f"Docker daemon remained unavailable while {description}"
+        ) from last_error
+
     def read_shutdown_receipt():
-        receipt = control_command('cat -- "$1/settled"')
+        receipt = retry_daemon_read(
+            lambda: control_command('cat -- "$1/settled"'),
+            "reading the exec shutdown receipt",
+        )
         try:
             return int(receipt)
         except (TypeError, ValueError) as exc:
@@ -262,7 +290,7 @@ def _exec_run(
         limit = time.monotonic() + _EXEC_SHUTDOWN_GRACE + _EXEC_DRAIN_GRACE
         while True:
             try:
-                state = inspect()
+                state = retry_daemon_read(inspect, "inspecting exec completion")
             except NotFound as missing:
                 # Docker may garbage-collect old exec metadata before a long
                 # caller performs its final inspect.  The in-container supervisor
