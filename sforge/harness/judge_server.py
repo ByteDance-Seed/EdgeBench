@@ -26,6 +26,8 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
+from contextlib import ExitStack
+from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path, PurePosixPath
@@ -296,44 +298,205 @@ class HostJudgeCapacity:
     def _holder_units(holder: float | dict) -> int:
         return holder.get("units", 1) if isinstance(holder, dict) else 1
 
+    @staticmethod
+    def _process_start(token: str) -> str | None:
+        pid, separator, _ = token.partition(":")
+        if not separator or not pid.isdecimal():
+            return None
+        try:
+            stat = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+            if stat[0] == "Z":
+                return "exited"
+            boot = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+            return f"{boot}:{stat[19]}"
+        except (OSError, IndexError):
+            return None
+
+    def _read_waiters(self, state: dict) -> list[dict]:
+        waiters = state.get("waiters", [])
+        if (
+            not isinstance(waiters, list)
+            or any(
+                not isinstance(w, dict)
+                or not isinstance(w.get("token"), str)
+                or (
+                    w.get("owner_id") is not None and not isinstance(w["owner_id"], str)
+                )
+                or type(w.get("units")) is not int
+                or w["units"] < 1
+                or type(w.get("memory_units")) is not int
+                or w["memory_units"] < 0
+                or (
+                    w.get("memory_path") is not None
+                    and not isinstance(w["memory_path"], str)
+                )
+                or (
+                    w.get("process_start") is not None
+                    and not isinstance(w["process_start"], str)
+                )
+                for w in waiters
+            )
+            or len({w["token"] for w in waiters}) != len(waiters)
+        ):
+            raise RuntimeError(
+                "Invalid judge host waiter state; explicit recovery required"
+            )
+        return waiters
+
     def try_acquire(
-        self, token: str, owner_id: str | None = None, *, units: int = 1,
+        self,
+        token: str,
+        owner_id: str | None = None,
+        *,
+        units: int = 1,
+        memory_capacity: HostJudgeCapacity | None = None,
+        memory_units: int = 0,
     ) -> bool:
+        """Admit in FIFO order only when every requested resource fits.
+
+        Waiters reserve no capacity. Queue order survives polling and process-local
+        object recreation. A dead waiter can be removed without backend cleanup;
+        holders still require explicit release or confirmed container cleanup.
+        All launchers sharing these files must use fair admission for FIFO service.
+        """
         if type(units) is not int or units < 1:
             raise ValueError("Judge host capacity units must be a positive integer")
+        if type(memory_units) is not int or memory_units < 0:
+            raise ValueError("Judge memory units must be a nonnegative integer")
+        if (memory_capacity is None) != (memory_units == 0):
+            raise ValueError(
+                "Judge memory capacity and positive units must be supplied together"
+            )
+        resources = [(self, units)]
+        if memory_capacity is not None:
+            if memory_capacity.path.resolve() == self.path.resolve():
+                raise ValueError("Judge slot and memory files must be distinct")
+            resources.append((memory_capacity, memory_units))
+        # Fixed ordering prevents deadlocks even if two callers reverse resources.
+        with ExitStack() as locks:
+            for capacity, _ in sorted(
+                resources, key=lambda r: str(r[0].path.resolve())
+            ):
+                capacity._lock_path.parent.mkdir(parents=True, exist_ok=True)
+                lock = locks.enter_context(open(capacity._lock_path, "a+"))
+                fcntl.flock(lock, fcntl.LOCK_EX)
+            snapshots = []
+            for capacity, required in resources:
+                state = capacity._read()
+                if state["capacity"] != capacity.capacity:
+                    raise RuntimeError("Judge host capacity configuration mismatch")
+                if required > state["capacity"]:
+                    raise ValueError("Judge request exceeds host capacity")
+                owners = capacity._read_owners()
+                current = state["holders"].get(token)
+                if current is not None:
+                    current_owner = (
+                        current.get("owner_id")
+                        if isinstance(current, dict)
+                        else owners.get(token)
+                    )
+                    if (
+                        capacity._holder_units(current) != required
+                        or current_owner != owner_id
+                    ):
+                        raise RuntimeError(
+                            "Judge host capacity holder identity mismatch"
+                        )
+                snapshots.append((capacity, required, state, owners, current))
+            state = snapshots[0][2]
+            waiters = self._read_waiters(state)
+            # PID reuse and zombies are detectable on Linux. Unknown identity is
+            # retained rather than interpreted as a dead process.
+            live = []
+            for waiter in waiters:
+                birth = self._process_start(waiter["token"])
+                if not self._owner_is_alive(waiter["token"]) or birth == "exited":
+                    continue
+                if (
+                    waiter["process_start"] is not None
+                    and birth is not None
+                    and waiter["process_start"] != birth
+                ):
+                    continue
+                live.append(waiter)
+            request = {
+                "token": token,
+                "owner_id": owner_id,
+                "units": units,
+                "memory_path": str(memory_capacity.path.resolve())
+                if memory_capacity
+                else None,
+                "memory_units": memory_units,
+                "process_start": self._process_start(token),
+            }
+            prior = next((w for w in live if w["token"] == token), None)
+            if prior is not None and any(
+                prior[k] != request[k] for k in request if k != "process_start"
+            ):
+                raise RuntimeError(
+                    "Judge host waiter identity mismatch; cancel before changing request"
+                )
+            already_held = all(item[4] is not None for item in snapshots)
+            if prior is None and not already_held:
+                live.append(request)
+            state["waiters"] = live
+            fits = all(
+                current is not None
+                or sum(capacity._holder_units(h) for h in st["holders"].values())
+                + required
+                <= st["capacity"]
+                for capacity, required, st, _, current in snapshots
+            )
+            if not already_held and (live[0]["token"] != token or not fits):
+                if live != waiters:
+                    self._write(state)
+                return False
+            originals = [
+                (capacity, deepcopy(st), dict(owners))
+                for capacity, _, st, owners, _ in snapshots
+            ]
+            # Persist memory first. Process crashes retain reservations until
+            # backend-confirmed cleanup; ordinary write failures roll back here.
+            try:
+                state["waiters"] = [w for w in live if w["token"] != token]
+                for capacity, required, st, owners, current in reversed(snapshots):
+                    if current is None:
+                        st["holders"][token] = (
+                            {
+                                "acquired_at": time.time(),
+                                "owner_id": owner_id,
+                                "units": required,
+                            }
+                            if required != 1
+                            else time.time()
+                        )
+                        if owner_id is not None:
+                            owners[token] = owner_id
+                        else:
+                            owners.pop(token, None)
+                    capacity._write(st)
+                    capacity._write_owners(owners)
+            except Exception:
+                for capacity, original_state, original_owners in reversed(originals):
+                    try:
+                        capacity._write_owners(original_owners)
+                        capacity._write(original_state)
+                    except Exception:
+                        logger.exception("Could not roll back judge admission %s", token)
+                raise
+            return True
+
+    def cancel_waiter(self, token: str) -> None:
+        """Remove an abandoned queued request, never an admitted holder."""
         self._lock_path.parent.mkdir(parents=True, exist_ok=True)
         with open(self._lock_path, "a+") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
-            try:
-                state = self._read()
-                if state["capacity"] != self.capacity:
-                    raise RuntimeError("Judge host capacity configuration mismatch")
-                holders = state["holders"]
-                owners = self._read_owners()
-                current = holders.get(token)
-                if current is not None:
-                    current_owner = (
-                        current.get("owner_id") if isinstance(current, dict)
-                        else owners.get(token)
-                    )
-                    if self._holder_units(current) != units or current_owner != owner_id:
-                        raise RuntimeError("Judge host capacity holder identity mismatch")
-                used = sum(self._holder_units(holder) for holder in holders.values())
-                if current is not None or used + units <= state["capacity"]:
-                    holders[token] = (
-                        {"acquired_at": time.time(), "owner_id": owner_id, "units": units}
-                        if units != 1 else time.time()
-                    )
-                    if owner_id is not None:
-                        owners[token] = owner_id
-                    else:
-                        owners.pop(token, None)
-                    self._write(state)
-                    self._write_owners(owners)
-                    return True
-                return False
-            finally:
-                fcntl.flock(lock, fcntl.LOCK_UN)
+            state = self._read()
+            waiters = self._read_waiters(state)
+            remaining = [w for w in waiters if w["token"] != token]
+            if remaining != waiters:
+                state["waiters"] = remaining
+                self._write(state)
 
     def release(self, token: str) -> None:
         self._lock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -343,6 +506,9 @@ class HostJudgeCapacity:
                 state = self._read()
                 owners = self._read_owners()
                 state["holders"].pop(token, None)
+                state["waiters"] = [
+                    w for w in self._read_waiters(state) if w["token"] != token
+                ]
                 owners.pop(token, None)
                 self._write(state)
                 self._write_owners(owners)
@@ -881,26 +1047,23 @@ class JudgeState:
                 while True:
                     if self._judge_queue_drained.is_set():
                         raise RuntimeError("Judge capacity wait cancelled before grading")
-                    slot_acquired = self.host_capacity.try_acquire(token, owner_id)
-                    if not slot_acquired:
-                        self._reconcile_stale_capacity_holders(backend)
-                        time.sleep(0.2)
-                        continue
-                    if self.host_memory_capacity is None:
-                        break
-                    memory_acquired = self.host_memory_capacity.try_acquire(
-                        token, owner_id, units=memory_units
+                    slot_acquired = self.host_capacity.try_acquire(
+                        token, owner_id, memory_capacity=self.host_memory_capacity,
+                        memory_units=memory_units or 0,
                     )
-                    if memory_acquired:
+                    if slot_acquired:
+                        memory_acquired = self.host_memory_capacity is not None
                         break
-                    self.host_capacity.release(token)
-                    slot_acquired = False
                     self._reconcile_stale_capacity_holders(backend)
                     time.sleep(0.2)
                 self._grade_worker(submission_id, *payload)
             except Exception as exc:
                 self._transition_submission(submission_id, SubmissionStatus.ERROR, error=str(exc))
             finally:
+                try:
+                    self.host_capacity.cancel_waiter(token)
+                except Exception:
+                    logger.exception("Could not cancel judge waiter %s", token)
                 if memory_acquired:
                     try:
                         assert self.host_memory_capacity is not None

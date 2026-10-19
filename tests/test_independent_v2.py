@@ -186,6 +186,7 @@ def test_host_capacity_accounts_for_weighted_resource_units(tmp_path):
     assert capacity.try_acquire(first, "docker:synthetic", units=7)
     try:
         assert not capacity.try_acquire(second, "docker:synthetic", units=4)
+        capacity.cancel_waiter(second)  # A changed reservation is a new request.
         assert capacity.try_acquire(second, "docker:synthetic", units=3)
     finally:
         capacity.release(first)
