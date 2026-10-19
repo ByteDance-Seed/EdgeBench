@@ -153,7 +153,23 @@ GET /api/v1/result/{submission_id}
 | `completed` | Grading finished, report is available |
 | `error` | Grading failed (container crash, timeout, etc.) |
 
-### Recovering an interrupted submission
+### Submitting snapshots and reading results
+
+The judge evaluates the archive uploaded at submission time. Once accepted,
+later edits to the working directory do not change that submission. To return
+after acceptance and continue independent work while grading runs:
+
+```bash
+sforge-submit --no-wait
+# Continue working; retain the printed submission ID and its candidate identity.
+sforge-submit --result <submission_id> --details
+```
+
+`--no-wait` exits successfully on acceptance, without reading or caching a score.
+It cannot be combined with `--list`, `--result`, or `--details`. The default
+command still waits for feedback. Keep recoverable copies of candidates you may
+need to restore: result retrieval reads feedback, not source files. Periodic
+automatic evaluations capture later workspace states independently.
 
 The generated `sforge-submit` helper can read an accepted submission without
 creating a new evaluation:

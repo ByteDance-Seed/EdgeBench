@@ -14,6 +14,8 @@
 
 """Generated bash/curl client against the native HTTP app; synthetic grading only."""
 
+from __future__ import annotations
+
 import io
 import json
 import os
@@ -43,6 +45,10 @@ def judge(tmp_path, monkeypatch):
         if not shutil.which(command):
             pytest.skip(f"Generated client requires {command}")
     states = []
+    grade_started = threading.Event()
+    grade_release = threading.Event()
+    grade_release.set()
+    graded_answers = []
 
     class TestState(judge_server.JudgeState):
         def load_tasks(self):
@@ -51,8 +57,11 @@ def judge(tmp_path, monkeypatch):
             states.append(self)
 
     def grade(**kwargs):
+        grade_started.set()
+        assert grade_release.wait(timeout=20)
         with tarfile.open(fileobj=io.BytesIO(kwargs["archive"]), mode="r:gz") as archive:
             assert "./answer.txt" in archive.getnames()
+            graded_answers.append(archive.extractfile("./answer.txt").read())
         return EvalReport(
             "example", kwargs["submission_id"], total_tests=1, passed=1,
             pass_rate=1.0, score=7, summary="synthetic result",
@@ -100,8 +109,11 @@ def judge(tmp_path, monkeypatch):
     state = states[0]
     try:
         yield SimpleNamespace(run=run, state=state, token=token, http=http,
-                              url=url, patch=patch, cache=cache)
+                              url=url, patch=patch, cache=cache,
+                              grade_started=grade_started, grade_release=grade_release,
+                              graded_answers=graded_answers)
     finally:
+        grade_release.set()
         state._reaper_stop.set()
         state._reaper_thread.join(timeout=5)
         server.should_exit = True
@@ -132,6 +144,43 @@ def test_read_result_preserves_full_feedback_and_submission_opportunity(judge):
         assert "public diagnostic" in recovered.stdout
     assert judge.state.resolve_token(judge.token) == before
     assert len(json.loads(judge.cache.read_text())["submissions"]) == 1
+
+
+def test_no_wait_allows_workspace_changes_while_original_snapshot_is_graded(judge):
+    judge.grade_release.clear()
+    try:
+        submitted = judge.run("--no-wait")
+        assert submitted.returncode == 0, submitted.stderr
+        sid = accepted_id(judge)
+        assert judge.grade_started.wait(timeout=5)
+        assert judge.state.submissions[sid]["status"] == judge_server.SubmissionStatus.RUNNING
+        assert "Accepted for evaluation" in submitted.stdout
+        assert "later workspace edits do not change it" in submitted.stdout
+        assert f"--result {sid} --details" in submitted.stdout
+        assert "Score:" not in submitted.stdout and not judge.cache.exists()
+        before = judge.state.resolve_token(judge.token)
+        (judge.patch / "answer.txt").write_text("next unsubmitted candidate")
+    finally:
+        judge.grade_release.set()
+
+    deadline = time.monotonic() + 5
+    while judge.state.submissions[sid]["status"] == judge_server.SubmissionStatus.RUNNING:
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+    recovered = judge.run("--result", sid, "--details")
+    assert recovered.returncode == 0, recovered.stderr
+    assert "Score:       7" in recovered.stdout and "public diagnostic" in recovered.stdout
+    assert judge.graded_answers == [b"synthetic answer"]
+    assert (judge.patch / "answer.txt").read_text() == "next unsubmitted candidate"
+    assert judge.state.resolve_token(judge.token) == before
+    assert accepted_id(judge) == sid
+
+
+@pytest.mark.parametrize("args", [("--list",), ("--result", "unknown"), ("--details",)])
+def test_no_wait_conflicts_fail_before_submission(judge, args):
+    result = judge.run("--no-wait", *args)
+    assert result.returncode != 0 and "--no-wait submits only" in result.stderr
+    assert judge.state.get_run_history("run", "example")["entries"] == []
 
 
 @contextmanager
