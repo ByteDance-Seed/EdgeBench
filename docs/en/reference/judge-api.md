@@ -162,14 +162,22 @@ after acceptance and continue independent work while grading runs:
 ```bash
 sforge-submit --no-wait
 # Continue working; retain the printed submission ID and its candidate identity.
-sforge-submit --result <submission_id> --details
+sforge-submit --result <submission_id> --no-wait --details
 ```
 
-`--no-wait` exits successfully on acceptance, without reading or caching a score.
-It cannot be combined with `--list`, `--result`, or `--details`. The default
-command still waits for feedback. Keep recoverable copies of candidates you may
-need to restore: result retrieval reads feedback, not source files. Periodic
-automatic evaluations capture later workspace states independently.
+For a new submission, `--no-wait` exits successfully on acceptance, without
+reading or caching a score. With `--result ID`, it checks the result once after
+verifying token-visible history: `queued` or `running` returns success with an
+explicit pending status and no score or cache change; a terminal result uses the
+same feedback and error handling as blocking retrieval. Pending means the read
+succeeded, not that the candidate passed. Continue useful independent work
+before checking the same ID again.
+
+Without `--no-wait`, submission and result retrieval still wait for feedback.
+`--no-wait` cannot be combined with `--list` or with `--details` unless a
+`--result ID` is supplied. Keep recoverable copies of candidates you may need to
+restore: result retrieval reads feedback, not source files. Periodic automatic
+evaluations capture later workspace states independently.
 
 The generated `sforge-submit` helper can read an accepted submission without
 creating a new evaluation:

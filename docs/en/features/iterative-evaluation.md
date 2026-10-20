@@ -42,8 +42,17 @@ Common commands:
 | Command | Description |
 |---------|-------------|
 | `sforge-submit` | Submit and wait for result |
-| `sforge-submit --details` / `-d` | Show per-item details |
+| `sforge-submit --details` / `-d` | Submit and wait for per-item details |
+| `sforge-submit --no-wait` | Submit a snapshot and return its accepted ID |
+| `sforge-submit --result ID --details` | Wait for an existing submission's feedback without resubmitting |
+| `sforge-submit --result ID --no-wait --details` | Query once; return pending or terminal feedback |
 | `sforge-submit --list` / `-l` | List previous submissions |
+
+After asynchronous submission, continue independent work before checking the
+same ID again. A pending response contains no score and does not update the
+display cache. Later edits do not change the accepted snapshot; retain candidate
+versions separately if you may need to restore them. See
+[submission and result retrieval](../reference/judge-api.md#submitting-snapshots-and-reading-results).
 
 ## Auto-Eval: Adding Sampling Points
 

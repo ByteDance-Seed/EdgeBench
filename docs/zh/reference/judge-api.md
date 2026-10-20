@@ -161,12 +161,18 @@ Judge 评测提交时上传的归档。提交被接受后，继续修改工作�
 ```bash
 sforge-submit --no-wait
 # 保留输出的提交 ID 及其对应的候选版本，继续工作。
-sforge-submit --result <submission_id> --details
+sforge-submit --result <submission_id> --no-wait --details
 ```
 
-`--no-wait` 在提交被接受后成功退出，此时尚未读取或缓存分数，不能与 `--list`、
-`--result` 或 `--details` 同用。默认命令仍等待评测反馈。需要恢复的候选版本应自行
-保留；结果查询只读取反馈，不恢复源码。定期自动评测会独立捕获之后的工作目录状态。
+新提交使用 `--no-wait` 时，在提交被接受后成功退出，此时尚未读取或缓存分数。
+与 `--result ID` 同用时，先核验 Token 可见历史，再查询一次结果：`queued` 或
+`running` 会成功返回明确的 pending 状态，不输出分数、不修改缓存；终态结果沿用
+阻塞查询的反馈与错误处理。pending 的成功退出只表示查询成功，不表示候选通过验收。
+可以先继续有用的独立工作，再查询同一 ID。
+
+不加 `--no-wait` 时，提交与结果查询仍等待评测反馈。`--no-wait` 不能与 `--list`
+同用；与 `--details` 同用时必须提供 `--result ID`。需要恢复的候选版本应自行保留；
+结果查询只读取反馈，不恢复源码。定期自动评测会独立捕获之后的工作目录状态。
 
 生成的 `sforge-submit` 工具可以读取已接受提交的结果，无需再次评测：
 

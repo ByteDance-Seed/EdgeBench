@@ -25,6 +25,7 @@ import subprocess
 import tarfile
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
@@ -100,11 +101,11 @@ def judge(tmp_path, monkeypatch):
     script.write_text(generate_submit_script().replace("/tmp/sforge_state.json", str(cache)))
     subprocess.run(["bash", "-n", str(script)], check=True)
 
-    def run(*args, judge_url=url, submit_token=token):
+    def run(*args, judge_url=url, submit_token=token, timeout=20):
         env = dict(os.environ, SFORGE_JUDGE_URL=judge_url, SFORGE_TOKEN=submit_token,
                    SFORGE_PATCH_DIR=str(patch), NO_PROXY="127.0.0.1,localhost")
         return subprocess.run(["bash", str(script), *args], env=env,
-                              capture_output=True, text=True, timeout=20)
+                              capture_output=True, text=True, timeout=timeout)
 
     state = states[0]
     try:
@@ -156,7 +157,7 @@ def test_no_wait_allows_workspace_changes_while_original_snapshot_is_graded(judg
         assert judge.state.submissions[sid]["status"] == judge_server.SubmissionStatus.RUNNING
         assert "Accepted for evaluation" in submitted.stdout
         assert "later workspace edits do not change it" in submitted.stdout
-        assert f"--result {sid} --details" in submitted.stdout
+        assert f"--result {sid} --no-wait --details" in submitted.stdout
         assert "Score:" not in submitted.stdout and not judge.cache.exists()
         before = judge.state.resolve_token(judge.token)
         (judge.patch / "answer.txt").write_text("next unsubmitted candidate")
@@ -176,10 +177,91 @@ def test_no_wait_allows_workspace_changes_while_original_snapshot_is_graded(judg
     assert accepted_id(judge) == sid
 
 
-@pytest.mark.parametrize("args", [("--list",), ("--result", "unknown"), ("--details",)])
+@pytest.mark.parametrize("status", ["queued", "running"])
+@pytest.mark.parametrize("existing_cache", [False, True])
+def test_result_no_wait_reads_once_then_recovers_original_snapshot(
+    judge, monkeypatch, status, existing_cache,
+):
+    judge.grade_release.clear()
+    submitted = judge.run("--no-wait")
+    assert submitted.returncode == 0, submitted.stderr
+    sid = accepted_id(judge)
+    assert judge.grade_started.wait(timeout=5)
+    original_get_result = judge.state.get_result
+    reads = []
+
+    def pending_result(requested):
+        reads.append(requested)
+        result = original_get_result(requested)
+        return {**result, "status": status}
+
+    monkeypatch.setattr(judge.state, "get_result", pending_result)
+    before = judge.state.resolve_token(judge.token)
+    history_before = judge.state.get_run_history("run", "example")
+    if existing_cache:
+        judge.cache.write_text('{"best_score": 3, "submissions": []}\n')
+    cache_before = judge.cache.read_bytes() if existing_cache else None
+    try:
+        recovered = judge.run("--result", sid, "--no-wait", "--details", timeout=5)
+        assert recovered.returncode == 0, recovered.stderr
+        assert f"Pending: {sid} ({status})" in recovered.stdout
+        assert "no score available yet" in recovered.stdout
+        assert "Score:" not in recovered.stdout
+        assert "Accepted for evaluation" not in recovered.stdout
+        assert reads == [sid]
+        assert not judge.grade_release.is_set()
+        assert judge.state.resolve_token(judge.token) == before
+        assert judge.state.get_run_history("run", "example") == history_before
+        assert (judge.cache.read_bytes() if judge.cache.exists() else None) == cache_before
+        (judge.patch / "answer.txt").write_text("next unsubmitted candidate")
+    finally:
+        monkeypatch.setattr(judge.state, "get_result", original_get_result)
+        judge.grade_release.set()
+
+    deadline = time.monotonic() + 5
+    while judge.state.submissions[sid]["status"] == judge_server.SubmissionStatus.RUNNING:
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+    shutil.rmtree(judge.patch)
+    recovered = judge.run("--no-wait", "--result", sid, "--details")
+    assert recovered.returncode == 0, recovered.stderr
+    assert "Score:       7" in recovered.stdout and "public diagnostic" in recovered.stdout
+    assert judge.graded_answers == [b"synthetic answer"]
+    assert judge.state.resolve_token(judge.token) == before
+    assert accepted_id(judge) == sid
+    assert len(json.loads(judge.cache.read_text())["submissions"]) == 1
+
+
+def test_result_default_waits_for_pending_grading(judge, monkeypatch):
+    judge.grade_release.clear()
+    assert judge.run("--no-wait").returncode == 0
+    sid = accepted_id(judge)
+    original_get_result = judge.state.get_result
+    pending_read = threading.Event()
+
+    def observed_result(requested):
+        result = original_get_result(requested)
+        if result["status"] in ("queued", "running"):
+            pending_read.set()
+        return result
+
+    monkeypatch.setattr(judge.state, "get_result", observed_result)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(judge.run, "--result", sid, "--details")
+        try:
+            assert pending_read.wait(timeout=5)
+            assert not future.done()
+        finally:
+            judge.grade_release.set()
+        recovered = future.result(timeout=15)
+    assert recovered.returncode == 0, recovered.stderr
+    assert "Score:       7" in recovered.stdout and "public diagnostic" in recovered.stdout
+
+
+@pytest.mark.parametrize("args", [("--list",), ("--details",)])
 def test_no_wait_conflicts_fail_before_submission(judge, args):
     result = judge.run("--no-wait", *args)
-    assert result.returncode != 0 and "--no-wait submits only" in result.stderr
+    assert result.returncode != 0 and "ERROR:" in result.stderr
     assert judge.state.get_run_history("run", "example")["entries"] == []
 
 
@@ -239,7 +321,8 @@ def test_lost_reply_recovers_from_visible_history_without_resubmit(judge, path):
         assert judge.state.resolve_token(judge.token) == before
 
 
-def test_token_history_errors_and_other_run_ids_are_not_empty_success(judge):
+@pytest.mark.parametrize("read_flags", [(), ("--no-wait",)])
+def test_token_history_errors_and_other_run_ids_are_not_empty_success(judge, read_flags):
     assert judge.run().returncode == 0
     sid = accepted_id(judge)
     denied = judge.run("--list", submit_token="invalid")
@@ -254,13 +337,14 @@ def test_token_history_errors_and_other_run_ids_are_not_empty_success(judge):
         tar.addfile(info, io.BytesIO(content))
     auto = judge.state.submit("example", archive.getvalue(), "run", "auto-1")
     for token, requested in ((other, sid), (judge.token, "unknown"), (judge.token, auto)):
-        denied = judge.run("--result", requested, submit_token=token)
+        denied = judge.run("--result", requested, *read_flags, submit_token=token)
         assert denied.returncode != 0 and "visible history" in denied.stderr
     assert judge.state.resolve_token(judge.token)["next_agent"] == 2
 
 
 @pytest.mark.parametrize("failure", ["error", "missing_report", "not_found"])
-def test_failed_result_reads_do_not_create_zero_score_cache_entries(judge, failure):
+@pytest.mark.parametrize("read_flags", [(), ("--no-wait",)])
+def test_failed_result_reads_do_not_create_zero_score_cache_entries(judge, failure, read_flags):
     assert judge.run().returncode == 0
     sid = accepted_id(judge)
     judge.cache.unlink()
@@ -272,19 +356,20 @@ def test_failed_result_reads_do_not_create_zero_score_cache_entries(judge, failu
         result["report"] = None
     else:
         del judge.state.submissions[sid]
-    recovered = judge.run("--result", sid)
+    recovered = judge.run("--result", sid, *read_flags)
     assert recovered.returncode != 0 and "ERROR:" in recovered.stderr
     assert "Score:" not in recovered.stdout and not judge.cache.exists()
     assert judge.state.resolve_token(judge.token)["next_agent"] == 2
 
 
 @pytest.mark.parametrize("score,valid", [(0, True), (None, True), (7, False)])
-def test_native_zero_missing_and_invalid_results_remain_distinct(judge, score, valid):
+@pytest.mark.parametrize("read_flags", [(), ("--no-wait",)])
+def test_native_zero_missing_and_invalid_results_remain_distinct(judge, score, valid, read_flags):
     assert judge.run().returncode == 0
     sid = accepted_id(judge)
     judge.cache.unlink()
     judge.state.submissions[sid]["report"].update(score=score, valid=valid)
-    recovered = judge.run("--result", sid)
+    recovered = judge.run("--result", sid, *read_flags)
     assert recovered.returncode == 0
     cached = json.loads(judge.cache.read_text())
     assert cached["submissions"][0]["score"] == score

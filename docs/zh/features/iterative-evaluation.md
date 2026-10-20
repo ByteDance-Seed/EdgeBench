@@ -42,8 +42,15 @@ SForge 采用迭代式“评测-改进”循环：Agent 修改代码，提交评
 | 命令 | 说明 |
 |------|------|
 | `sforge-submit` | 提交并等待结果 |
-| `sforge-submit --details` / `-d` | 显示逐项详情 |
+| `sforge-submit --details` / `-d` | 提交并等待逐项详情 |
+| `sforge-submit --no-wait` | 提交快照，接受后返回提交 ID |
+| `sforge-submit --result ID --details` | 等待已有提交的反馈，不重复提交 |
+| `sforge-submit --result ID --no-wait --details` | 只查询一次，返回 pending 或终态反馈 |
 | `sforge-submit --list` / `-l` | 列出历史提交 |
+
+异步提交后，可以先继续独立工作，再查询同一 ID。pending 响应不包含分数，也不更新
+展示缓存。后续修改不会改变已接受的快照；可能需要恢复的候选版本应另行保留。
+详见[提交快照与读取结果](../reference/judge-api.md#提交快照与读取结果)。
 
 ## Auto-eval：增加采样点
 
