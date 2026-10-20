@@ -153,6 +153,54 @@ GET /api/v1/result/{submission_id}
 | `completed` | Grading finished, report is available |
 | `error` | Grading failed (container crash, timeout, etc.) |
 
+### Submitting snapshots and reading results
+
+The judge evaluates the archive uploaded at submission time. Once accepted,
+later edits to the working directory do not change that submission. To return
+after acceptance and continue independent work while grading runs:
+
+```bash
+sforge-submit --no-wait
+# Continue working; retain the printed submission ID and its candidate identity.
+sforge-submit --result <submission_id> --no-wait --details
+```
+
+For a new submission, `--no-wait` exits successfully on acceptance, without
+reading or caching a score. With `--result ID`, it checks the result once after
+verifying token-visible history: `queued` or `running` returns success with an
+explicit pending status and no score or cache change; a terminal result uses the
+same feedback and error handling as blocking retrieval. Pending means the read
+succeeded, not that the candidate passed. Continue useful independent work
+before checking the same ID again.
+
+Without `--no-wait`, submission and result retrieval still wait for feedback.
+`--no-wait` cannot be combined with `--list` or with `--details` unless a
+`--result ID` is supplied. Keep recoverable copies of candidates you may need to
+restore: result retrieval reads feedback, not source files. Periodic automatic
+evaluations capture later workspace states independently.
+
+The generated `sforge-submit` helper can read an accepted submission without
+creating a new evaluation:
+
+```bash
+sforge-submit --list
+sforge-submit --result <submission_id> --details
+```
+
+Use the ID printed on acceptance, or find it in `--list` if the acceptance reply
+was lost. Recovery reads only IDs in the current token's visible history and
+preserves the original round, score and public details. It does not archive the
+current workspace, consume another submission, or change the cooldown clock.
+`--details` alone still submits new code; use `--result ID --details` to read
+existing details.
+
+Transport/HTTP errors, terminal grading errors and a completed response without
+a report fail with a nonzero exit status instead of creating a zero-score cache
+entry. A legitimate zero score remains zero; a missing score remains missing.
+If acceptance is unknown, inspect history before submitting again. This is
+client-side result retrieval, not idempotent submission retry or durable server
+restart recovery; it requires the server to retain the session and result.
+
 ### Run History
 
 Retrieve the full submission history for a run session, including the best score selection.
