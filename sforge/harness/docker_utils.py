@@ -120,20 +120,31 @@ _EXEC_DRAIN_GRACE = 5
 _EXEC_DAEMON_READ_ATTEMPTS = 3
 _EXEC_DAEMON_RETRY_DELAY = 0.25
 _EXEC_SUPERVISOR = r"""
-control=$1; grace=$2; drain=$3; shift 3
+control=$1; grace=$2; drain=$3; argv_prefix=$4
 [[ -d "$control" && -p "$control/hold" ]] || exit 125
 if [[ -f "$control/stop" ]]; then
     printf "125\n" > "$control/settled"
     exit 125
 fi
+argc_name=${argv_prefix}_COUNT
+[[ -v "$argc_name" ]] || exit 125
+argc=${!argc_name}
+[[ "$argc" =~ ^[0-9]+$ && $argc -gt 0 ]] || exit 125
+solver_argv=()
+for ((i=0; i<argc; i++)); do
+    arg_name=${argv_prefix}_$i
+    [[ -v "$arg_name" ]] || exit 125
+    solver_argv+=("${!arg_name}")
+    unset "$arg_name"
+done
+unset "$argc_name" argv_prefix argc_name argc arg_name i
 stop=0
 trap 'stop=1' TERM INT HUP
 set -m
-/bin/bash -c '
-    control=$1; shift
+(
     trap "" TERM INT HUP
     exec 3<>"$control/hold" || exit 125
-    (trap - TERM INT HUP; exec "$@") 3>&- &
+    (trap - TERM INT HUP; exec "${solver_argv[@]}") 3>&- &
     child=$!
     wait "$child" 2>/dev/null
     code=$?
@@ -145,7 +156,7 @@ set -m
     fi
     # Stay alive as the process-group anchor until the final group kill.
     read -r -u 3
-' sforge-exec-group "$control" "$@" &
+) &
 group=$!
 # Preserve the command stderr, but suppress supervisor job-control notices.
 exec 2>/dev/null
@@ -215,11 +226,18 @@ def _exec_run(
     if not argv:
         raise ValueError("Docker exec command must not be empty")
     control = f"/tmp/sforge-exec-{uuid.uuid4().hex}"
+    argv_prefix = f"_SFORGE_EXEC_{uuid.uuid4().hex.upper()}"
+    exec_environment = dict(environment or {})
+    exec_environment[f"{argv_prefix}_COUNT"] = str(len(argv))
+    exec_environment.update(
+        {f"{argv_prefix}_{index}": arg for index, arg in enumerate(argv)}
+    )
     options = {
         k: v
-        for k, v in (("user", user), ("workdir", workdir), ("environment", environment))
+        for k, v in (("user", user), ("workdir", workdir))
         if v
     }
+    options["environment"] = exec_environment
     control_options = {"user": user} if user else {}
 
     def control_command(script):
@@ -346,7 +364,7 @@ def _exec_run(
                 control,
                 str(_EXEC_SHUTDOWN_GRACE),
                 str(_EXEC_DRAIN_GRACE),
-                *argv,
+                argv_prefix,
             ],
             **options,
         )["Id"]

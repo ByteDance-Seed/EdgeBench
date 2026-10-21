@@ -246,6 +246,28 @@ print('DONE',flush=True)
     assert probe.exit_code == 0, probe.output
 
 
+def test_command_can_kill_its_matching_process_without_killing_supervisor(
+    container, execute
+):
+    result = execute(
+        [
+            "bash",
+            "-c",
+            (
+                "ps -eo pid=,args= | grep -E '[b]enchmark-worker' | "
+                "awk '{print $1}' | while read -r pid; do kill -9 \"$pid\"; done"
+            ),
+            "benchmark-worker",
+        ],
+        timeout=5,
+    )
+    assert result[1:3] == (137, False)
+
+    follow_up = execute(["printf", "AFTER_SELF_KILL"], timeout=5)
+    assert follow_up[0] == "AFTER_SELF_KILL"
+    assert follow_up[1:3] == (0, False)
+
+
 def test_nonroot_and_string_command(container, execute):
     result = execute('printf "literal space"', user="65534", timeout=5)
     assert result[0] == "literal space" and result[1:3] == (0, False)
