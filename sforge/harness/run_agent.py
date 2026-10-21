@@ -338,7 +338,11 @@ def run_agent(
     4. Run agent (high max-turns for iterative work)
     5. Read final state, extract archive
     """
-    effective_timeout = timeout or config.agent_timeout or agent.timeout
+    effective_timeout = timeout if timeout is not None else config.agent_timeout
+    if effective_timeout is None:
+        effective_timeout = agent.timeout
+    if type(effective_timeout) is not int or effective_timeout <= 0:
+        raise ValueError("Agent execution timeout must be a positive integer in seconds")
 
     log_dir = config.log_dir / "runs" / run_id / task_spec.task_id
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -605,7 +609,11 @@ def run_agent(
 
         # 5. Write prompt
         if task_spec.game_mode:
-            prompt = generate_game_prompt(task_spec.work.agent_query, internet=internet)
+            prompt = generate_game_prompt(
+                task_spec.work.agent_query,
+                internet=internet,
+                agent_budget_seconds=effective_timeout,
+            )
         else:
             prompt = generate_evolve_prompt(
                 task_spec.work.agent_query,
@@ -613,6 +621,7 @@ def run_agent(
                 internet=internet,
                 max_submissions=max_submissions,
                 submission_cooldown=submission_cooldown,
+                agent_budget_seconds=effective_timeout,
             )
         prompt_path = "/tmp/agent_prompt.md"
         local_prompt = log_dir / "agent_prompt.md"
@@ -640,6 +649,11 @@ def run_agent(
         on_chunk_cb = None
 
         while remaining_timeout > 0:
+            # Backends accept whole seconds; never dispatch a zero-second timeout.
+            segment_timeout = int(remaining_timeout)
+            if segment_timeout <= 0:
+                agent_timed_out = True
+                break
             is_resume = resume_count > 0
             run_cmd = agent.format_run_cmd(
                 prompt_path, model=model,
@@ -653,13 +667,21 @@ def run_agent(
             else:
                 logger.info(f"Running agent: {run_cmd[:200]}... (timeout={remaining_timeout:.0f}s)")
 
+            # Resume commands may reuse a session without reading the prompt again.
+            # Refresh the budget snapshot for each dispatched process as well.
+            segment_env = {
+                **env,
+                "SFORGE_AGENT_BUDGET_SECONDS": str(effective_timeout),
+                "SFORGE_AGENT_REMAINING_SECONDS": str(segment_timeout),
+                "SFORGE_AGENT_SEGMENT_STARTED_AT": str(time.time()),
+            }
             seg_result = backend.exec_run_with_timeout(
                 handle,
                 ["/bin/bash", "-c", run_cmd],
-                timeout=int(remaining_timeout),
+                timeout=segment_timeout,
                 log_file=agent_live_log,
                 workdir=task_spec.cwd,
-                environment=env,
+                environment=segment_env,
                 stream_to_stdout=verbose,
                 shutdown_event=shutdown_event,
                 log_append=is_resume,
