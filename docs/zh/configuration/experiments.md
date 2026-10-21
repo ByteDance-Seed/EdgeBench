@@ -118,6 +118,34 @@ tasks:
     # 最终结果：FOO=from-task, BAR=shared, BAZ=task-only
 ```
 
+## Agent 执行预算
+
+配置解析后，`run_agent` 依次选用显式 `timeout`、
+`SForgeConfig.agent_timeout`、所选 Agent 的默认值。最终值必须是以秒为单位的
+正整数；非法值会在注册会话、创建容器之前报错，不会静默回退到其他值。
+
+Runner 将同一预算写入迭代模式和游戏模式的 `agent_prompt.md`，优先于题目或
+工作区文档中冲突的**整轮 Agent 时间限制**。原始题目文本保留，单次命令、测试、
+训练和评分限制仍然有效。预算是上限，不要求 Agent 用完时间，也不改变已配置的
+Stop Hook 和自动恢复策略。
+
+多次恢复共享执行预算，安装 Agent 和最终评分不计入。每次执行前注入：
+
+| 环境变量 | 含义 |
+| --- | --- |
+| `SFORGE_AGENT_BUDGET_SECONDS` | 整轮执行预算 |
+| `SFORGE_AGENT_REMAINING_SECONDS` | 本次执行可用的剩余整秒数 |
+| `SFORGE_AGENT_SEGMENT_STARTED_AT` | 主机派发执行时的 Unix 时间戳 |
+
+这些保留字段在派发时覆盖 `extra_env` 中的同名值。它们是时间快照，不是实时递减
+的计数器。即使恢复命令不重新读取 prompt，新进程也会收到更新后的值；Agent
+需要读取这些值才能用于规划。恢复会扣除此前已执行时间，不会重新获得整轮预算。
+不足一秒的余量向下取整，不会派发超时为零的执行。
+
+修改 prompt 的预算声明会改变实验协议。保留历史 attempt 及其原始 prompt，使用
+不同的 run ID 补跑预算对齐后的实验。外层超时配置本身不能证明 Agent 实际被告知
+的时间约定。
+
 ## 使用方法
 
 ### 运行实验中的所有任务

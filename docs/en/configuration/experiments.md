@@ -118,6 +118,40 @@ tasks:
     # Result: FOO=from-task, BAR=shared, BAZ=task-only
 ```
 
+## Agent execution budget
+
+After configuration resolution, `run_agent` chooses its explicit `timeout`, then
+`SForgeConfig.agent_timeout`, then the selected Agent's default. The effective value
+must be a positive integer in seconds; invalid values fail before registration or
+container creation instead of silently selecting a fallback.
+
+The runner writes this same budget into `agent_prompt.md` for both iterative and
+game modes. It takes precedence over conflicting **whole-run Agent** time limits
+in the task query or workspace documentation. Task text is preserved, and local
+command, test, training, and judge limits still apply. The budget is an upper
+limit; it does not require an Agent to use all available time or change the
+configured stop-hook and auto-resume policy.
+
+Execution time is shared across resumes. Agent installation and final grading
+are outside the execution budget. Before each execution, the runner supplies:
+
+| Environment variable | Meaning |
+| --- | --- |
+| `SFORGE_AGENT_BUDGET_SECONDS` | Total execution budget |
+| `SFORGE_AGENT_REMAINING_SECONDS` | Remaining whole seconds allowed for this execution |
+| `SFORGE_AGENT_SEGMENT_STARTED_AT` | Host Unix timestamp at dispatch |
+
+These reserved values override matching `extra_env` keys at dispatch. They are
+snapshots, not live counters. A resumed process receives updated values even if
+its resume command does not reread the prompt; an Agent must read them to use
+them in planning. Resumption deducts elapsed execution time rather than granting
+a fresh total budget. Remaining fractions of a second are rounded down, and a
+zero-second execution is not dispatched.
+
+Changing the prompt's budget declaration changes the experiment protocol. Keep
+old attempts and their original prompts; use distinct run IDs for budget-aligned
+reruns. An outer timeout alone does not show what duration the Agent was told to use.
+
 ## Usage
 
 ### Run all tasks in an experiment

@@ -313,12 +313,36 @@ fi
 """
 
 
+def _agent_execution_budget_note(agent_budget_seconds: int | None) -> str:
+    """Describe the runner's execution limit without changing task-local limits."""
+    if agent_budget_seconds is None:
+        return ""
+    if type(agent_budget_seconds) is not int or agent_budget_seconds <= 0:
+        raise ValueError("Agent execution budget must be a positive integer in seconds")
+    return (
+        "### Agent Execution Budget\n\n"
+        f"The runner allows **{agent_budget_seconds} seconds** of Agent execution, "
+        "shared across all resumed executions. Installation and final grading are "
+        "outside this budget. This replaces conflicting whole-run Agent time limits "
+        "in the task query or workspace documentation; per-command, per-test, "
+        "training, and judge limits still apply. This is an upper limit, not a "
+        "minimum required duration.\n\n"
+        "Each execution receives `SFORGE_AGENT_BUDGET_SECONDS` (total budget), "
+        "`SFORGE_AGENT_REMAINING_SECONDS` (remaining whole seconds at dispatch), "
+        "and `SFORGE_AGENT_SEGMENT_STARTED_AT` (host Unix timestamp at dispatch). "
+        "These environment values are snapshots, not live counters; refresh your "
+        "remaining-time estimate using elapsed time within the execution. "
+        "A resumed execution receives a new snapshot, not a fresh total budget.\n\n"
+    )
+
+
 def generate_evolve_prompt(
     original_query: str,
     submit_paths: list[str] | None = None,
     internet: bool = True,
     max_submissions: int | None = None,
     submission_cooldown: int | None = None,
+    agent_budget_seconds: int | None = None,
 ) -> str:
     """Generate the enhanced prompt wrapping the task query with eval instructions."""
     submit_files_note = ""
@@ -376,6 +400,7 @@ def generate_evolve_prompt(
         "You are working with iterative test feedback. "
         "After implementing code, you can submit your work for evaluation at any "
         "time to see which tests pass and which fail, then iterate based on the results.\n\n"
+        f"{_agent_execution_budget_note(agent_budget_seconds)}"
         f"{how_to_test}"
         f"{submit_files_note}"
         f"{budget_note}"
@@ -392,7 +417,11 @@ def generate_evolve_prompt(
     )
 
 
-def generate_game_prompt(original_query: str, internet: bool = True) -> str:
+def generate_game_prompt(
+    original_query: str,
+    internet: bool = True,
+    agent_budget_seconds: int | None = None,
+) -> str:
     """Generate the enhanced prompt for game mode.
 
     Wraps the task-specific query with common game interaction instructions
@@ -416,6 +445,7 @@ def generate_game_prompt(original_query: str, internet: bool = True) -> str:
         "## Game Mode\n\n"
         "You are playing an **interactive fiction game** via an HTTP API. "
         "Send commands to the game server and maximize your score.\n\n"
+        f"{_agent_execution_budget_note(agent_budget_seconds)}"
         "---\n\n"
         f"{network_note}"
         "## Game Server HTTP API\n\n"
