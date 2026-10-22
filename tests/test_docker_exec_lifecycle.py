@@ -125,6 +125,25 @@ def test_cancel_during_create_does_not_dispatch(container, execute, monkeypatch)
     assert container.exec_run(["test", "!", "-e", "/tmp/dispatched"]).exit_code == 0
 
 
+@pytest.mark.parametrize("user", [None, "65534"])
+@pytest.mark.parametrize("timeout_exit", [False, True])
+def test_task_temp_cleanup_preserves_exec_receipts(container, execute, user, timeout_exit):
+    # A normal verifier may clear scratch files before running its test suite.
+    # Use a dedicated network-disabled container; never touch host temp files.
+    script = 'find /tmp /var/tmp -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +; '
+    script += (
+        'trap \'printf "STOPPED\\n"; exit 0\' TERM; sleep 60 & wait'
+        if timeout_exit else 'printf "COMPLETED\\n"; exit 19'
+    )
+    output, code, timed_out, _ = execute(
+        ["bash", "-c", script], timeout=1 if timeout_exit else 5, user=user,
+    )
+    assert timed_out is timeout_exit
+    assert code == (-1 if timeout_exit else 19)
+    assert ("STOPPED" if timeout_exit else "COMPLETED") in output
+    assert execute(["printf", "NEXT"], timeout=5, user=user)[:3] == ("NEXT", 0, False)
+
+
 @pytest.mark.parametrize("exit_code", [0, 17])
 def test_normal_exit_preserves_bytes_arguments_and_unrelated_process(
     container, execute, tmp_path, exit_code
@@ -164,7 +183,7 @@ sys.exit(int(sys.argv[2]))
     )
     assert probe.exit_code == 0, probe.output
     assert (
-        container.exec_run(["bash", "-c", 'compgen -G "/tmp/sforge-exec-*"']).exit_code
+        container.exec_run(["bash", "-c", 'compgen -G "/dev/shm/sforge-exec-*"']).exit_code
         == 1
     )
 
@@ -375,7 +394,7 @@ def test_missing_exec_metadata_recovers_from_settled_receipt(
     result = execute(["bash", "-c", f"printf RECOVERED; exit {exit_code}"], timeout=5)
     assert result[:3] == ("RECOVERED", exit_code, False)
     assert (
-        container.exec_run(["bash", "-c", 'compgen -G "/tmp/sforge-exec-*"']).exit_code
+        container.exec_run(["bash", "-c", 'compgen -G "/dev/shm/sforge-exec-*"']).exit_code
         == 1
     )
 
@@ -416,7 +435,7 @@ def test_missing_exec_metadata_retries_transient_receipt_timeout(
     assert result[:3] == ("RECOVERED", exit_code, False)
     assert receipt_reads >= 2
     assert (
-        container.exec_run(["bash", "-c", 'compgen -G "/tmp/sforge-exec-*"']).exit_code
+        container.exec_run(["bash", "-c", 'compgen -G "/dev/shm/sforge-exec-*"']).exit_code
         == 1
     )
 
@@ -525,7 +544,7 @@ def test_slow_receipt_publication_preserves_exit_code(
     assert result[0] in ("DONEPUBLISHING\n", "PUBLISHING\nDONE")
     assert result[1:3] == (exit_code, False)
     assert (
-        container.exec_run(["bash", "-c", 'compgen -G "/tmp/sforge-exec-*"']).exit_code
+        container.exec_run(["bash", "-c", 'compgen -G "/dev/shm/sforge-exec-*"']).exit_code
         == 1
     )
 
@@ -543,7 +562,7 @@ def test_cancel_during_receipt_publication_cleans_partial_file(
     assert result[1:3] == (-1, True)
     assert stop.is_set()
     assert (
-        container.exec_run(["bash", "-c", 'compgen -G "/tmp/sforge-exec-*"']).exit_code
+        container.exec_run(["bash", "-c", 'compgen -G "/dev/shm/sforge-exec-*"']).exit_code
         == 1
     )
 
@@ -560,6 +579,6 @@ def test_receipt_publication_failure_is_nonzero(container, execute, monkeypatch)
     result = execute(["printf", "DONE"], timeout=5)
     assert result[:3] == ("DONE", 125, False)
     assert (
-        container.exec_run(["bash", "-c", 'compgen -G "/tmp/sforge-exec-*"']).exit_code
+        container.exec_run(["bash", "-c", 'compgen -G "/dev/shm/sforge-exec-*"']).exit_code
         == 1
     )

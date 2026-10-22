@@ -225,7 +225,12 @@ def _exec_run(
     argv = split_command(cmd) if isinstance(cmd, str) else list(cmd)
     if not argv:
         raise ValueError("Docker exec command must not be empty")
-    control = f"/tmp/sforge-exec-{uuid.uuid4().hex}"
+    # Task/verifier cleanup may legitimately remove all of /tmp and /var/tmp.
+    # Docker's shared-memory mount is writable by non-root exec users and keeps
+    # the small FIFO/receipt files outside those task scratch directories. No
+    # executable is placed here, so a noexec mount is supported. Creation still
+    # fails before dispatch if the control directory cannot be provisioned.
+    control = f"/dev/shm/sforge-exec-{uuid.uuid4().hex}"
     argv_prefix = f"_SFORGE_EXEC_{uuid.uuid4().hex.upper()}"
     exec_environment = dict(environment or {})
     exec_environment[f"{argv_prefix}_COUNT"] = str(len(argv))
