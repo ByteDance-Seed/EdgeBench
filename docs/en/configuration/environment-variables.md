@@ -80,8 +80,37 @@ host allowlist directly.
 |----------|---------|
 | `SFORGE_WORK_CPU_LIMIT` | Number of CPUs for work containers (e.g., `4`) |
 | `SFORGE_WORK_MEM_LIMIT` | Memory limit for work containers (e.g., `8g`) |
+| `SFORGE_JUDGE_MAX_CONCURRENCY` | Maximum judges executing in one SForge server process (default: `4`) |
+| `SFORGE_JUDGE_MAX_BACKLOG` | Maximum queued plus running submissions in one server process (default: `8`) |
+| `SFORGE_JUDGE_HOST_CAPACITY` | Host-wide judge slot count shared across SForge server processes (default: `8`) |
+| `SFORGE_JUDGE_HOST_MEMORY_CAPACITY` | Optional host-wide judge memory budget (for example, `24g`). Declared judge memory limits are charged against this budget; a judge without a limit is charged the full budget and therefore runs alone. |
+| `SFORGE_JUDGE_HOST_SLOT_FILE` | Override the host-wide slot ledger path (default: `/tmp/sforge-judge-host-slots.json`) |
+| `SFORGE_JUDGE_HOST_OWNER_FILE` | Override the backend-owner sidecar path used for crash recovery (default: `/tmp/sforge-judge-host-owners.json`) |
+| `SFORGE_JUDGE_HOST_MEMORY_FILE` | Override the host-wide memory ledger path (default: `/tmp/sforge-judge-host-memory.json`) |
 
 Judge CPU/memory limits are currently set through CLI flags (`--judge-cpu-limit`, `--judge-mem-limit`) or experiment YAML (`judge_cpu_limit`, `judge_mem_limit`), not environment variables.
+The memory budget is admission control rather than a container limit. Set an actual judge memory limit when concurrent judges should share the budget. SForge recovers dead Docker owners only after the same Docker engine confirms that the orphan judge container has been removed.
+
+
+Judge admission uses a persistent FIFO queue shared by server processes. A request
+starts only when both its slot and its full memory reservation fit; polling more
+often cannot overtake an earlier waiter. Waiting requests consume neither resource.
+This deliberately leaves spare capacity idle when the oldest request needs more
+memory, so a stream of small requests cannot starve a larger one. The queue orders
+requests reaching host admission, not submissions still waiting in a server's local
+worker queue. It does not preempt running judges or bound their execution time.
+
+Cancellation removes the queued request. Exited processes, zombies and detected
+PID reuse also remove waiters; an unavailable process-identity read retains them.
+Already admitted holders still require explicit release or backend-confirmed
+cleanup. A changed resource request must cancel its old wait before joining again.
+
+Upgrade all launchers sharing the resource files after draining their existing
+work: older launchers enforce capacity but do not honor FIFO order. Keep the same
+ledgers and owner sidecars; deleting them while judges run would erase reservations.
+Slot and memory ledgers are locked together for admission, but their writes are
+separate: a crash between writes can conservatively retain a reservation, which
+uses the existing dead-owner cleanup path.
 
 ## Container Backend Variables
 

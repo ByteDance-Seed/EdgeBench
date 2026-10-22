@@ -19,9 +19,9 @@ from __future__ import annotations
 import abc
 import logging
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import Callable
 
 
 @dataclass
@@ -40,6 +40,11 @@ class StreamingExecResult:
     exit_code: int = 0
     timed_out: bool = False
     elapsed_seconds: float = 0.0
+    # Optional evidence; legacy return codes (including timeout sentinels) alone
+    # do not attest that a native process terminal status was observed.
+    terminal_observed: bool | None = None
+    native_exit_code: int | None = None
+    termination_signal: int | None = None
 
 
 @dataclass(frozen=True)
@@ -113,6 +118,19 @@ class ContainerBackend(abc.ABC):
     @abc.abstractmethod
     def remove_container_by_name(self, name: str) -> None:
         ...
+
+    def judge_capacity_owner_id(self) -> str | None:
+        """Stable local resource-owner identity for host-capacity recovery."""
+        return None
+
+    def reconcile_judge_capacity_holder(
+        self, token: str, owner_id: str | None,
+    ) -> bool:
+        """Clean resources owned by a dead host-capacity holder.
+
+        Backends that cannot prove ownership and cleanup retain the reservation.
+        """
+        return False
 
     # --- Image ---
 
