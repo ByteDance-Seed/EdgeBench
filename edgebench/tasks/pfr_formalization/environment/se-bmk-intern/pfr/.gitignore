@@ -1,0 +1,6 @@
+/.lake/*
+# lake-packages/, build/ and lakefile.olean are not strictly needed anymore,
+# but people might still have them around in their local copy
+/lake-packages/*
+/build
+/lakefile.olean

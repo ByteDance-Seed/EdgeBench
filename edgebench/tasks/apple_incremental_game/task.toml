@@ -1,0 +1,35 @@
+schema_version = 0
+id = "apple_incremental_game"
+name = "Apple Incremental Game"
+category = "Combinatorial Optimization"
+language = "Python"
+description = "Decide each turn whether to invest in machines or collect output in an incremental production game, balancing short-term gains against long-horizon compounding."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python310"
+platform = "linux/amd64"
+cwd = "/home/workspace/apple_incremental_game"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["solution.py"]
+exclude = []
+
+[judge]
+cmd = "python3 /judge/grade.py"
+timeout_sec = 600
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# eval_apple_incremental_game.py runs the 50 cases 8 at a time (ProcessPoolExecutor,
+# max_workers=8), each `python3 solution.py` under a 30 s wall-clock timeout. Scores of
+# time-limited (anytime) solutions depend on host CPU speed and load; see NOTES.md.
+
+[score]
+direction = "maximize"
+rescale = { kind = "piecewise_max", baseline = 45000000.0, rank30 = 262328915.6667, rank1 = 282791094.0, super_anchor = 289952856.4167 }

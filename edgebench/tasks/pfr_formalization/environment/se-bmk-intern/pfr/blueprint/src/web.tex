@@ -1,0 +1,29 @@
+% This file makes the web version of the blueprint.
+% This file can be built locally.
+
+\documentclass{report}
+
+\usepackage{amsmath,amsfonts,amsthm,amssymb}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\DeclareGraphicsExtensions{.svg,.png,.jpg}
+\usepackage[capitalize]{cleveref}
+\usepackage[showmore, dep_graph, project=../../]{blueprint}
+
+\usepackage{tikz-cd}
+\usepackage{tikz}
+
+\input{preamble/common}
+\input{preamble/web}
+
+%\home{https://github.com/teorth/pfr/}
+\github{https://github.com/teorth/pfr/}
+\dochome{https://teorth.github.io/pfr/docs}
+
+\title{PFR}
+\author{}
+
+\begin{document}
+\maketitle
+\input{chapter/main}
+\end{document}

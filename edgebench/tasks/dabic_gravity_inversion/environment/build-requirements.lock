@@ -1,0 +1,12 @@
+# Build backend for the two sdist-only packages in requirements.lock (pymatsolver 0.4.0,
+# simpeg 0.25.2; both declare setuptools>=64 + setuptools_scm>=8). These are the exact
+# wheels v1's isolated build environment used (their sha256 are the bodies left in v1's
+# /root/.cache/pip/http-v2). Installed into a throwaway --target dir, never into the image.
+setuptools==80.10.2 \
+    --hash=sha256:95b30ddfb717250edb492926c92b5221f7ef3fbcc2b07579bcd4a27da21d0173  # setuptools-80.10.2-py3-none-any.whl
+setuptools-scm==10.0.5 \
+    --hash=sha256:f611037d8aae618221503b8fa89319f073438252ae3420e01c9ceec249131a0a  # setuptools_scm-10.0.5-py3-none-any.whl
+vcs-versioning==1.1.1 \
+    --hash=sha256:b541e2ba79fc6aaa3850f8a7f88af43d97c1c80649c01142ee4146eddbc599e4  # vcs_versioning-1.1.1-py3-none-any.whl
+packaging==26.2 \
+    --hash=sha256:5fc45236b9446107ff2415ce77c807cee2862cb6fac22b8a73826d0693b0980e  # packaging-26.2-py3-none-any.whl

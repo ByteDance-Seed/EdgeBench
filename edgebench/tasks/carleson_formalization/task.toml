@@ -1,0 +1,31 @@
+schema_version = 0
+id = "carleson_formalization"
+name = "Carleson Formalization"
+category = "Formal Math & Theorem Proving"
+language = "Lean 4"
+description = "Fill proof obligations in the Lean 4 formalization of Carleson's theorem on pointwise convergence of L^2 Fourier series. Transitive axiom checking ensures no dependence on unproved prerequisites."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "lean-4.30.0-rc2-mathlib-1a4917a"
+platform = "linux/amd64"
+cwd = "/home/workspace/"
+internet = false
+cpus = 8
+memory = "16g"
+
+[submission]
+paths = ["se-bmk-intern/carleson"]
+exclude = ["se-bmk-intern/carleson/.lake"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 2400
+cpus = 8
+memory = "16g"
+
+[score]
+direction = "maximize"
+# raw score = repaired / 3004 baseline sorry declarations, 0 if the classical_carleson_check HASH check fails (v1 eval_lean `score`)
+rescale = { kind = "linear", lower = 0.0, upper = 1.0 }

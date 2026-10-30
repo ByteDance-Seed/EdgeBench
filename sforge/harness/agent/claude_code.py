@@ -23,15 +23,15 @@ from pathlib import Path, PurePosixPath
 
 from sforge.harness.agent.base import Agent
 from sforge.harness.backend import ContainerBackend, ContainerHandle
+from sforge.harness.constants import CONTAINER_DIR
 
 
 class ClaudeCodeAgent(Agent):
 
     name = "claude-code"
-    install_cmds = [
-        "sudo -E bash -c 'NODE_MIRROR=${SFORGE_NODEJS_MIRROR_URL:-https://nodejs.org/dist} && curl -fsSL $NODE_MIRROR/v20.18.0/node-v20.18.0-linux-x64.tar.xz | tar -xJ -C /usr/local --strip-components=1'",
-        "sudo -E npm install -g @anthropic-ai/claude-code@2.1.159",
-    ]
+    npm_package = "@anthropic-ai/claude-code"
+    default_version = "2.1.258"
+    session_dirs = ("/root/.claude/projects",)
     run_cmd = (
         'claude -p "$(cat {prompt_file})"'
         " --output-format stream-json"
@@ -51,8 +51,12 @@ class ClaudeCodeAgent(Agent):
     stop_hook = "claude"
 
     def augment_env(self, env: dict[str, str], model: str | None) -> None:
-        if self._config.claude_cache_opt:
-            env["CLAUDE_CODE_ATTRIBUTION_HEADER"] = "0"
+        # Containers run as root; Claude Code refuses
+        # --dangerously-skip-permissions as root outside a declared sandbox.
+        env["IS_SANDBOX"] = "1"
+        # Keep the prompt prefix stable so API proxies can cache it: no
+        # per-request attribution header, no dynamic system prompt sections.
+        env["CLAUDE_CODE_ATTRIBUTION_HEADER"] = "0"
         if not self._config.agent_api_base_url and self._config.agent_api_key:
             env["ANTHROPIC_API_KEY"] = self._config.agent_api_key
         # setdefault so an explicit extra_env value stays authoritative.
@@ -81,11 +85,10 @@ class ClaudeCodeAgent(Agent):
         if not internet:
             cmd += " --disallowedTools WebSearch,WebFetch"
 
-        if self._config.claude_cache_opt:
-            cmd += (
-                " --exclude-dynamic-system-prompt-sections"
-                """ --settings '{"includeGitInstructions":false}'"""
-            )
+        cmd += (
+            " --exclude-dynamic-system-prompt-sections"
+            """ --settings '{"includeGitInstructions":false}'"""
+        )
 
         return cmd
 
@@ -96,13 +99,13 @@ class ClaudeCodeAgent(Agent):
         log_dir: Path,
         logger: logging.Logger,
     ) -> None:
-        hook_path = "/tmp/sforge-stop-hook.sh"
+        hook_path = f"{CONTAINER_DIR}/stop-hook.sh"
 
         hook_script = _generate_stop_hook()
         local_hook = log_dir / "_stop-hook.sh"
         local_hook.write_text(hook_script)
         backend.copy_to_container(handle, local_hook, PurePosixPath(hook_path))
-        backend.exec_run(handle, f"chmod a+x {hook_path}", user="root")
+        backend.exec_run(handle, f"chmod a+x {hook_path}")
         logger.info("Installed Claude Code stop hook")
 
         settings_content = _generate_claude_settings(hook_path)
@@ -111,28 +114,9 @@ class ClaudeCodeAgent(Agent):
         backend.copy_to_container(
             handle,
             local_settings,
-            PurePosixPath("/home/agent/.claude/settings.json"),
+            PurePosixPath("/root/.claude/settings.json"),
         )
-        result = backend.exec_run(
-            handle, "chown -R agent:agent /home/agent/.claude", user="root",
-        )
-        if result.exit_code != 0:
-            raise RuntimeError(
-                f"Failed to set Claude Code config ownership: {result.output}"
-            )
         logger.info("Configured Claude Code settings with hooks")
-
-
-class ClaudeCode2_1_214Agent(ClaudeCodeAgent):
-    """Claude Code pinned to 2.1.214 — required by Claude 5-family models
-    (Fable/Mythos); the 2.1.159 pin predates them. Kept as a separate agent
-    so existing claude-code results stay comparable."""
-
-    name = "claude-code-2.1.214"
-    install_cmds = [
-        ClaudeCodeAgent.install_cmds[0],
-        "sudo -E npm install -g @anthropic-ai/claude-code@2.1.214",
-    ]
 
 
 # ---------------------------------------------------------------------------

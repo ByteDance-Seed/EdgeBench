@@ -1,0 +1,18 @@
+[package]
+name = "tools"
+version = "1.0.0"
+authors = []
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rand = { version = "=0.7.3", features = ["small_rng"] }
+rand_chacha = "=0.2.2"
+proconio = { version = "=0.3.6", features = ["derive"] }
+svg = "0.9.0"
+docopt = "1.1.0"
+serde = { version = "1", features = ["derive"] }
+chrono = "0.4"
+indicatif = "0.15.0"
+clap = { version = "4.5.35", features = ["derive"] }

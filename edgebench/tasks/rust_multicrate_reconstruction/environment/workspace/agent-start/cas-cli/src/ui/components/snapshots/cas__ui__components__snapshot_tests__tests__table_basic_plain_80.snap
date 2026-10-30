@@ -1,0 +1,10 @@
+---
+source: cas-cli/src/ui/components/snapshot_tests.rs
+expression: tf.output()
+---
+╭──────────┬─────────────┬────────╮
+│ ID       │ Title       │ Status │
+├──────────┼─────────────┼────────┤
+│ cas-abc1 │ Fix bug     │ Open   │
+│ cas-def2 │ Add feature │ Closed │
+╰──────────┴─────────────┴────────╯

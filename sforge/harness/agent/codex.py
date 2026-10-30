@@ -22,17 +22,19 @@ from pathlib import Path, PurePosixPath
 
 from sforge.harness.agent.base import Agent
 from sforge.harness.backend import ContainerBackend, ContainerHandle
+from sforge.harness.constants import CONTAINER_DIR
 
 
 class CodexAgent(Agent):
 
     name = "codex"
-    install_cmds = [
-        "sudo -E bash -c 'NODE_MIRROR=${SFORGE_NODEJS_MIRROR_URL:-https://nodejs.org/dist} && curl -fsSL $NODE_MIRROR/v20.18.0/node-v20.18.0-linux-x64.tar.xz | tar -xJ -C /usr/local --strip-components=1'",
-        "sudo -E npm install -g @openai/codex@0.130.0",
-        '''if [ -n "$OPENAI_BASE_URL" ]; then
-    mkdir -p ~/.codex
-    cat > ~/.codex/config.toml << EOF
+    npm_package = "@openai/codex"
+    default_version = "0.145.0"
+    session_dirs = ("/root/.codex/sessions",)
+    # Point codex at the configured gateway (container env carries the URL).
+    provider_setup = '''if [ -n "$OPENAI_BASE_URL" ]; then
+    mkdir -p /root/.codex
+    cat > /root/.codex/config.toml << EOF
 model_provider = "sforge-proxy"
 model_verbosity = "medium"
 model = "${CODEX_MODEL:-gpt-5.5}"
@@ -42,15 +44,21 @@ name = "sforge-proxy"
 base_url = "${OPENAI_BASE_URL}"
 env_key = "OPENAI_API_KEY"
 EOF
-fi''',
-    ]
-    run_cmd = 'codex exec --dangerously-bypass-approvals-and-sandbox "$(cat {prompt_file})"'
-    resume_cmd = 'codex exec resume --last --dangerously-bypass-approvals-and-sandbox "Continue working."'
+fi'''
+    # --json: stdout is JSONL events, like Claude Code's stream-json.
+    run_cmd = 'codex exec --json --dangerously-bypass-approvals-and-sandbox "$(cat {prompt_file})"'
+    resume_cmd = 'codex exec resume --last --json --dangerously-bypass-approvals-and-sandbox "Continue working."'
     api_key_env = "OPENAI_API_KEY"
     api_base_env = "OPENAI_BASE_URL"
-    default_api_base_url = "https://api.openai.com"
+    default_api_base_url = "https://api.openai.com/v1"
     model_env = "CODEX_MODEL"
     stop_hook = "codex"
+
+    def install(self, backend, handle, logger) -> None:
+        super().install(backend, handle, logger)
+        result = backend.exec_run(handle, ["/bin/bash", "-c", self.provider_setup])
+        if result.exit_code != 0:
+            raise RuntimeError(f"Failed to configure Codex provider: {result.output}")
 
     def augment_env(self, env: dict[str, str], model: str | None) -> None:
         if not self._config.agent_api_base_url:
@@ -92,19 +100,19 @@ fi''',
         log_dir: Path,
         logger: logging.Logger,
     ) -> None:
-        hook_path = "/tmp/sforge-codex-stop-hook.sh"
+        hook_path = f"{CONTAINER_DIR}/codex-stop-hook.sh"
 
         hook_script = _generate_codex_stop_hook()
         local_hook = log_dir / "_codex-stop-hook.sh"
         local_hook.write_text(hook_script)
         backend.copy_to_container(handle, local_hook, PurePosixPath(hook_path))
-        backend.exec_run(handle, f"chmod a+x {hook_path}", user="root")
+        backend.exec_run(handle, f"chmod a+x {hook_path}")
         logger.info("Installed Codex stop hook")
 
         hooks_content = _generate_codex_hooks(hook_path)
         local_hooks = log_dir / "_codex_hooks.json"
         local_hooks.write_text(hooks_content)
-        backend.exec_run(handle, "mkdir -p /etc/codex", user="root")
+        backend.exec_run(handle, "mkdir -p /etc/codex")
         backend.copy_to_container(
             handle,
             local_hooks,
@@ -117,14 +125,14 @@ fi''',
         backend.copy_to_container(
             handle,
             local_config_append,
-            PurePosixPath("/tmp/sforge-codex-config-append.toml"),
+            CONTAINER_DIR / "codex-config-append.toml",
         )
 
         enable_hooks_cmd = r"""
 set -e
-CONFIG=/home/agent/.codex/config.toml
+CONFIG=/root/.codex/config.toml
 TMP=$(mktemp)
-mkdir -p /home/agent/.codex
+mkdir -p /root/.codex
 touch "$CONFIG"
 if grep -Eq '^[[:space:]]*hooks[[:space:]]*=' "$CONFIG"; then
     sed -E 's/^[[:space:]]*hooks[[:space:]]*=.*/hooks = true/' "$CONFIG" > "$TMP"
@@ -139,29 +147,16 @@ elif grep -Eq '^[[:space:]]*\[features\][[:space:]]*$' "$CONFIG"; then
     ' "$CONFIG" > "$TMP"
 else
     cp "$CONFIG" "$TMP"
-    cat /tmp/sforge-codex-config-append.toml >> "$TMP"
+    cat /opt/sforge/codex-config-append.toml >> "$TMP"
 fi
 mv "$TMP" "$CONFIG"
-chown -R agent:agent /home/agent/.codex
 """
         result = backend.exec_run(
-            handle, ["/bin/bash", "-lc", enable_hooks_cmd], user="root",
+            handle, ["/bin/bash", "-lc", enable_hooks_cmd],
         )
         if result.exit_code != 0:
             raise RuntimeError(f"Failed to configure Codex hooks: {result.output}")
         logger.info("Configured Codex hooks")
-
-
-class Codex0_145_0Agent(CodexAgent):
-    """Codex pinned to 0.145.0. Kept as a separate agent so existing
-    codex (0.130.0) results stay comparable."""
-
-    name = "codex-0.145.0"
-    install_cmds = [
-        CodexAgent.install_cmds[0],
-        "sudo -E npm install -g @openai/codex@0.145.0",
-        CodexAgent.install_cmds[2],
-    ]
 
 
 # ---------------------------------------------------------------------------

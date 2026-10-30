@@ -1,0 +1,110 @@
+name: ANN benchmarks
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+# Cancel the workflow for the previous commit when the new commit is pushed.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: True
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3 # Pull the repository
+      - run: sudo apt-get update && sudo apt-get install -y libhdf5-dev python3-numpy python3-scipy python3-matplotlib python3-sklearn
+      - run: pip3 install --quiet -r requirements.txt
+      - run: pytest
+
+  run-benchmarks:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        dataset: [random-xs-20-angular]
+        library:
+          - annoy
+          - balltree
+          - bruteforce
+          - ckdtree
+          - descartes
+          - diskann
+          - dolphinnpy
+          - elasticsearch
+          - elastiknn
+          - expann
+          - faiss
+          - flann
+          - glass
+          - hnswlib
+          - kdtree
+          - kgn
+          - luceneknn
+          - milvus
+          - mrpt
+          - nndescent
+          - n2
+          - nmslib
+          - onng_ngt
+          - opensearchknn
+          - panng_ngt
+          - parlayann
+          - pg_embedding
+          - pgvector
+          - pgvectorscale
+          - pgvecto_rs
+          - pynndescent
+          - redisearch
+          - qdrant
+          - qg_ngt
+          - qsg_ngt
+          - scann
+          - sptag
+          - tinyknn
+          - vald
+          - vearch
+          - vespa
+          - voyager
+          - vsag
+          - weaviate
+        include:
+          - library: pynndescent
+            dataset: random-xs-16-hamming
+          - library: datasketch
+            dataset: random-s-jaccard
+          - library: pynndescent
+            dataset: random-s-jaccard
+
+    name: ${{ matrix.library }} (${{ matrix.dataset }})
+
+    env:
+      LIBRARY: ${{ matrix.library }}
+      DATASET: ${{ matrix.dataset }}
+
+    steps:
+    - uses: actions/checkout@v3 # Pull the repository
+
+    - name: Install OS Dependencies
+      run: sudo apt-get update && sudo apt-get install -y libhdf5-dev python3-numpy python3-scipy python3-matplotlib python3-sklearn
+
+    - name: Install Project Dependencies
+      run: pip3 install --quiet -r requirements.txt
+
+    - name: Build Library Docker Image
+      run: python3 install.py
+
+    - name: Run the benchmark
+      run: |
+        python3 run.py --docker-tag ann-benchmarks-${LIBRARY} --max-n-algorithms 3 --runs 2 --dataset $DATASET --run-disabled --timeout 300
+        python3 run.py --docker-tag ann-benchmarks-${LIBRARY} --max-n-algorithms 3 --runs 2 --dataset $DATASET --run-disabled --batch --timeout 300
+        sudo chmod -R 777 results/
+        python3 plot.py --dataset $DATASET --output plot.png
+        python3 plot.py --dataset $DATASET --output plot-batch.png --batch
+        python3 data_export.py --out test.csv
+        python3 create_website.py --outputdir . --scatter --latex

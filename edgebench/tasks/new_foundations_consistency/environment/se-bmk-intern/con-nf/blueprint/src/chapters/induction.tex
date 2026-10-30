@@ -1,0 +1,137 @@
+\section{Induction, in abstract}
+In this section, we prove a theorem on inductive constructions using a proof-irrelevant \( \Prop \).
+\begin{definition}
+  \label{def:IC}
+  Let \( I : \Type_u \) be a type with a well-founded transitive relation \( \prec \).
+  Let \( A : I \to \Type_v \) be a family of types indexed by \( I \), and let
+  \[ B : \prod_{i : I} A_i \to \left(\prod_{j : I} j \prec i \to A_j\right) \to \Sort_w \]
+  An \emph{inductive construction} for \( (I, A, B) \) is a pair of functions
+  \begin{align*}
+    &F_A : \prod_{i : I} \prod_{d : \prod_{j : I} j \prec i \to A_j} \\
+    &\quad\left( \prod_{j : I} \prod_{h : j \prec i} B\ j\ (d\ j\ h)\ (k\ h' \mapsto d\ k\ (\newoperator{trans}(h',h))) \right) \to A_i \\
+    &F_B : \prod_{i : I} \prod_{d : \prod_{j : I} j \prec i \to A_j} \\
+    &\quad\prod_{h : \left( \prod_{j : I} \prod_{h : j \prec i} B\ j\ (d\ j\ h)\ (k\ h' \mapsto d\ k\ (\newoperator{trans}(h',h))) \right)} B\ i\ (F_A\ i\ d\ h)\ d
+  \end{align*}
+\end{definition}
+\begin{proposition}[inductive construction theorem for propositions]
+  \uses{def:IC}
+  \label{prop:IC.fix_prop}
+  Let \( (F_A, F_B) \) be an inductive construction for \( (I, A, B) \), where \( w \) is \( 0 \).
+  Then there are computable functions
+  \[ G : \prod_{i : I} A_i;\quad H : \prod_{i : I} B\ i\ G_i\ (j\ \_ \mapsto G_j) \]
+  such that for each \( i : I \),
+  \[ G_i = F_A\ i\ (j\ \_ \mapsto G_j)\ (F_B\ i\ (j\ \_ \mapsto H_j)) \]
+\end{proposition}
+\begin{proof}
+  Recall that \( \Part \alpha \) denotes the type \( \sum_{p: \Prop} (p \to \alpha) \).
+  For \( i : I \), we define the \emph{hypothesis} on data \( t : \prod_{j : I} j \prec i \to \Part A_j \) to be the proposition
+  \begin{align*}
+    \newoperator{IH}(i, t) = &\sum_{D : \prod_{j : I} \prod_{h : j \prec i} \pr_1(t\ j\ h)} \prod_{j : I} \prod_{h : j \prec i} B\ j\ (\pr_2(t\ j\ h)\ (D\ j\ h))\\
+    &\quad(k\ h' \mapsto (\pr_2(t\ k\ (\newoperator{trans}(h',h)))\ (D\ k\ (\newoperator{trans}(h',h)))))
+  \end{align*}
+  Now we define \( K : \prod_{i : I} \Part A_i \) by
+  \[ K = \newoperator{fix}_{\Part A_{(-)}} \left( i t \mapsto \left\langle \newoperator{IH}(i, t), h \mapsto F_A\ i\ (j\ h' \mapsto (\pr_2(t\ j\ h')\ (\pr_1(h)\ j\ h')))\ \pr_2(h) \right\rangle \right) \]
+  where \( \newoperator{fix}_C \) is the fixed point function for \( \prec \) and induction motive \( C : I \to \Type_v \), with type
+  \[ \newoperator{fix}_C : \left( \prod_{i : I} \left( \prod_{j : I} j \prec i \to C_j \right) \to C_i \right) \to \prod_{i : I} C_i \]
+  By definition of \( \newoperator{fix} \), we obtain the equation
+  \[ K_i = \left\langle \newoperator{IH}(i, j \_ \mapsto K_j), h \mapsto F_A\ i\ (j\ h' \mapsto (\pr_2(K_j)\ (\pr_1(h)\ j\ h')))\ \pr_2(h) \right\rangle \]
+  Further, if \( h_1 : \pr_1(K_i) \), we have the equation
+  \[ \pr_2(K_i)\ h_1 = F_A\ i\ (j\ h' \mapsto (\pr_2(K_j)\ (\pr_1(h_2)\ j\ h')))\ \pr_2(h_2) \]
+  where \( h_2 : \newoperator{IH}(i, j \_ \mapsto K_j) \) is obtained by casting from \( h_1 \) using the previous equation; this equation is derived from the extensionality principle of \( \Part \), which states that
+  \[ \prod_{x, y : \Part \alpha} \left( \prod_{a : \alpha} (\exists h,\, a = \pr_2(x)\ h) \leftrightarrow (\exists h,\, a = \pr_2(y)\ h) \right) x = y \]
+  Using these two equations, we may now show directly by induction on \( i \) that \( D' : \prod_{i : I} \pr_1(K_i) \).\footnote{TODO: More details?}
+  From this, we may define \( G : \prod_{i : I} A_i \) by \( G_i = \pr_2(K_i)\ D'_i \).
+  We may then easily obtain \( H : \prod_{i : I}\ B\ i\ G_i\ (j \_ \mapsto G_j) \) by appealing to \( F_B \) and the two equations above.
+  The required equality also easily follows from the two given equations.
+\end{proof}
+\begin{theorem}[inductive construction theorem]
+  \label{prop:IC.fix}
+  Let \( (F_A, F_B) \) be an inductive construction for \( (I, A, B) \).
+  Then there are \emph{noncomputable} functions
+  \[ G : \prod_{i : I} A_i;\quad H : \prod_{i : I} B\ i\ G_i\ (j\ \_ \mapsto G_j) \]
+  such that for each \( i : I \),
+  \[ G_i = F_A\ i\ (j\ \_ \mapsto G_j)\ (F_B\ i\ (j\ \_ \mapsto H_j)) \]
+\end{theorem}
+\begin{proof}
+  \uses{prop:IC.fix_prop}
+  Define
+  \[ C : \prod_{i : I} A_i \to \left(\prod_{j : I} j \prec i \to A_j\right) \to \Prop \]
+  by \( C\ i\ x\ d = \newoperator{Nonempty}(B\ i\ x\ d) \).
+  We then define the inductive construction \( (F_A', F_B') \) for \( (I, A, C) \) by
+  \[ F_A'\ i\ d\ h = F_A\ i\ d\ (j h' \mapsto \newoperator{some}(h\ j\ h'));\quad F_B'\ i\ d\ h = \langle F_B\ i\ d\ (j h' \mapsto \newoperator{some}(h\ j\ h')) \rangle \]
+  where \( \langle-\rangle \) is the constructor and \( \newoperator{some} \) is the noncomputable destructor of \( \newoperator{Nonempty} \).
+  The result is then direct from \cref{prop:IC.fix_prop}.
+\end{proof}
+
+\section{Building the tower}
+\begin{definition}
+  \uses{def:ModelData}
+  \label{def:MainMotive}
+  For a proper type index \( \alpha \), the \emph{main motive} at \( \alpha \) is the type \( \Motive_\alpha \) consisting of model data at \( \alpha \), a position function for \( \Tang_\alpha \), and typed near-litters at \( \alpha \), such that if \( (x, S) \) is an \( \alpha \)-tangle and \( y \) is an atom or near-litter that occurs in the range of \( S_A \), then \( \iota(y) < \iota(x, S) \).
+\end{definition}
+\begin{definition}
+  \uses{def:MainMotive,def:TypedNearLitter,def:InflexiblePath}
+  \label{def:MainHypothesis}
+  We define the \emph{main hypothesis}
+  \[ \Hypothesis : \prod_{\alpha : \lambda} \Motive_\alpha \to \left( \prod_{\beta < \alpha} \Motive_\beta \right) \to \Type_{u+1} \]
+  at \( \alpha \), given \( \Motive_\alpha \) and \( \prod_{\beta < \alpha} \Motive_\beta \), to be the type consisting of the following data.
+  \begin{itemize}
+    \item For \( \gamma < \beta \leq \alpha \), there is a map \( \AllPerm_\beta \to \AllPerm_\gamma \) that commutes with the coercions from \( \AllPerm_{(-)} \) to \( \StrPerm_{(-)} \).
+    \item Let \( \beta, \gamma < \alpha \) be distinct with \( \gamma \) proper.
+    Let \( t : \Tang_\beta \) and \( \rho : \AllPerm_\alpha \).
+    Then
+    \[ (\rho_\gamma)_\bot(f_{\beta,\gamma}(t)) = f_{\beta,\gamma}(\rho_\beta(t)) \]
+    \item Suppose that \( (\rho(\beta))_{\beta < \alpha} \) is a collection of allowable permutations such that whenever \( \beta, \gamma < \alpha \) are distinct, \( \gamma \) is proper, and \( t : \Tang_\gamma \), we have
+    \[ (\rho(\gamma))_\bot(f_{\beta,\gamma}(t)) = f_{\beta,\gamma}(\rho(\beta)(t)) \]
+    Then there is an \( \alpha \)-allowable permutation \( \rho \) with \( \rho_\beta = \rho(\beta) \) for each \( \beta < \alpha \).
+    \item For any \( \beta < \alpha \),
+    \[ U_\alpha(x)(\beta) \subseteq \ran U_\beta \]
+    \item (extensionality) If \( \beta : \lambda \) is such that \( \beta < \alpha \), the map \( U_\alpha(-)(\beta) : \TSet_\beta \to \Set \StrSet_\beta \) is injective.
+    \item If \( \beta : \lambda \) is such that \( \beta < \alpha \), for every \( x : \TSet_\beta \) there is some \( y : \TSet_\alpha \) such that \( U_\alpha(y)(\beta) = \{ x \} \), and we write \( \singleton_\alpha(x) \) for this object \( y \).
+  \end{itemize}
+\end{definition}
+\begin{definition}
+  \uses{def:MainMotive,def:NewModelData,def:CoherentData,prop:card_tangle,prop:newPos}
+  \label{def:motiveStep}
+  The \emph{inductive step for the main motive} is the function
+  \begin{align*}
+    &\newoperator{Step}_M : \prod_{\alpha : \lambda} \prod_{M : \prod_{\beta < \alpha} \Motive_\beta} \\
+    &\quad\left( \prod_{\beta : \lambda} \prod_{h : \beta < \alpha} \Hypothesis\ \beta\ (M\ \beta\ h)\ (\gamma\ h' \mapsto M\ \gamma\ (\newoperator{trans}(h',h))) \right) \to \Motive_\alpha
+  \end{align*}
+  given as follows.
+  Given the hypotheses \( \alpha, M, H \), we use \cref{def:NewModelData} to construct model data at level \( \alpha \).
+  Then, combine this with \( H \) to create an instance of coherent data below level \( \alpha \).\footnote{This requires using the definition of new allowable permutations. There may be some difficulties here in converting between the types of model data at level \( \alpha \) together with model data at all \( \beta < \alpha \), and model data at all levels \( \beta \leq \alpha \).}
+  By \cref{prop:card_tangle}, we conclude that \( \#\Tang_\alpha = \#\mu \), and so by \cref{prop:newPos} there is a position function on \( \Tang_\alpha \) that respects the typed near-litters defined in \cref{def:newTypedNearLitter}.
+  These data comprise the main motive at level \( \alpha \).
+\end{definition}
+\begin{definition}
+  \uses{def:MainHypothesis,def:motiveStep,def:newSingleton}
+  \label{def:hypothesisStep}
+  The \emph{inductive step for the main hypothesis} is the function
+  \begin{align*}
+    &\newoperator{Step}_H : \prod_{\alpha : \lambda} \prod_{M : \prod_{\beta < \alpha} \Motive_\beta} \\
+    &\quad\prod_{H : \prod_{\beta : \lambda} \prod_{h : \beta < \alpha} \Hypothesis\ \beta\ (M\ \beta\ h)\ (\gamma\ h' \mapsto M\ \gamma\ (\newoperator{trans}(h',h)))}\\
+    &\quad\Hypothesis\ \alpha\ (\newoperator{Step}_M\ \alpha\ M\ H)\ M
+  \end{align*}
+  given as follows.
+  Given the hypotheses \( \alpha, M, H \), we use the definitions from \cref{def:motiveStep} to obtain model data at level \( \alpha \) and coherent data below level \( \alpha \).
+  The remaining proof obligations are handled by \cref{def:newSingleton,prop:newPos}.
+\end{definition}
+\begin{theorem}[model construction]
+  \uses{def:motiveStep,def:hypothesisStep}
+  \label{thm:model_construction}
+  There are noncomputable functions
+  \[ \newoperator{ComputeMotive} : \prod_{\alpha : \lambda} \Motive_\alpha \]
+  and
+  \[ \newoperator{ComputeHypothesis} : \prod_{\alpha : \lambda} \Hypothesis\ \alpha\ \newoperator{ComputeMotive}_\alpha\ (\beta\ \_ \mapsto \newoperator{ComputeMotive}_\beta) \]
+  such that for each \( \alpha : \lambda \),
+  \begin{align*}
+    \newoperator{ComputeMotive}_\alpha = &\newoperator{Step}_M\ \alpha\ (\beta\ \_ \mapsto \newoperator{ComputeMotive}_\beta)\\
+    &(\newoperator{Step}_H\ \alpha\ (\beta\ \_ \mapsto \newoperator{ComputeHypothesis}_\beta))
+  \end{align*}
+\end{theorem}
+\begin{proof}
+  \uses{prop:IC.fix}
+  Direct from \cref{prop:IC.fix}.
+\end{proof}
+We can then reconstruct, for each level \( \alpha \), the type of coherent data below \( \alpha \).

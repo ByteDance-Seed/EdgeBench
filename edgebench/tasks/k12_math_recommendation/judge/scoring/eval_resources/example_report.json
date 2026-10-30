@@ -1,0 +1,46 @@
+{
+  "weights": {
+    "M1": 0.35,
+    "M2": 0.2,
+    "M3": 0.25,
+    "M4": 0.15,
+    "M5": 0.05
+  },
+  "M1_next_question_auc": {
+    "auc": 0.6899464771173297,
+    "n_scenarios_valid": 94,
+    "score": 47.48661927933242
+  },
+  "M2_knowledge_calibration": {
+    "ece_per_student_mean": 0.1385233644062238,
+    "spearman_per_student_mean": 0.31853912567970794,
+    "ece_component": 44.590654237510485,
+    "spearman_component": 31.853912567970795,
+    "n_students_valid": 95,
+    "score": 38.22228340274064
+  },
+  "M3_learning_gain": {
+    "agent_mean": 0.5316168998415137,
+    "random_mean": 0.5254126569190276,
+    "gain": 0.006204242922486114,
+    "gain_for_full_score": 0.05,
+    "score": 12.408485844972228
+  },
+  "M4_constraint_satisfaction": {
+    "per_scenario_mean": 0.9915789473684211,
+    "per_constraint_pass_rate": {
+      "C1": 1.0,
+      "C2": 1.0,
+      "C3": 0.9578947368421052,
+      "C4": 1.0,
+      "C5": 1.0
+    },
+    "n_scenarios": 95,
+    "score": 99.15789473684211
+  },
+  "M5_inference_efficiency": {
+    "infer_time_seconds": 5.0,
+    "score": 100.0
+  },
+  "total_score": 47.241
+}

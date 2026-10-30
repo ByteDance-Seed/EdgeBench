@@ -1,0 +1,35 @@
+schema_version = 0
+id = "jagua_nesting_optimization"
+name = "Jagua Nesting Optimization"
+category = "Combinatorial Optimization"
+language = "Rust"
+description = "Improve a Rust-based 2D irregular bin packing optimizer for non-convex polygonal pieces. Solution geometry is independently verified; improvements below a minimum threshold receive no credit."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "rust"              # bases/rust (rust:1.78 + git curl jq build-essential); toolchain 1.88.0 added by the task
+platform = "linux/amd64"
+cwd = "/home/workspace/jagua-rs"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["lbf/src/", "jagua-rs/src/", "lbf/Cargo.toml", "jagua-rs/Cargo.toml", "Cargo.toml"]
+exclude = ["target/", ".git/", "assets/"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 1200
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# The grader is timed: each lbf run has a 20 s limit and the
+# score is multiplied by a runtime factor (candidate vs reference wall time), see NOTES.md.
+
+[score]
+direction = "maximize"
+# raw score = v1 TOTAL_SCORE (sum of 16 per-case scores of 6.25 points each, so 0..100).
+# v1 defined no rescale (score_0_100 was null), so none is set here either; see NOTES.md.

@@ -1,0 +1,36 @@
+contourpy==1.3.3 \
+    --hash=sha256:51e79c1f7470158e838808d4a996fa9bac72c498e93d8ebe5119bc1e6becb0db  # contourpy-1.3.3-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+cycler==0.12.1 \
+    --hash=sha256:85cef7cff222d8644161529808465972e51340599459b8ac3ccbac5a854e0d30  # cycler-0.12.1-py3-none-any.whl
+discretize==0.12.0 \
+    --hash=sha256:688e909b3a05e305389a561c343145e96b96f03539735c742058b294fccab94d  # discretize-0.12.0-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl
+fonttools==4.63.0 \
+    --hash=sha256:d76ac49f929aecaf82d83250b8347e099d7aecba0f4726c1d9b6df3b8bb5fe18  # fonttools-4.63.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
+geoana==0.8.1 \
+    --hash=sha256:1521e7d15e7e0670d6c304ef214f09acf6132e7f7e9b8744d9e38e3e2d8f0eb0  # geoana-0.8.1-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl
+kiwisolver==1.5.0 \
+    --hash=sha256:2517e24d7315eb51c10664cdb865195df38ab74456c677df67bb47f12d088a27  # kiwisolver-1.5.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
+libdlf==0.3.0 \
+    --hash=sha256:bb7b29e46b837f88289089358673513a204cc21d0d783b175a10bbdaff093367  # libdlf-0.3.0-py3-none-any.whl
+matplotlib==3.10.9 \
+    --hash=sha256:8e436d155fa8a3399dc62683f8f5d0e2e50d25d0144a73edd73f82eec8f4abfb  # matplotlib-3.10.9-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
+numpy==2.4.6 \
+    --hash=sha256:89cd468399cfd2504718f0ba50e410dca55a170b61a02ad92bb18c8a65186e93  # numpy-2.4.6-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+packaging==26.2 \
+    --hash=sha256:5fc45236b9446107ff2415ce77c807cee2862cb6fac22b8a73826d0693b0980e  # packaging-26.2-py3-none-any.whl
+pillow==12.2.0 \
+    --hash=sha256:e74473c875d78b8e9d5da2a70f7099549f9eb37ded4e2f6a463e60125bccd176  # pillow-12.2.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+pymatsolver==0.4.0 \
+    --hash=sha256:0ef77e92ac5a780df08d921cc772e0fe230d88e114355eaa2958a2ffa5b35004  # pymatsolver-0.4.0.tar.gz
+pyparsing==3.3.2 \
+    --hash=sha256:850ba148bd908d7e2411587e247a1e4f0327839c40e2e5e6d05a007ecc69911d  # pyparsing-3.3.2-py3-none-any.whl
+python-dateutil==2.9.0.post0 \
+    --hash=sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427  # python_dateutil-2.9.0.post0-py2.py3-none-any.whl
+scipy==1.17.1 \
+    --hash=sha256:43af8d1f3bea642559019edfe64e9b11192a8978efbd1539d7bc2aaa23d92de4  # scipy-1.17.1-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+simpeg==0.25.2 \
+    --hash=sha256:feeb106f70bf093ecd6b531dad49cc179d11c5e69dbff0c64f9c3cf8b5e2eb97  # simpeg-0.25.2.tar.gz
+six==1.17.0 \
+    --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274  # six-1.17.0-py2.py3-none-any.whl
+typing_extensions==4.15.0 \
+    --hash=sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548  # typing_extensions-4.15.0-py3-none-any.whl

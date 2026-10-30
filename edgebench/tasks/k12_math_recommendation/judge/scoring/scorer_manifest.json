@@ -1,0 +1,78 @@
+{
+  "entrypoint": "eval_resources/evaluate.py",
+  "kind": "python",
+  "command": [
+    "python3",
+    "/home/workspace/scoring/eval_resources/evaluate.py",
+    "--ground_truth",
+    "/home/workspace/scoring/eval_resources/test_ground_truth.json",
+    "--scenarios",
+    "/home/workspace/scoring/eval_resources/test_scenarios.json",
+    "--logs",
+    "/home/workspace/input/input_data/answering_logs.csv",
+    "--questions",
+    "/home/workspace/input/input_data/question_bank.csv",
+    "--kp_graph",
+    "/home/workspace/input/input_data/knowledge_graph.csv",
+    "--infer_cmd",
+    "python3 infer.py --scenarios /home/workspace/scoring/eval_resources/test_scenarios.json --output {output}",
+    "--deliverables_dir",
+    "/home/workspace",
+    "--output",
+    "/home/workspace/report.json"
+  ],
+  "working_dir": "/home/workspace",
+  "required_submission_files": [
+    "infer.py"
+  ],
+  "required_input_files": [
+    "input_data/answering_logs.csv",
+    "input_data/question_bank.csv",
+    "input_data/knowledge_graph.csv"
+  ],
+  "required_scoring_files": [
+    "eval_resources/test_ground_truth.json",
+    "eval_resources/test_scenarios.json",
+    "eval_resources/student_simulator.py"
+  ],
+  "score_output": {
+    "source": "file",
+    "format": "json_path",
+    "pattern": null,
+    "json_path": "$.total_score",
+    "csv_column": null,
+    "file_path": "/home/workspace/report.json",
+    "scale_max": 100
+  },
+  "score_normalization": {
+    "raw_min": 0,
+    "raw_max": 100,
+    "target_min": 0,
+    "target_max": 100
+  },
+  "failure_policy": {
+    "missing_submission": "zero_score",
+    "missing_dependency": "infra_error",
+    "missing_scoring_file": "infra_error",
+    "parse_failure": "infra_error",
+    "nonzero_exit_without_score": "infra_error"
+  },
+  "confidence": "high",
+  "evidence": [
+    "Feishu scoring text explicitly says the final score is a weighted sum out of 100 and that the evaluation script is located at eval_resources/evaluate.py.",
+    "eval_resources/evaluate.py defines argparse flags --submission, --ground_truth, --scenarios, --logs, --questions, --kp_graph, --infer_time_seconds, --infer_cmd, --deliverables_dir, and --output.",
+    "eval_resources/evaluate.py supports closed-loop timing via --infer_cmd and run_and_time_inference requires the command template to contain the {output} placeholder.",
+    "Feishu scoring text recommends closed-loop timing with --infer_cmd \"python infer.py … --output {output}\" and defines M5 from the measured infer.py wall-clock time.",
+    "The task constraints state that running python infer.py --scenarios test_scenarios.json --output submission.json should produce the submission file, so infer.py is the submitted script required before scoring starts.",
+    "eval_resources/evaluate.py reads hidden test labels from test_ground_truth.json, hidden evaluation scenarios from test_scenarios.json, and imports StudentSimulator from student_simulator.py.",
+    "eval_resources/evaluate.py uses answering_logs.csv, question_bank.csv, and knowledge_graph.csv for M3/M4 simulation and constraint checks.",
+    "eval_resources/evaluate.py computes total = 0.35*M1 + 0.20*M2 + 0.25*M3 + 0.15*M4 + 0.05*M5, writes the report to --output, and stores the benchmark score in the top-level JSON key total_score.",
+    "eval_resources/evaluate.py check_deliverables() checks train.py, infer.py, requirements.txt, and README.md under --deliverables_dir and applies an M5 penalty for missing files rather than requiring them as scorer inputs.",
+    "Feishu scoring text states eval_resources/evaluate.py, eval_resources/student_simulator.py, and eval_resources/test_scenarios.json are not distributed to the Agent, so they are judge-only scoring files rather than worker submission requirements."
+  ],
+  "warnings": [
+    "The scorer runs infer.py but does not run train.py; submissions that require a separate training step or missing local model artifacts may fail during inference.",
+    "train.py, requirements.txt, and README.md are intentionally not listed in required_submission_files because evaluate.py handles their absence through the deliverables_dir M5 penalty, while infer.py is the only submitted file directly executed by the command.",
+    "The hidden test_scenarios.json is passed to infer.py as evaluation input during scoring; it remains a judge-only scoring asset and is not a worker-required submission file."
+  ]
+}

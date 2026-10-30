@@ -1,0 +1,202 @@
+\documentclass{book}
+
+\usepackage[a4paper]{geometry}
+\usepackage{minitoc}
+
+\usepackage{parskip}
+
+\usepackage{fontspec}
+\usepackage{unicode-math}
+\setmainfont[Path=../fonts/STIXTwo/,
+	UprightFont=*-Regular.otf,
+	BoldFont=*-Bold.otf,
+	ItalicFont=*-Italic.otf,
+	BoldItalicFont=*-BoldItalic.otf,
+	]{STIXTwoText}[Numbers={OldStyle,Monospaced}, Ligatures=TeX]
+\setsansfont[Path=../fonts/Source_Sans_3/static/]{SourceSans3-Regular.ttf}[Ligatures={Common,TeX}]
+\setmathfont[Path=../fonts/STIXTwo/]{STIXTwoMath-Regular.otf}
+\setmathfont[Path=../fonts/,range=\star]{TeXGyrePagellaMath.otf}
+\setmonofont[Path=../fonts/JuliaMono-ttf/,
+  UprightFont=*-Regular.ttf,
+  BoldFont=*-Bold.ttf,
+  ItalicFont=*-RegularItalic.ttf,
+  BoldItalicFont=*-BoldItalic.ttf]{JuliaMono}
+
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{cleveref}
+\hypersetup{
+	colorlinks=true,
+	linkcolor=red!50!black,
+	citecolor=green!50!black,
+	urlcolor=magenta!70!black,
+}
+
+\usepackage[outputdir=build]{minted}
+\newmintinline[lean]{'lean4.py:Lean4Lexer -x'}{fontsize=\footnotesize,bgcolor=white}
+\newminted[leancode]{'lean4.py:Lean4Lexer -x'}{fontsize=\scriptsize,breaklines}
+
+\usemintedstyle{xcode}
+
+\usepackage{biblatex}
+\addbibresource{../blueprint/src/refs.bib}
+
+\begin{document}
+
+% Replaces "chapter 2" with "chapter II" and "section 2.4" with "section 4"
+% \renewcommand{\thechapter}{\Roman{chapter}}
+% \renewcommand{\thesection}{\arabic{section}}
+
+\begin{titlepage}
+	\begin{center}
+		\vspace*{1cm}
+
+		\Huge
+		\textbf{\emph{New Foundations} is consistent: documentation of the formal proof}
+
+		\vspace{0.5cm}
+		\LARGE
+		Sky Wilshaw
+
+		\vfill
+
+		\Large
+		University of Nottingham\\
+		2022--\the\year{}
+
+	\end{center}
+\end{titlepage}
+
+\dominitoc{}
+
+\setcounter{tocdepth}{1}
+\tableofcontents
+\newpage
+\setcounter{tocdepth}{3}
+
+\chapter{Overview}
+
+\input{overview.tex}
+
+\chapter{The base type}
+
+In this chapter, we will define some of the ambient structure that our model of tangled type theory is going to live inside.
+
+\medskip
+\minitoc
+\newpage
+
+\input{generated/Base/Params.tex}
+\input{generated/Base/Small.tex}
+\input{generated/Base/TypeIndex.tex}
+\input{generated/Base/Litter.tex}
+\input{generated/Base/Atom.tex}
+\input{generated/Base/NearLitter.tex}
+\input{generated/Base/BasePerm.tex}
+
+\chapter{Ambient higher type structure}
+
+\minitoc
+\newpage
+
+\input{generated/Levels/Path.tex}
+\input{generated/Levels/Tree.tex}
+\input{generated/Levels/StrPerm.tex}
+\input{generated/Levels/StrSet.tex}
+
+\chapter{Position functions}
+
+\minitoc
+\newpage
+
+\input{generated/Position/Position.tex}
+\input{generated/Position/Deny.tex}
+\input{generated/Position/BasePositions.tex}
+
+\chapter{Model data}
+
+\minitoc
+\newpage
+
+\input{generated/ModelData/Enumeration.tex}
+\input{generated/ModelData/PathEnumeration.tex}
+\input{generated/ModelData/Support.tex}
+\input{generated/ModelData/ModelData.tex}
+\input{generated/ModelData/Fuzz.tex}
+\input{generated/ModelData/Level.tex}
+\input{generated/ModelData/CoherentData.tex}
+
+\chapter{The model construction}
+
+\minitoc
+\newpage
+
+\input{generated/Construction/Code.tex}
+\input{generated/Construction/NewModelData.tex}
+
+\chapter{Freedom of action}
+
+\minitoc
+\newpage
+
+\input{generated/FOA/Inflexible.tex}
+\input{generated/FOA/Coherent.tex}
+\input{generated/FOA/BaseApprox.tex}
+\input{generated/FOA/StrApprox.tex}
+\input{generated/FOA/StrApproxFOA.tex}
+\input{generated/FOA/BaseAction.tex}
+\input{generated/Background/PermutativeExtension.tex}
+\input{generated/FOA/FlexApprox.tex}
+\input{generated/FOA/StrAction.tex}
+\input{generated/FOA/StrActionFOA.tex}
+
+\chapter{Strong supports}
+
+\minitoc
+\newpage
+
+\input{generated/Strong/Strong.tex}
+\input{generated/Strong/CodingFunction.tex}
+\input{generated/Strong/Spec.tex}
+\input{generated/Strong/SMulSpec.tex}
+\input{generated/Strong/SpecSame.tex}
+
+\chapter{The counting argument}
+
+\minitoc
+\newpage
+
+\input{generated/Counting/Recode.tex}
+\input{generated/Counting/CountSupportOrbit.tex}
+\input{generated/Counting/BaseCoding.tex}
+\input{generated/Counting/BaseCounting.tex}
+\input{generated/Counting/Conclusions.tex}
+
+\chapter{Building the model}
+
+\minitoc
+\newpage
+
+\input{generated/Model/InductionStatement.tex}
+\input{generated/Model/ConstructMotive.tex}
+\input{generated/Model/ConstructHypothesis.tex}
+\input{generated/Background/InductiveConstruction.tex}
+\input{generated/Model/RunInduction.tex}
+\input{generated/Model/Externalise.tex}
+\input{generated/Model/RaiseStrong.tex}
+\input{generated/Model/TTT.tex}
+\input{generated/Model/Hailperin.tex}
+\input{generated/Model/Result.tex}
+
+\chapter{Externalised results}
+
+\minitoc
+\newpage
+
+\input{generated/External/Basic.tex}
+\input{generated/External/Counting.tex}
+\input{generated/External/WellOrder.tex}
+
+\printbibliography
+
+\end{document}

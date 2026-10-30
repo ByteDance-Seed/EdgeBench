@@ -1,0 +1,132 @@
+% !TeX root = print.tex
+% !TEX program = xelatex
+% This file makes a printable version of the blueprint
+
+\documentclass[11pt,reqno,a4paper,dvipsnames]{amsart}
+
+% \usepackage[utf8]{inputenc}
+\usepackage[dvipsnames]{xcolor}
+\usepackage[textwidth=14cm]{geometry}
+\usepackage{xfrac}
+\usepackage{polyglossia}
+\setdefaultlanguage{english}
+
+\usepackage{amsmath,amssymb}
+\usepackage{enumitem}
+
+\usepackage{tikz-cd}
+
+\usepackage{mathtools}
+\usepackage[warnings-off={mathtools-colon,mathtools-overbracket}]{unicode-math}
+\usepackage{fontspec}
+\setmathfont{latinmodern-math.otf}
+\setmathfont[range=\varnothing, Scale=MatchUppercase]{Asana-Math.otf}
+\setmathfont[range=\pitchfork, Scale=MatchUppercase]{Asana-Math.otf}
+\setmathfont[range=\intprod, Scale=MatchUppercase]{Asana-Math.otf}
+\setmathfont[range=\int, Scale=MatchUppercase]{latinmodern-math.otf}
+\setmathfont[range=\setminus, Scale=MatchUppercase]{Asana-Math.otf}
+
+\usepackage{amsthm}
+\usepackage{etexcmds}
+\usepackage{thmtools}
+% \usepackage{showlabels}
+
+\usepackage[stretch=10]{microtype}
+
+\input{preamble/common}
+\input{preamble/print}
+\usepackage[nameinlink, capitalize]{cleveref}
+
+\usepackage[style=trad-alpha]{biblatex}
+\ExecuteBibliographyOptions{safeinputenc=true,backref=true,giveninits,useprefix=true,maxnames=5,doi=false,eprint=true,isbn=false,url=false}
+\bibliography{bibliography.bib}
+
+\author[Becker et al.]{Lars Becker}
+\address{Lars Becker,
+	University of Bonn}
+\email{becker@math.uni-bonn.de}
+
+\author[]{Mar\'ia In\'es de Frutos-Fern\'andez}
+\address{Mar\'ia In\'es de Frutos-Fern\'andez,
+	University of Bonn}
+\email{midff@math.uni-bonn.de}
+
+\author[]{Leo Diedering}
+\address{Leo Diedering,
+	University of Bonn}
+\email{leo.diedering@uni-bonn.de}
+
+\author[]{Floris van Doorn}
+\address{Floris van Doorn,
+	University of Bonn}
+\email{vdoorn@math.uni-bonn.de}
+
+\author[]{S\'ebastien Gou\"ezel}
+\address{S\'ebastien Gou\"ezel,
+	University of Rennes}
+\email{sebastien.gouezel@univ-rennes1.fr}
+
+\author[]{Asgar Jamneshan}
+\address{Asgar Jamneshan,
+	University of Bonn}
+\email{ajamnesh@math.uni-bonn.de}
+
+\author[]{Evgenia Karunus}
+\address{Evgenia Karunus,
+  University of Bonn}
+\email{lakesare@gmail.com}
+
+\author[]{Edward van de Meent}
+\address{Edward van de Meent,
+  University of Utrecht}
+\email{edwardvdmeent@gmail.com}
+
+\author[]{Pietro Monticone}
+\address{Pietro Monticone,
+University of Trento}
+\email{pit.monticone@gmail.com}
+
+\author[]{Jasper Mulder-Sohn}
+\address{Jasper Mulder-Sohn,
+	The Hague}
+\email{jasper.mulder@planet.nl}
+
+\author[]{Jim Portegies}
+\address{Jim Portegies,
+  Eindhoven University of Technology}
+\email{j.w.portegies@tue.nl}
+
+\author[]{Joris Roos}
+\address{Joris Roos,
+  University of Massachusetts Lowell}
+\email{joris\_roos@uml.edu}
+
+\author[]{Michael Rothgang}
+\address{Michael Rothgang,
+	University of Bonn}
+\email{rothgang@math.uni-bonn.de}
+
+\author[]{Rajula Srivastava}
+\address{Rajula Srivastava,
+	University of Bonn}
+\email{rajulas@math.uni-bonn.de}
+
+\author[]{James Sundstrom}
+\address{James Sundstrom,
+	Baruch College}
+\email{james.sundstrom@baruch.cuny.edu}
+
+\author[]{Jeremy Tan}
+\address{Jeremy Tan,
+	National University of Singapore}
+\email{jtjierui@comp.nus.edu.sg}
+
+\author[]{Christoph Thiele}
+ \address{Christoph Thiele,
+	University of Bonn}
+\email{thiele@math.uni-bonn.de}
+
+
+\begin{document}
+\input{chapter/main}
+\end{document}

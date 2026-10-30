@@ -1,0 +1,37 @@
+schema_version = 0
+id = "vehicle_routing_time_windows"
+name = "Vehicle Routing Time Windows"
+category = "Combinatorial Optimization"
+language = "Python"        # v1 tasks.jsonl value (base image); the submission itself is C++17 built with make/g++
+description = "Implement a capacitated vehicle routing solver with time windows for Solomon-style benchmarks. Scored against best-known solutions on vehicle count and total travel distance."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python"            # bases/python (python:3.11 + git curl jq build-essential)
+platform = "linux/amd64"
+cwd = "/home/workspace/task_cvrptw_905da6dd/workspace"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["src/", "include/", "Makefile"]
+exclude = ["instances/", "internal/", "__MACOSX/", ".DS_Store"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 1200
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# eval.py has its own 20-minute global deadline (compile <= 300 s, then each of 56 instances gets
+# min(60, remaining) s), so a solver that uses its whole budget finishes close to the 1200 s judge
+# timeout; see NOTES.md.
+
+[score]
+direction = "maximize"
+# raw score = 100 * mean over 56 instances of the per-instance score (0..160, 100 = BKS);
+# v1 rescale: linear over 0..10000 (so 100 points = BKS on every instance on average).
+rescale = { kind = "linear", lower = 0.0, upper = 10000.0 }

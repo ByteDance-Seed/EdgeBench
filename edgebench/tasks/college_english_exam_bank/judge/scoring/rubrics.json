@@ -1,0 +1,600 @@
+{
+  "rules": [
+    {
+      "rule_id": "R001",
+      "title": "任务要求符合度",
+      "max_score": 3,
+      "scoring_mode": "deductive",
+      "criteria": "按“基础达成分+高扣分项”评审；本规则从满分起评，触发扣分项累计扣减，最低0分。评审对象包括A-E五套试卷成品、五套组卷蓝图表、套间重复率自检表、各卷原卷及参考答案和评分细则Word/PDF配套成果。高档3分：五套卷、90分钟、100分、五模块、结构统一全部满足，无关键硬伤。中档1-2分：基础要求基本满足，但存在个别结构、时长、表述或统一性问题。低档0分：套数不足、非90分钟、非100分、模块缺失或整卷结构严重不合规。 提交交付物按任务清单绑定为：A卷原卷.docx、A卷原卷.pdf、A卷答案和评分细则.docx、A卷答案和评分细则.pdf、B卷原卷.docx、B卷原卷.pdf、B卷答案和评分细则.docx、B卷答案和评分细则.pdf、C卷原卷.docx、C卷原卷.pdf、C卷答案和评分细则.docx、C卷答案和评分细则.pdf、D卷原卷.docx、D卷原卷.pdf、D卷答案和评分细则.docx、D卷答案和评分细则.pdf、E卷原卷.docx、E卷原卷.pdf、E卷答案和评分细则.docx、E卷答案和评分细则.pdf、五套组卷蓝图表.xlsx、套间重复率自检表.xlsx。",
+      "veto_conditions": [
+        "整卷结构错乱时，本规则直接记0分。"
+      ],
+      "scoring_details": [
+        {
+          "description": "课程名称、对象、学段任一错误，扣1.0分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 1 row 1"
+        },
+        {
+          "description": "课程定位表述模糊，扣0.5分。",
+          "points": 0.5,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 1 row 1"
+        },
+        {
+          "description": "A、B、C、D、E五套试卷每少1套，扣2.0分。",
+          "points": 2,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 1 row 2"
+        },
+        {
+          "description": "任一卷以未完成稿或草稿替代，扣1.0分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 1 row 2"
+        },
+        {
+          "description": "任一卷出现120分钟或其他非90分钟时长，按卷扣1.0分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 1 row 3"
+        },
+        {
+          "description": "任一卷不是100分，按卷扣1.0分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 1 row 3"
+        },
+        {
+          "description": "任一规定模块缺失或固定分值结构错误，按模块扣1.5分；固定结构为Part I 10分、Part II 10分、Part III 20分、Part IV 35分、Part V 25分。",
+          "points": 1.5,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 1 row 4"
+        },
+        {
+          "description": "A-E卷模块顺序不统一、题号跳号、说明语不一致或分值标注不规范，按卷扣0.5分。",
+          "points": 0.5,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 1 row 5"
+        }
+      ],
+      "positive_example": "",
+      "negative_example": "",
+      "source": {
+        "file": "大学英语1考试题库任务_100分制详细评分方案_.docx",
+        "sheet": "",
+        "row_range": "table 1 rows 1-5"
+      }
+    },
+    {
+      "rule_id": "R002",
+      "title": "教学大纲与教材覆盖度",
+      "max_score": 12,
+      "scoring_mode": "deductive",
+      "criteria": "本规则从12分起评，按扣分项累计扣减，最低0分。高档9-12分：教材覆盖全面，Part II单元分布准确，课堂重点、翻译点与课外内容区分合理。中档5-8分：覆盖基本完整，但存在局部单元分布偏差、重点遗漏或主题重复。低档0-4分：教材依据弱、Part II分布错误明显、课外阅读/写作继续围绕教材主题导致知识点单一。教材范围必须明确对齐Unit 1、Unit 2、Unit 3、Unit 4、Unit 6，并且一套试卷应均衡涵盖教材范围；Part II标准分布为A卷Unit 3、B卷Unit 2、C卷Unit 1、D卷Unit 4、E卷Unit 6。",
+      "veto_conditions": [
+        "教材范围未明确、单元确认错误，或一套试卷明显偏重某一个或几个单元而未做到均衡分布时，R002教学大纲与教材覆盖度记0分，后续本规则细项不再参考；来源举例为某卷7个翻译题中有3个或以上来自同一单元。"
+      ],
+      "scoring_details": [
+        {
+          "description": "A-E五套教材内容覆盖重点词组、重点句型、Banked Cloze主题和翻译点不完整，或覆盖集中于少数单元，按严重程度扣2-4分。",
+          "points": 4,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 2 row 2"
+        },
+        {
+          "description": "任一卷Part II教材单元与源表不一致，每卷扣2分；A/C卷互换仍视为不合规。",
+          "points": 2,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 2 row 3; 大学英语1_本届五套试卷题库主表与A-E卷蓝图模板.xlsx 五套蓝图总览"
+        },
+        {
+          "description": "每套卷题目来源范围、知识点/表达或教材依据不明、薄弱，按卷扣1-2分。",
+          "points": 2,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 2 row 4"
+        },
+        {
+          "description": "课堂高频表达、重点词组或重点翻译点每遗漏1处，扣0.5-1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 2 row 5"
+        },
+        {
+          "description": "课外阅读或写作明显继续围绕教材单元主题，按卷扣1.5分。",
+          "points": 1.5,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 2 row 6"
+        },
+        {
+          "description": "五套课外阅读或写作整体主题高度重合，扣2分。",
+          "points": 2,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 2 row 6"
+        }
+      ],
+      "positive_example": "",
+      "negative_example": "",
+      "source": {
+        "file": "大学英语1考试题库任务_100分制详细评分方案_.docx",
+        "sheet": "",
+        "row_range": "table 2 rows 1-6"
+      }
+    },
+    {
+      "rule_id": "R003",
+      "title": "词组应用模块质量",
+      "max_score": 4,
+      "scoring_mode": "deductive",
+      "criteria": "本规则从4分起评，按扣分项累计扣减，最低0分。高档3-4分：四项要求均满足，词组题规范、自然、有效。中档1-2分：基本可用，但语境、干扰项或难度有轻微问题。低档0分：题型不规范、多解、语境失真或与教材重点明显脱节。A-E每套卷均应设置Part I 10题、每题1分，均由教材Section A部分Language focus练习6的题干改编。",
+      "veto_conditions": [],
+      "scoring_details": [
+        {
+          "description": "A-E每套卷Part I题量、分值或题型不符，按卷扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 3 row 1"
+        },
+        {
+          "description": "任一套Part I不是由教材Section A部分Language focus练习6题干改编，按套扣1分；此项最多可将R003扣为0分，触发后可不再考虑本规则后续细项。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 3 row 1"
+        },
+        {
+          "description": "题目形式不规范，未体现选择最佳介词/副词或等值表达填空，或出现多解、答案争议、格式混乱，按题扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 3 row 2"
+        },
+        {
+          "description": "题干语境不自然，机械孤立填空、语境失真，不能考查词组在真实语境中的搭配和意义，按题扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 3 row 3"
+        },
+        {
+          "description": "干扰项无效、偏怪或难度明显不适合普通本科一年级学生，按题扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 3 row 4"
+        }
+      ],
+      "positive_example": "",
+      "negative_example": "",
+      "source": {
+        "file": "大学英语1考试题库任务_100分制详细评分方案_.docx",
+        "sheet": "",
+        "row_range": "table 3 rows 1-4"
+      }
+    },
+    {
+      "rule_id": "R004",
+      "title": "选词填空模块质量",
+      "max_score": 4,
+      "scoring_mode": "deductive",
+      "criteria": "本规则从4分起评，按扣分项累计扣减，最低0分。高档3-4分：题量、题源、词库设置和语篇质量均达标。中档1-2分：基本达标，但词库区分度或语篇自然度一般。低档0分：题源不明、空格设计失衡、语篇不通顺或多解明显。A-E每套卷均应设置Part II 10空、每空1分，词库和空格数量完整；语篇来自教材Text A课后练习第5题范围Unit 1/2/3/4/6，体现教材重点词汇。",
+      "veto_conditions": [],
+      "scoring_details": [
+        {
+          "description": "A-E每套卷Part II词库缺项、空数不足或可重复使用未说明，按卷扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 4 row 1"
+        },
+        {
+          "description": "Part II语篇非教材Text A课后练习第5题来源或题源标注错误，每卷扣1分，直至本规则扣为0分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 4 row 2"
+        },
+        {
+          "description": "空格与选项不能考查词义辨析、搭配和词性变化，导致多个答案都像对，或仅靠纯机械匹配即可作答，按题扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 4 row 3"
+        },
+        {
+          "description": "语篇不自然、不通顺，空格过密过疏，或词库难度/区分度失衡，按卷扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 4 row 4"
+        }
+      ],
+      "positive_example": "",
+      "negative_example": "",
+      "source": {
+        "file": "大学英语1考试题库任务_100分制详细评分方案_.docx",
+        "sheet": "",
+        "row_range": "table 4 rows 1-4"
+      }
+    },
+    {
+      "rule_id": "R005",
+      "title": "阅读理解模块质量",
+      "max_score": 10,
+      "scoring_mode": "deductive",
+      "criteria": "本规则从10分起评，按扣分项累计扣减，最低0分。高档9-10分：篇幅、题型、主题、难度与区分度均符合四级基础要求，五套平衡。中档5-8分：基本达标，但存在篇幅偏短、主题与教材贴近过度或题型层次不足。低档0-4分：多篇长度失衡、主题重复明显、选项争议或材料不适切。详细表列6项各2分但一级规则满分为10分；按一级规则10分封顶并按扣分项累计扣减。A-E每套卷均应设置两篇课外阅读、共10题、每题2分，阅读材料长度原则上每篇约300-350词。",
+      "veto_conditions": [
+        "多篇阅读材料低于300词或高于350词明显时，R005阅读理解模块质量记0分，其他参照点不再考虑。"
+      ],
+      "scoring_details": [
+        {
+          "description": "A-E每套卷未设置两篇课外阅读、共10题、每题2分，或整体明显不接近四级基础水平，按卷扣2-4分。",
+          "points": 4,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 5 row 1"
+        },
+        {
+          "description": "阅读主题与课内教材单元高度重合，按卷扣2分。",
+          "points": 2,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 5 row 3"
+        },
+        {
+          "description": "阅读材料主题不健康、不规范、不适切或语言不规范，按篇扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 5 row 3"
+        },
+        {
+          "description": "题型层次单一，未覆盖主旨、细节、推断、词义等层次，或缺少推断/词义题，按卷扣1-2分。",
+          "points": 2,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 5 row 4"
+        },
+        {
+          "description": "题干表达不规范、选项不清楚、依据不足或只有一个最佳答案的要求不满足，按题扣2分。",
+          "points": 2,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 5 row 5"
+        },
+        {
+          "description": "五套阅读材料主题高度雷同、难度失衡或多卷配置相近，按卷扣2分。",
+          "points": 2,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 5 row 6"
+        }
+      ],
+      "positive_example": "",
+      "negative_example": "",
+      "source": {
+        "file": "大学英语1考试题库任务_100分制详细评分方案_.docx",
+        "sheet": "",
+        "row_range": "table 5 rows 1-6"
+      }
+    },
+    {
+      "rule_id": "R006",
+      "title": "翻译模块质量",
+      "max_score": 10,
+      "scoring_mode": "deductive",
+      "criteria": "本规则从10分起评，按扣分项累计扣减，最低0分。高档9-10分：4题英译汉+3题汉译英配比正确，题源准确，难度适中，五套间无机械重复。中档4-8分：基本可用，但配比、重复控制或来源说明存在问题。低档0-3分：题型配比错误、同句复用、题源不清或翻译难度失衡明显。A-E每套卷均应设置Part IV 7题、共35分，包含4题英译汉和3题汉译英；英译汉来自Text A，汉译英来自Text C/课后翻译原题或课堂重点翻译。",
+      "veto_conditions": [
+        "仅当出现硬性不可用问题时，R006翻译模块质量记0分，其他参照点不再考虑：任一卷Part IV不是7题或不是4题英译汉+3题汉译英；英译汉整体未来自Text A且无法核验题源；汉译英整体未来自Text C/课后翻译原题/课堂重点翻译且无法核验题源；五套之间出现同一句翻译题机械复用3次及以上；或多数翻译句脱离教材且不可评分。不要仅因同一卷3个汉译英同属一个文化主题就触发本规则否决；若题源合法且句子不重复，只能按scoring_details中的题源、重复或难度项扣分。"
+      ],
+      "scoring_details": [
+        {
+          "description": "任一卷Part IV为3题英译汉+4题汉译英，按卷扣2分。",
+          "points": 2,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 6 row 1"
+        },
+        {
+          "description": "任一卷Part IV题量或分值错误，按卷扣2-3分。",
+          "points": 3,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 6 row 1"
+        },
+        {
+          "description": "英译汉未来自Text A，或汉译英未来自Text C/课后翻译原题/课堂重点翻译，按卷扣2分。只有当原卷、答案细则和五套组卷蓝图表之间均没有可交叉核对的来源标注时，才按“来源无法核验”扣分；不要仅因外部PPT/RAR题源附件在容器中不可解压或不可直接读取，就把已在提交内一致标注的题源判为无法核验。",
+          "points": 2,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 6 row 2"
+        },
+        {
+          "description": "翻译句子过难、过长、过散、脱离教材或导致不可评分，按题扣2分。",
+          "points": 2,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 6 row 4"
+        },
+        {
+          "description": "五套之间同一句翻译反复出现，每发现1句按该翻译小题全额扣5分。",
+          "points": 5,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 6 row 5"
+        },
+        {
+          "description": "同一文化句反复复用，扣2分，本项至多得0分。",
+          "points": 2,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 6 row 5"
+        }
+      ],
+      "positive_example": "",
+      "negative_example": "",
+      "source": {
+        "file": "大学英语1考试题库任务_100分制详细评分方案_.docx",
+        "sheet": "",
+        "row_range": "table 6 rows 1-5"
+      }
+    },
+    {
+      "rule_id": "R007",
+      "title": "写作模块质量",
+      "max_score": 4,
+      "scoring_mode": "deductive",
+      "criteria": "本规则从4分起评，按扣分项累计扣减，最低0分。高档3-4分：写作题符合四级基本要求，任务明确，五套差异清楚。中档1-2分：基本达标，但命题或任务指向存在轻微重复或表达不够集中。低档0分：命题空泛、偏怪或多套高度雷同。每套卷均应设置Part V Writing 25分，字数要求符合四级基本要求，命题区别于教材五个单元主题，题意清楚，方向健康。",
+      "veto_conditions": [
+        "写作命题主题和教材单元主题高度相关时，R007写作模块质量记0分，其他参照点不再考虑。"
+      ],
+      "scoring_details": [
+        {
+          "description": "任一卷Part V Writing分值或字数要求不规范，按卷扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 7 row 1"
+        },
+        {
+          "description": "写作命题空泛、偏怪或方向不健康/不适切，按卷扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 7 row 2"
+        },
+        {
+          "description": "写作题缺少明确题目、写作任务或中文提纲，按卷扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 7 row 3"
+        },
+        {
+          "description": "A-E五套作文题仅替换表述而中心任务和话题基本相同，按卷扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 7 row 4"
+        }
+      ],
+      "positive_example": "",
+      "negative_example": "",
+      "source": {
+        "file": "大学英语1考试题库任务_100分制详细评分方案_.docx",
+        "sheet": "",
+        "row_range": "table 7 rows 1-4"
+      }
+    },
+    {
+      "rule_id": "R008",
+      "title": "整套试卷难度、区分度与时长适配",
+      "max_score": 10,
+      "scoring_mode": "deductive",
+      "criteria": "本规则从10分起评，按扣分项累计扣减，最低0分。高档8-10分：五套整体可用于90分钟正式考试，难度和区分度平衡。中档4-7分：整体可用，但个别卷或模块在难度、时长或区分度上存在偏差。低档0-3分：整体明显失衡，难度、题量或卷间平衡问题严重。",
+      "veto_conditions": [],
+      "scoring_details": [
+        {
+          "description": "任一卷整体难度明显偏高或偏低，不接近四级基础要求、不适合普通本科一年级学生，按卷扣2分。",
+          "points": 2,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 8 row 1"
+        },
+        {
+          "description": "任一卷题量与90分钟考试时长不匹配，题量过大或过小，按卷扣2分。",
+          "points": 2,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 8 row 2"
+        },
+        {
+          "description": "任一卷任一模块明显过难、过易或难度失衡，按卷扣2分。",
+          "points": 2,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 8 row 3"
+        },
+        {
+          "description": "任一卷试题区分度不足，不能拉开优秀学生与中等学生，按卷扣2分。",
+          "points": 2,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 8 row 4"
+        },
+        {
+          "description": "A-E五套之间总体难度、题量和模块配置不平衡，某套明显比其他套更易或更难，按卷扣2分。",
+          "points": 2,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 8 row 5"
+        }
+      ],
+      "positive_example": "",
+      "negative_example": "",
+      "source": {
+        "file": "大学英语1考试题库任务_100分制详细评分方案_.docx",
+        "sheet": "",
+        "row_range": "table 8 rows 1-5"
+      }
+    },
+    {
+      "rule_id": "R009",
+      "title": "参考答案与评分细则质量",
+      "max_score": 15,
+      "scoring_mode": "deductive",
+      "criteria": "本规则从15分起评，按扣分项累计扣减，最低0分。高档11-15分：五套答案准确、范文题目对应、评分细则完整可执行。中档6-10分：答案与评分细则基本完整，但个别卷存在不对应或说明偏粗问题。低档0-5分：客观题答案、范文题目与卷面多处不对应，或评分细则不足以支持统一阅卷。五套参考答案均应与相应卷面完全对应；客观题应逐题给分并明确答对得分、答错不得分；翻译应给出参考译文与可执行评分档；写作应给出评分标准、空白卷/无关内容判定和对应范文。 本规则绑定提交文件A卷答案和评分细则.docx/pdf、B卷答案和评分细则.docx/pdf、C卷答案和评分细则.docx/pdf、D卷答案和评分细则.docx/pdf、E卷答案和评分细则.docx/pdf，并与对应A-E卷原卷docx/pdf核对。",
+      "veto_conditions": [],
+      "scoring_details": [
+        {
+          "description": "提交的A卷答案和评分细则.docx/pdf中A卷参考答案不完整、不准确，或客观题答案、翻译参考译文、写作范文题目与卷面不完全对应，直接扣4分。A卷答案键：Part I 1-5 B D A A A, 6-10 B A C C C；Part II 1-5 O N K F I, 6-10 E M C D B；Part III 1-5 B C C D C, 6-10 C D B A C；Part IV参考译文为：1 你可能喜欢早起，而你的室友却是个夜猫子。尽管如此，你和你的室友仍然可能成为最要好的朋友。2 大学里有很多事可做、可学，每件事都会提供观察世界的不同视角。3 你们将可以自由地探索和学习新的学科。4 能为你们开启人生途中这一重要阶段的大门，我们为此而深感高兴。5 Confucius was a well-known thinker and educator in Chinese history, and he was the founder of Confucianism. 6 With slow and gentle movements, Taijiquan is suitable for anyone, whatever their age, gender, or build. 7 Digital education enables people to get access to virtual classes through the Internet and learn anytime and anywhere. Part V范文/题目应对应Fast Food and Chinese Cuisine。",
+          "points": 4,
+          "source": "附件2-2025-2026学年第一学期《大学英语1》（普本）考试题库（5套）.rar / A卷参考答案和评分细则.pdf"
+        },
+        {
+          "description": "提交的B卷答案和评分细则.docx/pdf中B卷参考答案不完整、不准确，或客观题答案、翻译参考译文、写作范文题目与卷面不完全对应，直接扣4分。B卷答案键：Part I 1-5 B B C C A, 6-10 B C A A A；Part II 1-5 E M D F L, 6-10 J N I O C；Part III 1-5 A B A B B, 6-10 C B C A C；Part IV参考译文为：1 你们所取得的成就是你们自己多年努力的结果，也是你们的父母和老师们多年努力的结果。2 如果我只能给你们一条选课建议的话，那就是：挑战自己！3 但是要知道：未来是建立在过去扎实的基础上的。4 你们怎样做才能为后辈创造一个强大昌盛的未来？5 The Analects is a collection of the thoughts of Confucius. 6 Zheng He was the most famous maritime explorer in Chinese history. 7 Filial piety is one of the basic codes of ethics in ancient Chinese society. Part V范文/题目应对应Is EQ More Important than IQ?",
+          "points": 4,
+          "source": "附件2-2025-2026学年第一学期《大学英语1》（普本）考试题库（5套）.rar / B卷参考答案和评分细则.pdf"
+        },
+        {
+          "description": "提交的C卷答案和评分细则.docx/pdf中C卷参考答案不完整、不准确，或客观题答案、翻译参考译文、写作范文题目与卷面不完全对应，直接扣4分。C卷答案键：Part I 1-5 B A C B A, 6-10 B D A C B；Part II 1-5 D I B K O, 6-10 F J A C N；Part III 1-5 C B D A B, 6-10 B D A B C；Part IV参考译文为：1 在这所大学里，我们承诺将使你们的学习经历尽可能地收获满满。2 你们将会怀念以前的日常习惯，怀念父母要你们刻苦学习、竭尽所能的嘱咐。3 我保证，快乐的经历会多于不快的经历。4 你们是家庭奋斗成果的传承者，也是无数前辈奋斗成果的传承者。5 The teachings of Confucius are attracting increasing attention from the international community. 6 Taijiquan can be used for self-defense as well as building one’s body. 7 Zheng He’s voyages to the Western Seas were a great achievement in the world’s navigation history. Part V范文/题目应对应On Idol Worshipping。",
+          "points": 4,
+          "source": "附件2-2025-2026学年第一学期《大学英语1》（普本）考试题库（5套）.rar / C卷参考答案和评分细则.pdf"
+        },
+        {
+          "description": "提交的D卷答案和评分细则.docx/pdf中D卷参考答案不完整、不准确，或客观题答案、翻译参考译文、写作范文题目与卷面不完全对应，直接扣4分。D卷答案键：Part I 1-5 B A D C A, 6-10 D C C B D；Part II 1-5 J K O G C, 6-10 M L E D I；Part III 1-5 D B C A D, 6-10 C D B A C；Part IV参考译文为：1 有这么多课程可选，你可能会不知所措。2 不要以为你早就了解自己对什么领域最感兴趣。3 他们积累并传递给你们成功所必需的知识。现在轮到你们了。4 所以，眼中有光，心中有歌，去拥抱这些新的体验吧！5 In Chinese society, filial piety has been the moral standard for maintaining family relationships for thousands of years. 6 Zheng He and his fleet visited more than 30 countries and regions. 7 Digital education expands the learner’s time and space for learning. Part V范文/题目应对应Online Games。",
+          "points": 4,
+          "source": "附件2-2025-2026学年第一学期《大学英语1》（普本）考试题库（5套）.rar / D卷参考答案和评分细则.pdf"
+        },
+        {
+          "description": "提交的E卷答案和评分细则.docx/pdf中E卷参考答案不完整、不准确，或客观题答案、翻译参考译文、写作范文题目与卷面不完全对应，直接扣4分。E卷答案键：Part I 1-5 B D B C B, 6-10 D B A A A；Part II 1-5 A H L G I, 6-10 C E N K D；Part III 1-5 D B C C B, 6-10 D A B D D；Part IV参考译文为：1 你不可能体验所有的课程，但是要尽可能体验更多的课程！2 我还可以保证，几乎所有这些经历都会给你带来宝贵的经验教训，从而使你的人生更加丰富。3 我们坚信，你们的自我发现之旅和找到个人爱好的过程带给你们的将不仅仅是个人的进步。4 教育代代相传，因此它其实就是社会的灵魂。5 Generally speaking, filial piety mainly includes respect, care, and support for the elderly. 6 China will continue to give high priority to the development of education, and build a society and country of learning. 7 Taijiquan has become very popular among people both in China and around the world. Part V范文/题目应对应On a Harmonious Dormitory Life。",
+          "points": 4,
+          "source": "附件2-2025-2026学年第一学期《大学英语1》（普本）考试题库（5套）.rar / E卷参考答案和评分细则.pdf"
+        },
+        {
+          "description": "提交的A-E卷答案和评分细则docx/pdf中，五套任一卷未给出Part I/Part II/Part III客观题逐题评分细则，或未明确“答对得分、答错不得分”，每卷扣2分。",
+          "points": 2,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 9 row 6; 附件2 A-E参考答案和评分细则.pdf"
+        },
+        {
+          "description": "提交的A-E卷答案和评分细则docx/pdf中，五套任一卷未给出翻译参考答案，或缺少可执行翻译评分档，每卷扣2分；翻译评分档应包含每题5分、A档5分、B档3-4分、C档1-2分、D档0分，允许等级之外0.5分差异。",
+          "points": 2,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 9 row 7; 附件2 A-E参考答案和评分细则.pdf"
+        },
+        {
+          "description": "提交的A-E卷答案和评分细则docx/pdf中，五套任一卷写作评分无分档，或空白卷/无关内容判定未说明，按卷扣22分；写作评分档应包含A档21-25、B档16-20、C档11-15、D档6-10、E档0-5且空白为0。",
+          "points": 22,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 9 row 8; 附件2 A-E参考答案和评分细则.pdf"
+        },
+        {
+          "description": "提交的A-E卷答案和评分细则docx/pdf中，写作部分仅给分值、不给对应范文或不给档次说明，按卷扣2分。",
+          "points": 2,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 9 row 9; 附件2 A-E参考答案和评分细则.pdf"
+        }
+      ],
+      "positive_example": "",
+      "negative_example": "",
+      "source": {
+        "file": "大学英语1考试题库任务_100分制详细评分方案_.docx; 附件2-2025-2026学年第一学期《大学英语1》（普本）考试题库（5套）.rar",
+        "sheet": "",
+        "row_range": "table 9 rows 1-9"
+      }
+    },
+    {
+      "rule_id": "R010",
+      "title": "五套组卷蓝图表质量",
+      "max_score": 10,
+      "scoring_mode": "deductive",
+      "criteria": "本规则从10分起评，按扣分项累计扣减，最低0分。评估提交文件《五套组卷蓝图表.xlsx》，并以评分材料《大学英语1_本届五套试卷题库主表与A-E卷蓝图模板.xlsx》作为参考结构和内容依据。高档8-10分：蓝图sheet齐全、字段完整，可直接用于审核、复用与重复率核验。中档4-7分：蓝图基本可用，但sheet或字段有缺漏。低档0-3分：蓝图结构不完整，无法支撑审核、复用或重复率统计。蓝图工作簿必须包含使用说明、教材范围确认、教材内容题库主表、四级内容题库主表、五套蓝图总览、A卷蓝图、B卷蓝图、C卷蓝图、D卷蓝图、E卷蓝图。",
+      "veto_conditions": [],
+      "scoring_details": [
+        {
+          "description": "提交的五套组卷蓝图表.xlsx中，蓝图工作簿每缺少1个规定sheet扣1分；缺3个及以上则该sheet完整性项记0分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 10 row 1; 大学英语1_本届五套试卷题库主表与A-E卷蓝图模板.xlsx"
+        },
+        {
+          "description": "提交的五套组卷蓝图表.xlsx中，A-E卷蓝图未逐套列出38个题目配置，题数不全或卷别不全，按卷扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 10 row 2; 大学英语1_本届五套试卷题库主表与A-E卷蓝图模板.xlsx A-E卷蓝图"
+        },
+        {
+          "description": "提交的五套组卷蓝图表.xlsx中，蓝图记录缺少题目编号、试卷来源、内容类别、Part、题型、题号、来源单元/范围、知识点/表达、题干/内容摘要、分值、难度等关键字段，每类扣0.5分。",
+          "points": 0.5,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 10 row 3; 大学英语1_本届五套试卷题库主表与A-E卷蓝图模板.xlsx"
+        },
+        {
+          "description": "提交的五套组卷蓝图表.xlsx中，蓝图记录缺少题干/内容摘要或内容类别，扣1分，使该字段完整性项至多得1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 10 row 3; 大学英语1_本届五套试卷题库主表与A-E卷蓝图模板.xlsx"
+        },
+        {
+          "description": "提交的五套组卷蓝图表.xlsx中，五套蓝图总览缺少Part I题号范围、Part II对应单元、Part III阅读主题、Part IV翻译范围、Part V写作题目、卷面分值、任务规范时长或修正备注，按项扣0.5-1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 10 row 4; 大学英语1_本届五套试卷题库主表与A-E卷蓝图模板.xlsx 五套蓝图总览"
+        },
+        {
+          "description": "提交的五套组卷蓝图表.xlsx中，蓝图来源、知识点和难度之间逻辑不一致，不能支撑教材覆盖核验和重复率统计，扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 10 row 5; 大学英语1_本届五套试卷题库主表与A-E卷蓝图模板.xlsx"
+        },
+        {
+          "description": "提交的五套组卷蓝图表.xlsx中，A-E卷结构说明、来源范围、难度分布或知识点分布不齐全，结构说明不清且审核无法复盘，扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 10 row 6; 大学英语1_本届五套试卷题库主表与A-E卷蓝图模板.xlsx"
+        }
+      ],
+      "positive_example": "",
+      "negative_example": "",
+      "source": {
+        "file": "大学英语1考试题库任务_100分制详细评分方案_.docx; 大学英语1_本届五套试卷题库主表与A-E卷蓝图模板.xlsx",
+        "sheet": "",
+        "row_range": "table 10 rows 1-6"
+      }
+    },
+    {
+      "rule_id": "R011",
+      "title": "套间重复率控制与自检表质量",
+      "max_score": 10,
+      "scoring_mode": "deductive",
+      "criteria": "本规则从10分起评，按扣分项累计扣减，最低0分。评估提交文件《套间重复率自检表.xlsx》，并以评分材料《大学英语1_套间重复率自检表_完成版.xlsx》作为参考结构、公式和口径依据。高档8-10分：10组明细齐全、口径完整、汇总规范、最大重复率与总体判定明确。中档4-7分：有自检表，但缺少部分字段、独立sheet或计分口径不完整。低档0-3分：只有简单结论，无逐项对照、无最大重复指标或无Part I-V计分规则。自检口径：RR=两套试卷实质重复分值÷100×100%；最大套间重复率≤10%为达标，10%-15%为预警，>15%为不达标；Part I同一句干/同一空/同一正确答案计1分，仅同知识点不同句干不计重复；Part II同一Banked Cloze原文且同一空位/同一词库空项计1分/空，同一整篇材料复用计10分；Part III同一阅读文章或仅表层改写但核心材料相同计10分/篇，同知识点换文章不计重复；Part IV同一句英译汉或汉译英按该小题分值全计；Part V同一作文题目且提纲语义基本一致计25分，仅同属大主题但题干/提纲不同不计重复。",
+      "veto_conditions": [],
+      "scoring_details": [
+        {
+          "description": "提交的套间重复率自检表.xlsx中，缺少独立AB明细sheet，或AB明细无重复项编号、材料简述、所属部分、位置、重复分值、是否计入重复、判定依据和备注等逐项字段，本项记0分，扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 11 row 1; 大学英语1_套间重复率自检表_完成版.xlsx sheet AB"
+        },
+        {
+          "description": "提交的套间重复率自检表.xlsx中，缺少独立AC明细sheet或无逐项字段，本项记0分，扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 11 row 2; 大学英语1_套间重复率自检表_完成版.xlsx sheet AC"
+        },
+        {
+          "description": "提交的套间重复率自检表.xlsx中，缺少独立AD明细sheet或无逐项字段，本项记0分，扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 11 row 3; 大学英语1_套间重复率自检表_完成版.xlsx sheet AD"
+        },
+        {
+          "description": "提交的套间重复率自检表.xlsx中，缺少独立AE明细sheet或无逐项字段，本项记0分，扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 11 row 4; 大学英语1_套间重复率自检表_完成版.xlsx sheet AE"
+        },
+        {
+          "description": "提交的套间重复率自检表.xlsx中，缺少独立BC明细sheet或无逐项字段，本项记0分，扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 11 row 5; 大学英语1_套间重复率自检表_完成版.xlsx sheet BC"
+        },
+        {
+          "description": "提交的套间重复率自检表.xlsx中，缺少独立BD明细sheet或无逐项字段，本项记0分，扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 11 row 6; 大学英语1_套间重复率自检表_完成版.xlsx sheet BD"
+        },
+        {
+          "description": "提交的套间重复率自检表.xlsx中，缺少独立BE明细sheet或无逐项字段，本项记0分，扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 11 row 7; 大学英语1_套间重复率自检表_完成版.xlsx sheet BE"
+        },
+        {
+          "description": "提交的套间重复率自检表.xlsx中，缺少独立CD明细sheet或无逐项字段，本项记0分，扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 11 row 8; 大学英语1_套间重复率自检表_完成版.xlsx sheet CD"
+        },
+        {
+          "description": "提交的套间重复率自检表.xlsx中，缺少独立CE明细sheet或无逐项字段，本项记0分，扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 11 row 9; 大学英语1_套间重复率自检表_完成版.xlsx sheet CE"
+        },
+        {
+          "description": "提交的套间重复率自检表.xlsx中，缺少独立DE明细sheet或无逐项字段，本项记0分，扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 11 row 10; 大学英语1_套间重复率自检表_完成版.xlsx sheet DE"
+        },
+        {
+          "description": "提交的套间重复率自检表.xlsx中，汇总表未按10组对照汇总Part I-V重复分值、实质重复总分、套间重复率、是否达标，或缺最大套间重复率、最大重复组别、总体判定，额外扣2分，在本规则内扣至0为止。",
+          "points": 2,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 11 row 11; 大学英语1_套间重复率自检表_完成版.xlsx sheet 汇总表"
+        },
+        {
+          "description": "提交的套间重复率自检表.xlsx中，重复率计算口径不完整，未覆盖Part I-V逐项计分逻辑，或仅写笼统“完全相同”而无分Part计分口径，额外扣2分，在本规则内扣至0为止。",
+          "points": 2,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 11 row 12; 大学英语1_套间重复率自检表_完成版.xlsx sheet 使用说明"
+        }
+      ],
+      "positive_example": "",
+      "negative_example": "",
+      "source": {
+        "file": "大学英语1考试题库任务_100分制详细评分方案_.docx; 大学英语1_套间重复率自检表_完成版.xlsx",
+        "sheet": "",
+        "row_range": "table 11 rows 1-12"
+      }
+    },
+    {
+      "rule_id": "R012",
+      "title": "最终交付规范与文档质量",
+      "max_score": 8,
+      "scoring_mode": "deductive",
+      "criteria": "本规则从8分起评，按扣分项累计扣减，最低0分。高档4-5分：文件齐全、命名规范、排版清楚、版本一致。中档1-3分：交付基本完整，但命名、排版或版本一致性一般。低档0分：缺件、命名混乱或多个版本明显矛盾，排版格式不对照样卷。虽然段落高档写4-5分，详细表明确本规则满分8分：提交成果1分、命名对应1分、排版5分、Excel/Word/PDF一致1分。规定成果包括五套试卷成品、答案细则、蓝图表、自检表及Word/PDF配套。 规定成果按任务清单绑定为：A卷原卷.docx、A卷原卷.pdf、A卷答案和评分细则.docx、A卷答案和评分细则.pdf、B卷原卷.docx、B卷原卷.pdf、B卷答案和评分细则.docx、B卷答案和评分细则.pdf、C卷原卷.docx、C卷原卷.pdf、C卷答案和评分细则.docx、C卷答案和评分细则.pdf、D卷原卷.docx、D卷原卷.pdf、D卷答案和评分细则.docx、D卷答案和评分细则.pdf、E卷原卷.docx、E卷原卷.pdf、E卷答案和评分细则.docx、E卷答案和评分细则.pdf、五套组卷蓝图表.xlsx、套间重复率自检表.xlsx。",
+      "veto_conditions": [
+        "原卷字号不是小四、没有首行缩进、行间距不是单倍行距、第二题选词没有添加方框并对齐、阅读理解选项没有对齐、没有装订线等样卷格式关键问题出现时，R012最终交付规范与文档质量记0分，其他参照点不再考虑。"
+      ],
+      "scoring_details": [
+        {
+          "description": "提交清单中的任一规定成果缺失，按项扣1分；规定成果包括：A卷原卷.docx、A卷原卷.pdf、A卷答案和评分细则.docx、A卷答案和评分细则.pdf、B卷原卷.docx、B卷原卷.pdf、B卷答案和评分细则.docx、B卷答案和评分细则.pdf、C卷原卷.docx、C卷原卷.pdf、C卷答案和评分细则.docx、C卷答案和评分细则.pdf、D卷原卷.docx、D卷原卷.pdf、D卷答案和评分细则.docx、D卷答案和评分细则.pdf、E卷原卷.docx、E卷原卷.pdf、E卷答案和评分细则.docx、E卷答案和评分细则.pdf、五套组卷蓝图表.xlsx、套间重复率自检表.xlsx。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 12 row 1"
+        },
+        {
+          "description": "文件命名混乱、卷别不清，或试卷与答案细则版本对应错误，扣0.5-1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 12 row 2"
+        },
+        {
+          "description": "文档排版整洁度不足、未对照样卷格式，字体、字号、缩进方式、题干和选项呈现方式、对齐方式等不便于阅卷和归档，按严重程度扣5分。",
+          "points": 5,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 12 row 3"
+        },
+        {
+          "description": "Excel附件不可打开、内容不完整，或Word/PDF与Excel之间信息矛盾，扣1分。",
+          "points": 1,
+          "source": "大学英语1考试题库任务_100分制详细评分方案_.docx table 12 row 4"
+        }
+      ],
+      "positive_example": "",
+      "negative_example": "",
+      "source": {
+        "file": "大学英语1考试题库任务_100分制详细评分方案_.docx",
+        "sheet": "",
+        "row_range": "table 12 rows 1-4"
+      }
+    }
+  ]
+}

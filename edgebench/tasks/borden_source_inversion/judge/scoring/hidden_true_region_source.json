@@ -1,0 +1,13 @@
+{
+  "source_type": "rectangular_region",
+  "dimension": 3,
+  "x_center": 259.90839694656484,
+  "y_center": 225.76923076923075,
+  "z_center": 220.81419847328246,
+  "half_length_x": 32.0,
+  "half_length_y": 18.0,
+  "half_length_z": 1.2,
+  "C0": 420.0,
+  "t_start": 730.0,
+  "duration": 2555.0
+}

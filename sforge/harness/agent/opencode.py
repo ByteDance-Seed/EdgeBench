@@ -43,13 +43,9 @@ _NO_INTERNET_PERMISSION = json.dumps(
 class OpenCodeAgent(Agent):
 
     name = "opencode"
-    install_cmds = [
-        "sudo -E bash -c 'NODE_MIRROR=${SFORGE_NODEJS_MIRROR_URL:-https://nodejs.org/dist} && curl -fsSL $NODE_MIRROR/v20.18.0/node-v20.18.0-linux-x64.tar.xz | tar -xJ -C /usr/local --strip-components=1'",
-        "sudo -E npm install -g opencode-ai@1.18.2",
-        # npm's postinstall runs as root with HOME=/home/agent and leaves
-        # root-owned ~/.local etc. that opencode then cannot write to
-        "sudo chown -R agent:agent /home/agent",
-    ]
+    npm_package = "opencode-ai"
+    default_version = "1.18.2"
+    session_dirs = ("/root/.local/share/opencode",)
     run_cmd = 'opencode run --format json --auto "$(cat {prompt_file})"'
     resume_cmd = 'opencode run --continue --format json --auto "Continue working."'
     api_key_env = "ANTHROPIC_API_KEY"

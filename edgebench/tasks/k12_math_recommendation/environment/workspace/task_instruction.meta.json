@@ -1,0 +1,39 @@
+{
+  "outputs": [
+    {
+      "path": "train.py",
+      "format": "Python source file"
+    },
+    {
+      "path": "infer.py",
+      "format": "Python source file"
+    },
+    {
+      "path": "submission.json",
+      "format": "JSON"
+    },
+    {
+      "path": "requirements.txt",
+      "format": "text"
+    },
+    {
+      "path": "README.md",
+      "format": "Markdown"
+    }
+  ],
+  "submit_paths": [
+    "train.py",
+    "infer.py",
+    "submission.json",
+    "requirements.txt",
+    "README.md"
+  ],
+  "attachments_dir": "attachments",
+  "source_fields_preserved": [
+    "task_name",
+    "task_description"
+  ],
+  "title_exact": true,
+  "description_exact": true,
+  "renderer": "codex_with_preservation_validator"
+}

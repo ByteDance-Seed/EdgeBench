@@ -1,0 +1,41 @@
+% This file makes the web version of the blueprint
+
+\documentclass{report}
+
+\usepackage[UKenglish]{babel}
+\usepackage{unicode-math}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{hyperref}
+\usepackage{cleveref}
+
+\hypersetup{
+	colorlinks=true,
+	linkcolor=red!50!black,
+	citecolor=green!50!black,
+	urlcolor=magenta!70!black,
+}
+
+\usepackage[showmore, dep_graph, coverage, project=../../, dep_by=chapter]{blueprint}
+
+\input{macro/common}
+
+\input{macro/web}
+
+\github{https://github.com/leanprover-community/con-nf/}
+\dochome{https://leanprover-community.github.io/con-nf/doc}
+
+\title{New Foundations is consistent}
+\author{Sky Wilshaw}
+
+\begin{document}
+
+\maketitle
+
+\input{chapters/abstract.tex}
+
+\newline
+
+\input{content}
+
+\end{document}

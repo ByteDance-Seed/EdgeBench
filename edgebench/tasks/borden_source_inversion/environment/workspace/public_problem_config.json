@@ -1,0 +1,116 @@
+{
+  "task_name": "Borden-style 3D finite-duration rectangular-region source inversion",
+  "random_seed": 20260522,
+  "source_parameterization": "finite_duration_rectangular_region",
+  "coordinate_system": {
+    "x_description": "main groundwater flow direction",
+    "y_description": "transverse horizontal direction",
+    "z_description": "elevation in meters; top water-table elevation is about 222 m",
+    "length_unit": "m",
+    "time_unit": "day",
+    "concentration_unit": "mg/L"
+  },
+  "grid": {
+    "domain_length_x_m": 1200.0,
+    "domain_length_y_m": 600.0,
+    "ncol": 131,
+    "nrow": 65,
+    "nlay": 21,
+    "delr_m": 9.16030534351145,
+    "delc_m": 9.23076923076923,
+    "z_top_m": 222.0,
+    "bottom_profile_x_m": [
+      0.0,
+      200.0,
+      300.0,
+      400.0,
+      600.0,
+      800.0,
+      1000.0,
+      1200.0,
+      1400.0
+    ],
+    "bottom_profile_z_m": [
+      192.0,
+      195.0,
+      199.0,
+      204.0,
+      208.0,
+      210.0,
+      211.0,
+      211.0,
+      211.0
+    ]
+  },
+  "hydrogeological_parameters": {
+    "porosity": 0.3,
+    "hk_m_per_day": 10.0,
+    "head_upstream_m": 220.0,
+    "head_downstream_m": 219.0,
+    "alpha_L_m": 10.0,
+    "alpha_TH_m": 0.5,
+    "alpha_TV_m": 0.01,
+    "Dm_m2_per_day": 0.0,
+    "lambda_per_day": 0.0,
+    "retardation_factor": 1.0,
+    "q_source_m3_per_day": 0.06764533176746916,
+    "fallback_source_scale_factor": 1000.0,
+    "velocity_m_per_day": 0.02777777777777778
+  },
+  "borden_source_zone_from_original_scene": {
+    "source_row_start": 20,
+    "source_row_end": 30,
+    "source_col_start": 20,
+    "source_col_end": 35,
+    "source_x_min_m": 183.206106870229,
+    "source_x_max_m": 320.6106870229007,
+    "source_y_min_m": 184.61538461538458,
+    "source_y_max_m": 276.9230769230769,
+    "description": "Original Borden landfill source-zone prior from the notebook; the task uses a finite-duration rectangular-region source inside/near this prior zone."
+  },
+  "source_search_bounds_for_agent": {
+    "x_center_min": 143.206106870229,
+    "x_center_max": 390.6106870229007,
+    "y_center_min": 134.61538461538458,
+    "y_center_max": 326.9230769230769,
+    "z_center_min": 216.47691748455108,
+    "z_center_max": 222.0,
+    "half_length_x_min": 5.0,
+    "half_length_x_max": 80.0,
+    "half_length_y_min": 5.0,
+    "half_length_y_max": 60.0,
+    "half_length_z_min": 0.5,
+    "half_length_z_max": 5.0,
+    "C0_min": 20.0,
+    "C0_max": 800.0,
+    "t_start_min": 0.0,
+    "t_start_max": 3000.0,
+    "duration_min": 100.0,
+    "duration_max": 8000.0
+  },
+  "region_source_discretization": {
+    "nx": 5,
+    "ny": 5,
+    "nz": 1,
+    "release_steps": 9,
+    "note": "Judge approximates rectangular-region finite release by superposing point-source ADE responses over sub-source points and release times."
+  },
+  "known_files_for_agent": {
+    "well_file": "public_wells.csv",
+    "monitoring_file": "public_monitoring_data.csv",
+    "grid_file": "borden_grid.npz",
+    "source_prior_file": "public_source_prior.json"
+  },
+  "data_column_description": {
+    "well_id": "monitoring well ID",
+    "x": "well x coordinate in m",
+    "y": "well y coordinate in m",
+    "z": "well elevation in m",
+    "time_days": "observation time in days",
+    "time_years": "observation time in years",
+    "concentration_clean_mg_L": "noise-free generated concentration, if present",
+    "concentration_observed_mg_L": "observed concentration with measurement noise",
+    "above_detection_limit": "whether observed concentration is above detection limit"
+  },
+  "important_note": "The judge evaluates finite-duration rectangular-region source predictions on withheld monitoring wells/times. Easy format/prior checks sum to <=15 points; hidden monitoring prediction dominates the score."
+}

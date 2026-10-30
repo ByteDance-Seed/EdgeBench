@@ -1,0 +1,53 @@
+{
+  "entrypoint": "run_eval.py",
+  "kind": "python",
+  "command": [
+    "python3",
+    "/home/workspace/scoring/run_eval.py"
+  ],
+  "working_dir": "/home/workspace",
+  "required_submission_files": [],
+  "required_input_files": [
+    "futures_price_data.xlsx",
+    "futures_contract_specs.xlsx",
+    "macro_factors_data.xlsx",
+    "risk_policy_doc.docx",
+    "strategy_research_notes.docx"
+  ],
+  "required_scoring_files": [
+    "eval_script.py",
+    "run_eval.py",
+    "standard_answer_nav_history.xlsx"
+  ],
+  "score_output": {
+    "source": "stdout",
+    "format": "regex",
+    "pattern": "TOTAL_SCORE\\s+(\\d+(?:\\.\\d+)?)",
+    "json_path": null,
+    "csv_column": null,
+    "file_path": null,
+    "scale_max": 100
+  },
+  "score_normalization": {
+    "raw_min": 0,
+    "raw_max": 100,
+    "target_min": 0,
+    "target_max": 100
+  },
+  "failure_policy": {
+    "missing_submission": "zero_score",
+    "missing_dependency": "zero_score",
+    "runtime_error": "zero_score",
+    "timeout": "zero_score",
+    "parse_failure": "zero_score",
+    "nonzero_exit_with_score": "ok"
+  },
+  "confidence": "high",
+  "evidence": [
+    "Original evaluator CLI requires submission_dir, data_dir, standard_answer_dir and writes eval_results.json.",
+    "Original evaluator reports grand_total out of total_max_score=80; run_eval.py normalizes to TOTAL_SCORE out of 100."
+  ],
+  "warnings": [
+    "Submitted run.py/main.py is capped at 300 seconds during each score call so iterative QC remains responsive."
+  ]
+}

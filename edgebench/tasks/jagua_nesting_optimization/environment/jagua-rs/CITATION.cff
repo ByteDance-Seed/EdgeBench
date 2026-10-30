@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Gardeyn"
+  given-names: "Jeroen"
+  affiliation: KU Leuven
+title: "jagua-rs: A fast and fearless Collision Detection Engine for 2D irregular Cutting and Packing problems"
+url: "https://github.com/JeroenGar/jagua-rs"
+preferred-citation:
+  type: article
+  authors:
+  - family-names: "Gardeyn"
+    given-names: "Jeroen"
+  - family-names: "Vanden Berghe"
+    given-names: "Greet"
+  - family-names: "Wauters"
+    given-names: "Tony"
+  title: "Decoupling Geometry from Optimization in 2D Irregular Cutting and Packing Problems: an Open-Source Collision Detection Engine"
+  doi: 10.48550/arXiv.2508.08341

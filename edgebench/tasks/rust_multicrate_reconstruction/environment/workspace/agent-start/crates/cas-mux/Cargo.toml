@@ -1,0 +1,48 @@
+[package]
+name = "cas-mux"
+version = "0.1.0"
+edition = "2024"
+description = "Terminal multiplexer for CAS factory mode"
+license = "MIT"
+
+[dependencies]
+# Terminal emulation (libghostty-vt via Zig)
+ghostty_vt = { path = "../ghostty_vt" }
+
+# Recording
+cas-recording = { path = "../cas-recording" }
+
+# Factory protocol types
+cas-factory-protocol = { path = "../cas-factory-protocol" }
+
+# PTY management
+cas-pty = { path = "../cas-pty" }
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# TUI rendering
+ratatui = "0.30"
+crossterm = "0.29"
+
+# Async runtime
+tokio = { version = "1", features = ["full", "sync"] }
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Logging
+tracing = "0.1"
+
+# Collections
+indexmap = "2"
+
+# Unicode width detection for wide character support
+unicode-width = "0.2"
+
+[features]
+default = []
+
+[dev-dependencies]
+tokio-test = "0.4"

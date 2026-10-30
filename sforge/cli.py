@@ -21,25 +21,24 @@ import concurrent.futures
 import copy
 import json
 import os
+import secrets
 import signal
+import socket
 import sys
 import threading
 import time
 from pathlib import Path
 from urllib.parse import urlparse
 
-import docker
-
-from sforge.harness.benchmark import load_benchmark
 from sforge.harness.config import SForgeConfig, create_backend_from_config, load_config
-from sforge.harness.constants import DEFAULT_EVAL_INTERVAL
+from sforge.harness.constants import DEFAULT_BENCHMARK_DIR, DEFAULT_EVAL_INTERVAL
 from sforge.harness.docker_build import (
     build_all_images,
     pull_all_images,
     push_all_images,
 )
 from sforge.harness.run_evaluation import judge_submission
-from sforge.harness.task_spec import TaskSpec, load_all_tasks, make_task_spec
+from sforge.harness.task_spec import TaskSpec, load_all_tasks, load_task
 
 
 def _resolve_task(args, config: SForgeConfig) -> TaskSpec:
@@ -53,13 +52,10 @@ def _resolve_task(args, config: SForgeConfig) -> TaskSpec:
 
 def _resolve_tasks(args, config: SForgeConfig) -> list[TaskSpec]:
     """Resolve one or more tasks by ID, or all tasks with --all."""
-    tasks_dir = config.tasks_dir
-    benchmark = load_benchmark(tasks_dir)
-
     if getattr(args, "all", False):
-        specs = load_all_tasks(tasks_dir, benchmark)
+        specs = load_all_tasks(config.benchmark)
         if not specs:
-            print(f"No tasks found in {tasks_dir}")
+            print(f"No tasks found in {config.benchmark.root / 'tasks'}")
             sys.exit(1)
         return specs
 
@@ -70,166 +66,96 @@ def _resolve_tasks(args, config: SForgeConfig) -> list[TaskSpec]:
     raw = args.task
     task_ids = raw if isinstance(raw, list) else [raw]
     specs: list[TaskSpec] = []
-    for tid in task_ids:
-        task_file = tasks_dir / f"{tid}.json"
-        if not task_file.exists():
-            print(f"Error: task '{tid}' not found at {task_file}")
-            sys.exit(1)
-        specs.append(make_task_spec(task_file, benchmark))
-    return specs
+    return [_load_task_by_id(config, tid) for tid in task_ids]
+
+
+def _load_task_by_id(config: SForgeConfig, task_id: str) -> TaskSpec:
+    task_toml = config.benchmark.root / "tasks" / task_id / "task.toml"
+    if not task_toml.exists():
+        print(f"Error: task '{task_id}' not found at {task_toml}")
+        sys.exit(1)
+    return load_task(task_toml.parent, config.benchmark)
+
+
+def _for_each_task(task_specs: list[TaskSpec], fn, verb: str) -> None:
+    """Run ``fn(spec) -> dict[label, str]`` for every task, in parallel."""
+    print(f"{verb} images for {len(task_specs)} task(s)...")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(task_specs)) as ex:
+        futures = {ex.submit(fn, ts): ts for ts in task_specs}
+        for fut in concurrent.futures.as_completed(futures):
+            ts = futures[fut]
+            try:
+                parts = "  ".join(f"{k}={v}" for k, v in fut.result().items())
+                print(f"  [{ts.task_id}] {parts}")
+            except Exception as e:
+                print(f"  [{ts.task_id}] FAILED: {e}", file=sys.stderr)
+    print("Done.")
 
 
 def _make_config(args) -> SForgeConfig:
     """Build config from CLI args."""
     overrides = {}
-    for key in ("log_dir", "tasks_dir", "registry", "backend",
+    for key in ("log_dir", "benchmark_dir", "registry", "backend",
                  "work_cpu_limit", "work_mem_limit", "judge_cpu_limit", "judge_mem_limit"):
         val = getattr(args, key, None)
         if val is not None:
             overrides[key] = val
-    return load_config(overrides)
+    config = load_config(overrides)
+    if hasattr(args, "benchmark_dir"):  # the command works on a benchmark
+        try:
+            config.benchmark
+        except FileNotFoundError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+    return config
+
+
+def _image_registry(config: SForgeConfig) -> str:
+    if not config.image_registry:
+        print("Error: no image registry: pass --registry or set registry in benchmark.toml", file=sys.stderr)
+        sys.exit(1)
+    return config.image_registry
 
 
 # --- Commands ---
 
 
 def cmd_build(args):
-    """Build work + judge images for one or more tasks (parallel)."""
+    """Build base + work + judge images from the task directories."""
     config = _make_config(args)
     task_specs = _resolve_tasks(args, config)
-    client = docker.from_env()
     verbose = not args.silent and len(task_specs) == 1
 
-    force_rebuild = args.force_rebuild or args.force_rebuild_with_base
-    force_rebuild_base = args.force_rebuild_with_base
-
-    if len(task_specs) == 1:
-        task_spec = task_specs[0]
-        print(f"Building images for task: {task_spec.task_id}")
+    def _build(ts: TaskSpec) -> dict:
         base, work, judge = build_all_images(
-            task_spec, config, client, force_rebuild=force_rebuild,
-            force_rebuild_base=force_rebuild_base,
-            verbose=verbose,
+            ts, config, force=args.force_rebuild or args.force_rebuild_with_base,
+            force_base=args.force_rebuild_with_base, verbose=verbose,
         )
-        print(f"  Base:  {base}")
-        print(f"  Work:  {work}")
-        print(f"  Judge: {judge}")
-    else:
-        print(f"Building images for {len(task_specs)} tasks in parallel...")
-        print(f"  (verbose output disabled for multi-task build, use single task or check log files)")
+        return {"base": base or "-", "work": work, "judge": judge}
 
-        def _build_one(ts: TaskSpec):
-            base, work, judge = build_all_images(
-                ts, config, client, force_rebuild=force_rebuild,
-                force_rebuild_base=force_rebuild_base,
-            )
-            return ts.task_id, base, work, judge
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(task_specs)) as ex:
-            futures = {ex.submit(_build_one, ts): ts for ts in task_specs}
-            for fut in concurrent.futures.as_completed(futures):
-                ts = futures[fut]
-                try:
-                    task_id, base, work, judge = fut.result()
-                    print(f"  [{task_id}] OK  base={base}  work={work}  judge={judge}")
-                except Exception as e:
-                    print(f"  [{ts.task_id}] FAILED: {e}", file=sys.stderr)
-
-    print("Done.")
+    _for_each_task(task_specs, _build, "Building")
 
 
 def cmd_pull(args):
-    """Pull pre-built images from a remote registry (parallel)."""
+    """Pull work + judge images from the remote registry."""
     config = _make_config(args)
-    if not config.registry:
-        print("Error: --registry or SFORGE_REGISTRY env var required for pull")
-        sys.exit(1)
-
-    task_specs = _resolve_tasks(args, config)
-    client = docker.from_env()
-
-    if len(task_specs) == 1:
-        task_spec = task_specs[0]
-        print(f"Pulling images for task: {task_spec.task_id}")
-        print(f"  Registry: {config.registry}")
-        print(f"  Work:  {task_spec.work_image_key}")
-        print(f"  Judge: {task_spec.judge_image_key}")
-        base_ok, work_ok, judge_ok = pull_all_images(
-            task_spec, config.registry, client
-        )
-        print(f"  Base:  {'OK' if base_ok else 'FAILED'}")
-        print(f"  Work:  {'OK' if work_ok else 'FAILED'}")
-        print(f"  Judge: {'OK' if judge_ok else 'FAILED'}")
-    else:
-        print(f"Pulling images for {len(task_specs)} tasks in parallel...")
-        print(f"  Registry: {config.registry}")
-
-        def _pull_one(ts: TaskSpec):
-            base_ok, work_ok, judge_ok = pull_all_images(
-                ts, config.registry, client
-            )
-            return ts.task_id, base_ok, work_ok, judge_ok
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(task_specs)) as ex:
-            futures = {ex.submit(_pull_one, ts): ts for ts in task_specs}
-            for fut in concurrent.futures.as_completed(futures):
-                ts = futures[fut]
-                try:
-                    task_id, base_ok, work_ok, judge_ok = fut.result()
-                    status = "OK" if all([base_ok, work_ok, judge_ok]) else "PARTIAL"
-                    print(f"  [{task_id}] {status}  base={'OK' if base_ok else 'FAIL'}  work={'OK' if work_ok else 'FAIL'}  judge={'OK' if judge_ok else 'FAIL'}")
-                except Exception as e:
-                    print(f"  [{ts.task_id}] FAILED: {e}", file=sys.stderr)
-
-    print("Done.")
+    registry = _image_registry(config)
+    _for_each_task(
+        _resolve_tasks(args, config),
+        lambda ts: {k: "OK" if ok else "FAIL" for k, ok in pull_all_images(ts, registry).items()},
+        "Pulling",
+    )
 
 
 def cmd_push(args):
-    """Push locally-built images to the remote registry (parallel)."""
+    """Push base + work + judge images to the remote registry."""
     config = _make_config(args)
-    if not config.registry:
-        print("Error: --registry or SFORGE_REGISTRY env var required for push")
-        sys.exit(1)
-
-    task_specs = _resolve_tasks(args, config)
-    client = docker.from_env()
-
-    if len(task_specs) == 1:
-        task_spec = task_specs[0]
-        print(f"Pushing images for task: {task_spec.task_id}")
-        print(f"  Registry: {config.registry}")
-        print(f"  Base hash:  {task_spec.base_image_hash[:12]}")
-        print(f"  Work hash:  {task_spec.work_image_hash[:12]}")
-        print(f"  Judge hash: {task_spec.judge_image_hash[:12]}")
-        base_ok, work_ok, judge_ok = push_all_images(
-            task_spec, config.registry, client
-        )
-        print(f"  Base:  {'OK' if base_ok else 'FAILED'}")
-        print(f"  Work:  {'OK' if work_ok else 'FAILED'}")
-        print(f"  Judge: {'OK' if judge_ok else 'FAILED'}")
-    else:
-        print(f"Pushing images for {len(task_specs)} tasks in parallel...")
-        print(f"  Registry: {config.registry}")
-
-        def _push_one(ts: TaskSpec):
-            base_ok, work_ok, judge_ok = push_all_images(
-                ts, config.registry, client
-            )
-            return ts.task_id, base_ok, work_ok, judge_ok
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(task_specs)) as ex:
-            futures = {ex.submit(_push_one, ts): ts for ts in task_specs}
-            for fut in concurrent.futures.as_completed(futures):
-                ts = futures[fut]
-                try:
-                    task_id, base_ok, work_ok, judge_ok = fut.result()
-                    status = "OK" if all([base_ok, work_ok, judge_ok]) else "PARTIAL"
-                    print(f"  [{task_id}] {status}  base={'OK' if base_ok else 'FAIL'}  work={'OK' if work_ok else 'FAIL'}  judge={'OK' if judge_ok else 'FAIL'}")
-                except Exception as e:
-                    print(f"  [{ts.task_id}] FAILED: {e}", file=sys.stderr)
-
-    print("Done.")
-
+    registry = _image_registry(config)
+    _for_each_task(
+        _resolve_tasks(args, config),
+        lambda ts: {k: "OK" if ok else "FAIL" for k, ok in push_all_images(ts, registry).items()},
+        "Pushing",
+    )
 
 
 def _run_single_task(
@@ -270,7 +196,7 @@ def _run_single_task(
     else:
         internet = task_spec.internet
 
-    print(f"Running agent '{agent.name}' on task: {task_spec.task_id}")
+    print(f"Running agent '{agent.spec}' on task: {task_spec.task_id}")
     print(f"  Work image:  {task_spec.work_image_key}")
     print(f"  Run ID:      {run_id}")
     print(f"  Timeout:     {effective_timeout}s")
@@ -315,6 +241,7 @@ def _run_single_task(
         model=args.model,
         timeout=args.timeout,
         judge_url=args.judge_url,
+        host_judge_url=getattr(args, "host_judge_url", None),
         eval_interval=effective_eval_interval,
         disable_stop_hook=disable_stop_hook,
         disable_auto_eval=disable_auto_eval,
@@ -334,14 +261,12 @@ def _run_single_task(
             print(f"  Best score:       {result.best_score:.0f}")
     else:
         print(f"  Total rounds:     {result.total_rounds}")
-        print(f"  Best pass rate:   {result.best_pass_rate:.2%}")
-        if result.best_score is not None:
-            print(f"  Best score:       {result.best_score:.0f}")
+        print(f"  Best score:       {result.best_score}  (0-100: {result.best_score_0_100})")
         print(f"  Best round:       {result.best_round}")
     print(f"  Final archive:    {run_log_dir / 'final_archive.tar.gz'}")
 
     combined = {
-        "agent": agent.name,
+        "agent": agent.spec,
         "task": task_spec.task_id,
         "run_id": run_id,
         "model": args.model or config.agent_model or agent.default_model,
@@ -358,16 +283,7 @@ def _run_single_task(
 
 def _resolve_experiment_tasks(experiment, config: SForgeConfig) -> list[TaskSpec]:
     """Resolve all tasks listed in an experiment config."""
-    tasks_dir = config.tasks_dir
-    benchmark = load_benchmark(tasks_dir)
-    specs: list[TaskSpec] = []
-    for task_id in experiment.tasks:
-        task_file = tasks_dir / f"{task_id}.json"
-        if not task_file.exists():
-            print(f"Error: task '{task_id}' (from experiment config) not found at {task_file}")
-            sys.exit(1)
-        specs.append(make_task_spec(task_file, benchmark))
-    return specs
+    return [_load_task_by_id(config, task_id) for task_id in experiment.tasks]
 
 
 def _apply_experiment_overrides(
@@ -382,7 +298,7 @@ def _apply_experiment_overrides(
       1. CLI flags (args)
       2. experiment.tasks.<task_id>.* (per-task override)
       3. experiment.defaults.* (experiment-level defaults)
-      4. task JSON / env vars / SForgeConfig defaults (base_config, original args)
+      4. task.toml / env vars / SForgeConfig defaults (base_config, original args)
     """
     if experiment is None:
         return copy.deepcopy(base_config), copy.copy(args)
@@ -452,7 +368,7 @@ def _apply_experiment_overrides(
         task_args.backend = merged.backend
         task_config.backend = merged.backend
 
-    if getattr(task_args, "judge_url", None) == "http://host.docker.internal:8080" and merged.judge_url is not None:
+    if getattr(task_args, "judge_url", None) is None and merged.judge_url is not None:
         task_args.judge_url = merged.judge_url
 
     if getattr(task_args, "max_submissions", None) is None and merged.max_submissions is not None:
@@ -524,6 +440,42 @@ def _effective_config_dict(
     return d
 
 
+def _start_embedded_judge(config: SForgeConfig, backend_name: str, port: int,
+                          advertise: str | None):
+    """Serve the judge app on a thread of this process.
+
+    Returns ``(server, container_url, host_url)``. The admin secret lives in
+    this process only.
+    """
+    import uvicorn
+
+    from sforge.harness.judge_server import create_app
+
+    if advertise is None:
+        if backend_name != "docker":
+            print(f"Error: the {backend_name} backend needs --judge-advertise (an address of "
+                  "this machine the sandboxes can reach) or an external --judge-url.",
+                  file=sys.stderr)
+            sys.exit(1)
+        advertise = "host.docker.internal"
+    os.environ.setdefault("SFORGE_ADMIN_SECRET", secrets.token_urlsafe(32))
+    if not port:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("", 0))
+            port = sock.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(
+        create_app(config), host="0.0.0.0", port=port, log_level="warning",
+    ))
+    threading.Thread(target=server.run, daemon=True, name="sforge-judge").start()
+    deadline = time.time() + 60
+    while not server.started:
+        if time.time() > deadline:
+            raise RuntimeError("In-process judge server did not start")
+        time.sleep(0.1)
+    host = f"[{advertise}]" if ":" in advertise and not advertise.startswith("[") else advertise
+    return server, f"http://{host}:{port}", f"http://127.0.0.1:{port}"
+
+
 def cmd_run(args):
     """Run a coding agent on one or more tasks, optionally auto-evaluate."""
     import shutil
@@ -543,7 +495,7 @@ def cmd_run(args):
         exp_defaults = experiment.defaults
         if exp_defaults.backend and base_config.backend == "docker" and getattr(args, "backend", None) is None:
             base_config.backend = exp_defaults.backend
-        if exp_defaults.judge_url and args.judge_url == "http://host.docker.internal:8080":
+        if exp_defaults.judge_url and args.judge_url is None:
             args.judge_url = exp_defaults.judge_url
 
     # Resolve task list
@@ -600,19 +552,24 @@ def cmd_run(args):
         )
     base_config.backend = backend_names.pop()
     backend = create_backend_from_config(base_config)
-    if backend.backend_name == "e2b":
-        unroutable = [
-            ta.judge_url for _, _, ta in task_runs
-            if urlparse(ta.judge_url).hostname == "host.docker.internal"
-        ]
-        if unroutable:
-            print(
-                "Error: the e2b backend needs a Judge Server the sandboxes "
-                "can reach. Start `sforge serve` on a routable host and pass "
-                "its address via --judge-url.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
+    if backend.backend_name == "e2b" and any(
+        urlparse(ta.judge_url).hostname == "host.docker.internal"
+        for _, _, ta in task_runs if ta.judge_url
+    ):
+        print("Error: e2b sandboxes cannot reach host.docker.internal; pass a "
+              "routable --judge-url or --judge-advertise.", file=sys.stderr)
+        sys.exit(1)
+
+    # Without --judge-url, this process serves the judge for all of its tasks.
+    embedded_judge = None
+    if not all(ta.judge_url for _, _, ta in task_runs):
+        embedded_judge, container_url, host_url = _start_embedded_judge(
+            base_config, backend.backend_name, args.judge_port, args.judge_advertise,
+        )
+        for _, _, ta in task_runs:
+            if not ta.judge_url:
+                ta.judge_url, ta.host_judge_url = container_url, host_url
+        print(f"Judge server: {container_url} (in-process)")
 
     # Resolve stagger: CLI flag wins over experiment YAML
     stagger = args.stagger
@@ -634,13 +591,17 @@ def cmd_run(args):
 
     shutdown_event = threading.Event()
 
-    def _sigint_handler(signum, frame):
+    # SIGTERM (systemd, platforms, `timeout`) gets the same graceful
+    # shutdown as Ctrl+C, so containers are stopped and results collected.
+    def _shutdown_handler(signum, frame):
         if not shutdown_event.is_set():
             shutdown_event.set()
-            print("\nShutting down — stopping containers (Ctrl+C again has no effect)...")
+            print("\nShutting down — stopping containers (further signals are ignored)...")
         signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
 
-    old_sigint = signal.signal(signal.SIGINT, _sigint_handler)
+    old_sigint = signal.signal(signal.SIGINT, _shutdown_handler)
+    old_sigterm = signal.signal(signal.SIGTERM, _shutdown_handler)
 
     def _invoke(ts: TaskSpec, task_config: SForgeConfig, task_args):
         try:
@@ -686,6 +647,9 @@ def cmd_run(args):
         print("\nShutting down — stopping containers...")
     finally:
         signal.signal(signal.SIGINT, old_sigint)
+        signal.signal(signal.SIGTERM, old_sigterm)
+        if embedded_judge is not None:
+            embedded_judge.should_exit = True
 
     if multi:
         run_root = base_config.log_dir / "runs" / run_id
@@ -700,12 +664,8 @@ def cmd_run(args):
             tid = s.get("task", "?")
             if "error" in s:
                 mark = f"ERROR: {s['error']}"
-            elif "best_pass_rate" in s:
-                mark = f"{s['best_pass_rate']:.2%}"
-                if s.get("best_score") is not None:
-                    mark += f"  (score {s['best_score']:.0f})"
-            elif "eval" in s and s["eval"]:
-                mark = f"{s['eval'].get('pass_rate', 0):.2%}"
+            elif s.get("best_score_0_100") is not None:
+                mark = f"{s['best_score_0_100']:.2f}  (raw {s.get('best_score')})"
             else:
                 mark = "-"
             print(f"  {tid:<30} {mark}")
@@ -763,13 +723,13 @@ def cmd_eval(args):
 
     print()
     print(f"Results:")
-    print(f"  Total tests: {report.total_tests}")
-    print(f"  Passed:      {report.passed}")
-    print(f"  Failed:      {report.failed}")
-    print(f"  Errors:      {report.errors}")
-    print(f"  Pass rate:   {report.pass_rate:.2%}")
-    if report.score_0_100 is not None:
-        print(f"  Score 0-100: {report.score_0_100:.2f}")
+    print(f"  Valid:       {report.valid}")
+    print(f"  Score:       {report.score}")
+    print(f"  Score 0-100: {report.score_0_100}")
+    if report.summary:
+        print(f"  Summary:     {report.summary}")
+    if report.error:
+        print(f"  Error:       {report.error}")
     print(f"  Runtime:     {report.runtime_seconds:.2f}s")
     print(f"  Timed out:   {report.timed_out}")
 
@@ -791,60 +751,30 @@ def cmd_serve(args):
     uvicorn.run(app, host=args.host, port=args.port)
 
 
-def cmd_proxy(args):
-    """Start a local API reverse proxy (for use with --disable-internet)."""
-    config = _make_config(args)
-
-    http_proxy = config.http_proxy
-    https_proxy = config.https_proxy
-    if not http_proxy and not https_proxy:
-        print(
-            "ERROR: No proxy configured. Set SFORGE_HTTPS_PROXY (or HTTPS_PROXY) "
-            "before starting the proxy.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    from sforge.harness.api_proxy import APIProxy
-
-    proxy = APIProxy(
-        target_url=args.target,
-        http_proxy=http_proxy,
-        https_proxy=https_proxy,
-        host=args.host,
-        port=args.port,
-    )
-    print(f"Starting API proxy on {proxy.local_url}")
-    print(f"  Forwarding to: {proxy.target_url}")
-    print(f"  Via proxy:     {https_proxy or http_proxy}")
-    print()
-    print("Usage: in another terminal, run:")
-    print(f"  export SFORGE_AGENT_API_BASE_URL=http://host.docker.internal:{proxy.port}")
-    print(f"  python -m sforge run --task <TASK> --agent <AGENT> --disable-internet")
-    print()
-    proxy.run_forever()
-
-
-def cmd_visualizer(args):
-    """Start the run-results visualizer web UI."""
+def cmd_viewer(args):
+    """Start the run viewer (score curves, submissions, token usage)."""
     import uvicorn
 
-    from sforge.visualizer.server import create_app as create_viz_app
+    from sforge.viewer import create_app
 
     config = _make_config(args)
-    runs_dir = Path(args.runs_dir).resolve()
-    tasks_dir = Path(args.tasks_dir).resolve() if args.tasks_dir else config.tasks_dir
-    if not tasks_dir.is_dir():
-        tasks_dir = None
-    if not runs_dir.is_dir():
-        print(f"WARNING: runs dir does not exist: {runs_dir}")
-    else:
-        n = sum(1 for p in runs_dir.iterdir() if p.is_dir())
-        print(f"Found {n} run folder(s) in {runs_dir}")
-    print(f"Reading tasks from: {tasks_dir if tasks_dir else '(none)'}")
-    app = create_viz_app(runs_dir, tasks_dir=tasks_dir)
+    runs_dir = Path(args.runs_dir).resolve() if args.runs_dir else config.log_dir / "runs"
+    print(f"Runs: {runs_dir}")
     print(f"Open: http://{args.host}:{args.port}/")
-    uvicorn.run(app, host=args.host, port=args.port)
+    uvicorn.run(create_app(runs_dir), host=args.host, port=args.port, log_level="warning")
+
+
+def cmd_replay(args):
+    """Open a run's archived session in the agent's own UI."""
+    from sforge.replay import replay
+
+    config = _make_config(args)
+    runs_dir = Path(args.runs_dir).resolve() if args.runs_dir else config.log_dir / "runs"
+    task_dir = runs_dir / args.run_id / args.task
+    if not task_dir.is_dir():
+        print(f"Error: no run at {task_dir}", file=sys.stderr)
+        sys.exit(1)
+    replay(task_dir, args.session)
 
 
 def cmd_list(args):
@@ -861,62 +791,21 @@ def cmd_list(args):
         return s + " " * (width - _display_width(s))
 
     config = _make_config(args)
-    benchmark = load_benchmark(config.tasks_dir)
-    tasks = load_all_tasks(config.tasks_dir, benchmark)
+    tasks = load_all_tasks(config.benchmark)
 
     if not tasks:
-        print(f"No tasks found in {config.tasks_dir}")
+        print(f"No tasks found in {config.benchmark.root / 'tasks'}")
         return
 
     col_id = max(_display_width("ID"), max(_display_width(t.task_id) for t in tasks)) + 2
     col_name = max(_display_width("Name"), max(_display_width(t.name) for t in tasks)) + 2
-    col_base = max(_display_width("Base Image"), max(_display_width(t.base_image) for t in tasks)) + 2
-    col_parser = max(_display_width("Parser"), max(_display_width(t.judge.parser) for t in tasks)) + 2
+    col_base = max(_display_width("Base"), max(_display_width(t.base or "-") for t in tasks)) + 2
 
-    print(f"{_pad('ID', col_id)} {_pad('Name', col_name)} {_pad('Base Image', col_base)} {_pad('Parser', col_parser)}")
-    print("-" * (col_id + col_name + col_base + col_parser + 3))
+    print(f"{_pad('ID', col_id)} {_pad('Name', col_name)} {_pad('Base', col_base)} Version")
+    print("-" * (col_id + col_name + col_base + 10))
     for t in tasks:
-        print(f"{_pad(t.task_id, col_id)} {_pad(t.name, col_name)} {_pad(t.base_image, col_base)} {_pad(t.judge.parser, col_parser)}")
+        print(f"{_pad(t.task_id, col_id)} {_pad(t.name, col_name)} {_pad(t.base or '-', col_base)} {t.version}")
 
-
-
-def cmd_fetch_tasks(args):
-    """Download benchmark task definitions from HuggingFace Hub."""
-    from huggingface_hub import snapshot_download
-
-    from sforge.harness.constants import BENCHMARK_REGISTRY, DEFAULT_BENCHMARK
-
-    benchmark = args.benchmark or DEFAULT_BENCHMARK
-    repo_id = args.repo or BENCHMARK_REGISTRY.get(benchmark)
-    if not repo_id:
-        available = ", ".join(sorted(BENCHMARK_REGISTRY))
-        print(
-            f"Error: unknown benchmark '{benchmark}'. "
-            f"Available: {available}\n"
-            f"Or specify --repo <org/repo> directly.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    tasks_dir = Path(args.tasks_dir).resolve() if args.tasks_dir else Path("tasks").resolve()
-    revision = args.revision or None
-
-    print(f"Fetching tasks from HuggingFace Hub")
-    print(f"  Repo:      {repo_id}")
-    if revision:
-        print(f"  Revision:  {revision}")
-    print(f"  Target:    {tasks_dir}")
-    print()
-
-    snapshot_download(
-        repo_id=repo_id,
-        repo_type="dataset",
-        local_dir=str(tasks_dir),
-        revision=revision,
-    )
-
-    n_tasks = sum(1 for p in tasks_dir.glob("*.json"))
-    print(f"\nDone. {n_tasks} task file(s) in {tasks_dir}")
 
 
 # --- Main parser ---
@@ -930,14 +819,18 @@ def main():
 
     # Global flags
     parser.add_argument("--log-dir", dest="log_dir", default=None)
-    parser.add_argument("--tasks-dir", dest="tasks_dir", default=None)
     parser.add_argument("--silent", action="store_true", default=False,
                         help="Suppress detailed log output (auto-enabled for multi-task runs)")
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    # Commands that work on tasks take the benchmark directory.
+    bench = argparse.ArgumentParser(add_help=False)
+    bench.add_argument("-b", "--benchmark", dest="benchmark_dir", default=None, metavar="DIR",
+                       help=f"Benchmark directory with benchmark.toml (default: SFORGE_BENCHMARK, else {DEFAULT_BENCHMARK_DIR})")
+
     # build
-    p_build = subparsers.add_parser("build", help="Build work + judge images")
+    p_build = subparsers.add_parser("build", parents=[bench], help="Build work + judge images")
     p_build_group = p_build.add_mutually_exclusive_group(required=True)
     p_build_group.add_argument("--task", nargs="+",
                                help="One or more task IDs (e.g. --task minitorch gitlet)")
@@ -950,31 +843,31 @@ def main():
     p_build.set_defaults(func=cmd_build)
 
     # pull
-    p_pull = subparsers.add_parser("pull", help="Pull pre-built images from remote registry")
+    p_pull = subparsers.add_parser("pull", parents=[bench], help="Pull pre-built images from remote registry")
     p_pull_group = p_pull.add_mutually_exclusive_group(required=True)
     p_pull_group.add_argument("--task", nargs="+",
                               help="One or more task IDs")
     p_pull_group.add_argument("--all", action="store_true", default=False,
                               help="Pull images for all tasks")
     p_pull.add_argument("--registry", dest="registry", default=None,
-                        help="Remote container registry (overrides SFORGE_REGISTRY)")
+                        help="Registry prefix (default: SFORGE_REGISTRY, else the benchmark's registry)")
     p_pull.set_defaults(func=cmd_pull)
 
     # push
-    p_push = subparsers.add_parser("push", help="Push built images to remote registry")
+    p_push = subparsers.add_parser("push", parents=[bench], help="Push built images to remote registry")
     p_push_group = p_push.add_mutually_exclusive_group(required=True)
     p_push_group.add_argument("--task", nargs="+",
                               help="One or more task IDs")
     p_push_group.add_argument("--all", action="store_true", default=False,
                               help="Push images for all tasks")
     p_push.add_argument("--registry", dest="registry", default=None,
-                        help="Remote container registry (overrides SFORGE_REGISTRY)")
+                        help="Registry prefix (default: SFORGE_REGISTRY, else the benchmark's registry)")
     p_push.set_defaults(func=cmd_push)
 
     # run
-    p_run = subparsers.add_parser("run", help="Run an agent on one or more tasks")
+    p_run = subparsers.add_parser("run", parents=[bench], help="Run an agent on one or more tasks")
     p_run.add_argument("--backend", choices=["docker", "k8s", "e2b"], default=None,
-                       help="Container backend (default from SFORGE_BACKEND or 'docker')")
+                       help="Container backend (default: docker)")
     p_run.add_argument("--task", default=None, nargs="+",
                        help="One or more task IDs (e.g. --task ahc056 ahc057). "
                             "Multiple tasks are run fully in parallel.")
@@ -1001,7 +894,14 @@ def main():
                        help="Minimum seconds between agent submissions (default: no cooldown)")
     p_run.add_argument("--stagger", type=int, default=None, dest="stagger",
                        help="Spread task launches evenly over N seconds (e.g. --stagger 300)")
-    p_run.add_argument("--judge-url", default="http://host.docker.internal:8080", help="Judge server URL")
+    p_run.add_argument("--judge-url", default=None,
+                       help="Use an external judge server (`sforge serve`) at this URL. "
+                            "By default `run` serves the judge itself.")
+    p_run.add_argument("--judge-port", type=int, default=0, dest="judge_port",
+                       help="Port for the in-process judge (default: any free port)")
+    p_run.add_argument("--judge-advertise", default=None, dest="judge_advertise",
+                       help="Host/IP the sandboxes use to reach this machine's in-process judge "
+                            "(default: host.docker.internal; required for k8s/e2b)")
     p_run.add_argument("--run-id", default=None, help="Run ID for tracking")
     net_group = p_run.add_mutually_exclusive_group()
     net_group.add_argument(
@@ -1026,9 +926,9 @@ def main():
     p_run.set_defaults(func=cmd_run)
 
     # eval
-    p_eval = subparsers.add_parser("eval", help="Evaluate an archive")
+    p_eval = subparsers.add_parser("eval", parents=[bench], help="Evaluate an archive")
     p_eval.add_argument("--backend", choices=["docker", "k8s", "e2b"], default=None,
-                        help="Container backend (default from SFORGE_BACKEND or 'docker')")
+                        help="Container backend (default: docker)")
     p_eval.add_argument("--task", required=True, help="Task ID")
     p_eval.add_argument("--archive", required=True, help="Path to .tar.gz archive (or - for stdin)")
     p_eval.add_argument("--run-id", default=None, help="Submission/run ID")
@@ -1041,54 +941,29 @@ def main():
     p_eval.set_defaults(func=cmd_eval)
 
     # serve
-    p_serve = subparsers.add_parser("serve", help="Start judge HTTP server")
+    p_serve = subparsers.add_parser("serve", parents=[bench], help="Start judge HTTP server")
     p_serve.add_argument("--host", default="0.0.0.0")
     p_serve.add_argument("--port", type=int, default=8080)
     p_serve.set_defaults(func=cmd_serve)
 
-    # proxy
-    p_proxy = subparsers.add_parser(
-        "proxy", help="Start local API reverse proxy (for --disable-internet)"
-    )
-    p_proxy.add_argument(
-        "--target", required=True,
-        help="Upstream API URL to forward to (e.g. https://api.anthropic.com)",
-    )
-    p_proxy.add_argument("--host", default="0.0.0.0")
-    p_proxy.add_argument("--port", type=int, default=9090)
-    p_proxy.set_defaults(func=cmd_proxy)
+    # viewer
+    p_viewer = subparsers.add_parser("viewer", help="Start the run viewer web UI")
+    p_viewer.add_argument("--runs-dir", default=None, help="Run folders (default: <log dir>/runs)")
+    p_viewer.add_argument("--host", default="127.0.0.1")
+    p_viewer.add_argument("--port", type=int, default=8000)
+    p_viewer.set_defaults(func=cmd_viewer)
 
-    # visualizer
-    p_viz = subparsers.add_parser("visualizer", help="Start run-results visualizer web UI")
-    p_viz.add_argument("--runs-dir", default="logs/runs", help="Directory of run folders")
-    p_viz.add_argument("--tasks-dir", dest="tasks_dir", default=None, help="Directory of task JSONs (for score_direction). Defaults to the harness tasks/ dir.")
-    p_viz.add_argument("--host", default="127.0.0.1")
-    p_viz.add_argument("--port", type=int, default=8000)
-    p_viz.set_defaults(func=cmd_visualizer)
+    # replay
+    p_replay = subparsers.add_parser("replay", help="Open a run's agent session in the agent's own UI")
+    p_replay.add_argument("--run-id", required=True)
+    p_replay.add_argument("--task", required=True)
+    p_replay.add_argument("--session", default=None, help="Session id (default: the latest one)")
+    p_replay.add_argument("--runs-dir", default=None, help="Run folders (default: <log dir>/runs)")
+    p_replay.set_defaults(func=cmd_replay)
 
     # list
-    p_list = subparsers.add_parser("list", help="List available tasks")
+    p_list = subparsers.add_parser("list", parents=[bench], help="List available tasks")
     p_list.set_defaults(func=cmd_list)
-
-    # fetch-tasks
-    p_fetch = subparsers.add_parser(
-        "fetch-tasks",
-        help="Download benchmark task definitions from HuggingFace Hub",
-    )
-    p_fetch.add_argument(
-        "benchmark", nargs="?", default=None,
-        help="Benchmark name (default: edgebench). Use --repo for unlisted repos.",
-    )
-    p_fetch.add_argument(
-        "--repo", default=None,
-        help="HuggingFace repo ID (e.g. ByteDance-Seed/EdgeBench). "
-             "Overrides the benchmark name lookup.",
-    )
-    p_fetch.add_argument(
-        "--revision", default=None,
-        help="Git revision (branch, tag, or commit hash) to download.",
-    )
-    p_fetch.set_defaults(func=cmd_fetch_tasks)
 
     args = parser.parse_args()
     args.func(args)

@@ -1,0 +1,49 @@
+[package]
+name = "cas-search"
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Search infrastructure for CAS: BM25, semantic vectors, and hybrid search"
+license = "MIT"
+
+[dependencies]
+# Core types
+cas-types = { path = "../cas-types" }
+cas-code = { path = "../cas-code" }
+cas-store = { path = "../cas-store" }
+
+# LMDB vector storage (Meilisearch's wrapper)
+heed = { version = "0.22", features = ["serde-json"] }
+
+# BM25 full-text search
+tantivy = "0.25"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+
+# Grep/ripgrep libraries
+grep-searcher = "0.1"
+grep-regex = "0.1"
+ignore = "0.4"
+
+# Metrics storage
+rusqlite = { version = "0.38", features = ["bundled"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# Async parallel search (optional)
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"], optional = true }
+
+[features]
+default = []
+parallel = ["tokio"]
+
+[dev-dependencies]
+tempfile = "3.14"

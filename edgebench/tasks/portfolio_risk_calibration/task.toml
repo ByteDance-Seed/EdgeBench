@@ -1,0 +1,35 @@
+schema_version = 0
+id = "portfolio_risk_calibration"
+name = "Portfolio Risk Calibration"
+category = "Professional Knowledge Work"
+language = "Python"
+description = "Implement a multi-module portfolio management system (risk calibration, constrained optimization, execution cost modeling, dynamic rebalancing) for a cross-asset ETF portfolio. Evaluated out-of-sample on risk-adjusted return metrics."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python"
+platform = "linux/amd64"
+cwd = "/home/workspace"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["portfolio_optimizer.py", "requirements.txt", "backtest_results.json"]
+exclude = [".git", "__pycache__", "*.pyc", "node_modules", "bin", "obj"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 600
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# The grader runs the submitted portfolio_optimizer.py --backtest once (capped at 300 s by
+# eval_script.py) and then scores the backtest_results.json it writes; see NOTES.md.
+
+[score]
+direction = "maximize"
+# raw score = v1 structured_json score = score.py: eval_script.py "Final total score", clamped
+# to 0..100. v1 defined no rescale (score_0_100 was null), so none is set here either; see NOTES.md.

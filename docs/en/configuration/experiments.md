@@ -6,7 +6,7 @@ title: Experiment Configuration
 
 ## Overview
 
-Experiment configuration files provide a YAML-based way to run multiple tasks with shared model settings and per-task overrides. This decouples "how to run" (model, timeouts, agent settings) from "what to test" (task JSON definitions).
+Experiment configuration files provide a YAML-based way to run multiple tasks with shared model settings and per-task overrides. This decouples "how to run" (model, timeouts, agent settings) from "what to test" (the task directories).
 
 ::: tip Official leaderboard settings
 The experiment YAMLs in the [all-tasks-k8s example](/en/examples/all-tasks-k8s) are the official configurations behind the EdgeBench leaderboard numbers.
@@ -27,16 +27,22 @@ defaults:
   timeout: 7200
   eval_interval: 300
 
+env:
+  SFORGE_K8S_NAMESPACE: "sforge-runs"
+
 tasks:
   ad_placement_optimization:
     eval_interval: 1800
-  tinykv:
-    extra_env:
-      GOPROXY: "https://goproxy.cn"
-  gitlet: {}
+  smt_solver:
+    work_cpu_limit: 16
+  graph_node_classification: {}
 ```
 
 ## Fields
+
+### `env`
+
+Environment variables set in the `sforge run` process before the rest of the file is read, so they work like exported variables (for example `SFORGE_K8S_IMAGE_REGISTRY` or `SFORGE_JUDGE_EXTRA_ENV`). Values are taken literally; `${VAR}` expansion applies only to the `model` section.
 
 ### `model`
 
@@ -54,7 +60,7 @@ Default settings applied to all tasks unless overridden per-task.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `agent` | `string` | --- | Agent name (`claude-code`, `codex`, `opencode`, or a pinned variant such as `claude-code-2.1.214`) |
+| `agent` | `string` | --- | Agent name (`claude-code`, `codex`, `opencode`), optionally `@<version>` (e.g. `claude-code@2.1.258`) |
 | `model` | `string` | --- | Model override (overrides `model.model` for specific tasks if set per-task) |
 | `effort` | `string` | --- | Reasoning effort (`low`, `medium`, `high`, or `max`); mapped to the selected Agent when supported |
 | `timeout` | `int` | --- | Agent timeout in seconds |
@@ -62,10 +68,10 @@ Default settings applied to all tasks unless overridden per-task.
 | `disable_stop_hook` | `bool` | `false` | Disable the agent stop hook |
 | `disable_auto_eval` | `bool` | `false` | Disable background auto-evaluation |
 | `disable_auto_resume` | `bool` | `false` | Disable auto-resume on abnormal agent exit |
-| `internet` | `bool` | --- | Enable/disable internet access |
+| `internet` | `bool` | --- | Override the task's `internet` setting for the work container |
 | `extra_env` | `dict` | --- | Extra environment variables injected into the agent container |
 | `backend` | `string` | --- | Container backend (`docker`, `k8s`, or `e2b`) |
-| `judge_url` | `string` | --- | Judge server URL override |
+| `judge_url` | `string` | --- | External judge server URL (default: `sforge run` serves the judge itself) |
 | `max_submissions` | `int` | --- | Maximum number of agent submissions per run |
 | `submission_cooldown` | `int` | --- | Minimum seconds between agent submissions |
 | `work_cpu_limit` | `int` | --- | CPU limit for work containers |
@@ -75,7 +81,7 @@ Default settings applied to all tasks unless overridden per-task.
 
 ### `tasks`
 
-Per-task overrides. Each key is a task ID that must correspond to a JSON file in the tasks directory. The value accepts the same fields as `defaults`. Tasks listed here define which tasks are run --- if `--task` is not specified on the CLI, the experiment's task list is used.
+Per-task overrides. Each key is a task ID, the name of a directory under the benchmark's `tasks/`. The value accepts the same fields as `defaults`. Tasks listed here define which tasks are run --- if `--task` is not specified on the CLI, the experiment's task list is used.
 
 An empty object (`{}`) means "use all defaults, no overrides."
 
@@ -94,13 +100,13 @@ For example, with 6 tasks and `stagger: 300`, each task starts 50 seconds apart.
 Configuration values are resolved in the following order (highest priority first):
 
 ```
-CLI flags  >  per-task overrides  >  experiment defaults  >  env vars / task JSON
+CLI flags  >  per-task overrides  >  experiment defaults  >  task.toml / env vars / built-in defaults
 ```
 
 For example:
 - `--timeout 3600` on the CLI always wins
 - A per-task `timeout: 1800` overrides the experiment-level `defaults.timeout`
-- The experiment `defaults.timeout` overrides `SFORGE_AGENT_TIMEOUT`
+- `work_cpu_limit` in the experiment overrides `cpus` in the task's `task.toml`
 
 For `extra_env`, dictionaries are **merged** (not replaced). Per-task keys override default keys on conflict:
 
@@ -131,7 +137,7 @@ When `--task` is not specified, all tasks listed in the experiment file are run 
 ### Run a subset of tasks
 
 ```bash
-sforge run --experiment experiments/my_config.yaml --task ad_placement_optimization tinykv
+sforge run --experiment experiments/my_config.yaml --task ad_placement_optimization smt_solver
 ```
 
 This uses the experiment's model and default settings but only runs the specified tasks.
@@ -162,11 +168,4 @@ If a referenced variable is not set, SForge exits with an error. This lets you k
 
 ## Run Artifacts
 
-When running with an experiment config, SForge saves:
-
-- `logs/runs/<run-id>/experiment.yaml` --- a copy of the experiment file
-- `logs/runs/<run-id>/run_config.json` --- the fully resolved configuration for all tasks
-- `logs/runs/<run-id>/<task-id>/run_config.json` --- per-task resolved configuration (with API keys redacted)
-- `logs/runs/<run-id>/summary.json` --- final results summary (multi-task runs)
-
-This ensures every run is fully reproducible from its log directory.
+A run with an experiment file also saves a copy of it and the fully resolved configuration; see [Run Outputs](/en/reference/cli#run-outputs).
