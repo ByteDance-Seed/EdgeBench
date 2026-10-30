@@ -1,0 +1,39 @@
+schema_version = 0
+id = "ordinal_notation_well_foundedness"
+name = "Ordinal Notation Well Foundedness"
+category = "Formal Math & Theorem Proving"
+language = "Coq"
+description = "Construct well-foundedness proofs for ordinal notation systems in Coq, involving Cantor Normal Form and ordinal arithmetic."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "coq"               # bases/coq (coqorg/coq:8.20 + git curl jq build-essential python3 ...); the task adds coq* symlinks in /usr/local/bin
+platform = "linux/amd64"
+cwd = "/home/workspace/ordinal_notation_wf"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["."]
+exclude = [
+  ".git", ".coq-native", "_CoqProject", "Makefile.coq", "Makefile.coq.conf",
+  "*.aux", ".*.aux", "*.d", "*.glob", "*.vo", "*.vos", "*.vok", "*.vio",
+  "eval_task*.v", "ChildOf.v", "debug*.v", "test*.v", "check*.v", "explore*.v", "tmp*.v", "scratch*.v",
+]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 7200
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# eval.py gives each coqc call 300 s.
+
+[score]
+direction = "maximize"
+# raw score = eval.py `score`: sum of the weights (1,2,2,4,4,8,16,16,32) of the targets whose
+# eval_taskN.v prints "Closed under the global context"; v1 rescale was linear 0..85.
+rescale = { kind = "linear", lower = 0.0, upper = 85.0 }

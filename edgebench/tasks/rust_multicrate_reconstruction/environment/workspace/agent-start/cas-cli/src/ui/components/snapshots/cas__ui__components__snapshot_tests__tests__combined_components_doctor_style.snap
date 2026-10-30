@@ -1,0 +1,13 @@
+---
+source: cas-cli/src/ui/components/snapshot_tests.rs
+expression: tf.output()
+---
+=== CAS Doctor ===
+
+[OK] Store connected
+[OK] Schema up to date
+[WARN] Index stale
+
+Entries: 142
+  Rules: 5
+  Tasks: 23

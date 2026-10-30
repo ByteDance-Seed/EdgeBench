@@ -1,0 +1,36 @@
+schema_version = 0
+id = "cta_risk_budget_optimization"
+name = "Cta Risk Budget Optimization"
+category = "Professional Knowledge Work"
+language = "Python"
+description = "Build a complete CTA multi-strategy futures trading system: multiple signal classes, dynamic risk budgeting, a multi-currency backtest engine with transaction costs, drawdown control, and performance attribution."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python"
+platform = "linux/amd64"
+cwd = "/home/workspace"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["run.py", "main.py", "config.json", "config.yaml", "nav_history.csv", "signal_matrix.csv", "positions.csv", "trades.csv", "risk_budget_allocation.csv", "performance_report.md", "performance_report.xlsx", "stress_test_report.md", "stress_test_results.xlsx", "sensitivity_analysis_report.md", "sensitivity_analysis.xlsx", "diagnostics.json", "outputs"]
+exclude = [".git", "__pycache__", "*.pyc", "node_modules", "bin", "obj", "attachments", "task_instruction.md", "requirements.txt", "futures_price_data.xlsx", "futures_contract_specs.xlsx", "macro_factors_data.xlsx", "risk_policy_doc.docx", "strategy_research_notes.docx"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 600
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# The grader runs the submitted run.py/main.py twice (once from run_eval.py, once from
+# eval_script.py, each capped at 300 s) and then scores the files it finds; see NOTES.md.
+
+[score]
+direction = "maximize"
+# raw score = v1 structured_json score = run_eval.py: eval_script.py grand_total / 80 * 100
+# (0..100 by construction). v1 defined no rescale (score_0_100 was null), so none is set
+# here either; see NOTES.md.

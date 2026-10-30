@@ -1,0 +1,35 @@
+schema_version = 0
+id = "openttd_transport_ai"
+name = "Openttd Transport Ai"
+category = "Interactive Games & Simulators"
+language = "Python"
+description = "Write an AI script for OpenTTD that builds road, rail, and air transport networks to connect towns and industries and grow company value across diverse procedurally generated maps."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python310"
+platform = "linux/amd64"
+cwd = "/home/workspace/openttd_ai"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["my_ai/"]
+exclude = []
+
+[judge]
+cmd = "python3 /judge/grade.py"
+timeout_sec = 3600
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# The eval runs 5 OpenTTD games (seeds 0-4, 20 game years each) in parallel, min(5, cpu_count)
+# worker processes; each game is deterministic for a given AI. eval_openttd.py has its own 3600 s
+# timeout (prints TOTAL_SCORE 0).
+
+[score]
+direction = "maximize"
+rescale = { kind = "log_max", baseline = 100000.0, expert = 1000000000.0 }

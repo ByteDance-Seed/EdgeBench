@@ -1,0 +1,19 @@
+% Those macros are used for the print version of the blueprint.
+% This file is not meant to be built. Build src/web.tex or src/print.text instead.
+
+% We neutralise the Plastex commands
+\newcommand{\proves}[1]{}
+\newcommand{\lean}[1]{}
+\newcommand{\leanok}{}
+\tracinglostchars=3
+
+% Make sure that arguments of \uses are real labels, by using invisible refs:
+% latex prints a warning if the label is not defined, but nothing is shown in the pdf file.
+\ExplSyntaxOn \NewDocumentCommand{\uses}{m}
+ {\clist_map_inline:nn{#1}{\vphantom{\ref{##1}}}%
+  \ignorespaces}
+\ExplSyntaxOff
+
+% In some distributions, \C is already defined so \newcommand fails, however, \def seems to
+% break the web-build our CI does, so we declare this separately for the pdf and the web version
+\def\C{\mathbb{C}}

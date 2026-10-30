@@ -1,0 +1,30 @@
+{
+    "files.exclude": {
+        "**/.DS_Store": true,
+        "**/.DS_yml": true,
+        "**/.git": true,
+        "**/*.olean": true,
+        "build": true,
+        "html": true,
+    },
+    "editor.minimap.enabled": false,
+    "editor.acceptSuggestionOnEnter": "off",
+    "scm.diffDecorationsGutterVisibility": "hover",
+    "editor.semanticHighlighting.enabled": true,
+    "editor.semanticTokenColorCustomizations": {
+        "[Default Light+]": {"rules": {"variable": "#1a31da"}}
+    },
+    "editor.unicodeHighlight.nonBasicASCII": false,
+    "editor.unicodeHighlight.ambiguousCharacters": false,
+    "editor.fontLigatures": true,
+    "files.trimTrailingWhitespace": true,
+    "files.trimFinalNewlines": true,
+    "lean4.infoview.emphasizeFirstGoal": true,
+    "lean4.infoview.showExpectedType": false,
+    "search.useIgnoreFiles": true,
+    "editor.rulers": [100],
+    "files.readonlyInclude": {
+        "**/.elan/**": true,
+        "**/.lake/**": true
+      }
+  }

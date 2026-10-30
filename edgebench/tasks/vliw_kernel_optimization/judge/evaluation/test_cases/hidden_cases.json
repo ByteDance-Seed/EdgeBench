@@ -1,0 +1,77 @@
+{
+  "cases": [
+    {
+      "name": "hidden_correctness_1000",
+      "forest_height": 10,
+      "rounds": 16,
+      "batch_size": 256,
+      "seed": 1000,
+      "kind": "correctness"
+    },
+    {
+      "name": "hidden_correctness_1001",
+      "forest_height": 10,
+      "rounds": 16,
+      "batch_size": 256,
+      "seed": 1001,
+      "kind": "correctness"
+    },
+    {
+      "name": "hidden_correctness_1002",
+      "forest_height": 10,
+      "rounds": 16,
+      "batch_size": 256,
+      "seed": 1002,
+      "kind": "correctness"
+    },
+    {
+      "name": "hidden_correctness_1003",
+      "forest_height": 10,
+      "rounds": 16,
+      "batch_size": 256,
+      "seed": 1003,
+      "kind": "correctness"
+    },
+    {
+      "name": "hidden_correctness_1004",
+      "forest_height": 10,
+      "rounds": 16,
+      "batch_size": 256,
+      "seed": 1004,
+      "kind": "correctness"
+    },
+    {
+      "name": "hidden_correctness_1005",
+      "forest_height": 10,
+      "rounds": 16,
+      "batch_size": 256,
+      "seed": 1005,
+      "kind": "correctness"
+    },
+    {
+      "name": "hidden_correctness_1006",
+      "forest_height": 10,
+      "rounds": 16,
+      "batch_size": 256,
+      "seed": 1006,
+      "kind": "correctness"
+    },
+    {
+      "name": "hidden_correctness_1007",
+      "forest_height": 10,
+      "rounds": 16,
+      "batch_size": 256,
+      "seed": 1007,
+      "kind": "correctness"
+    },
+    {
+      "name": "hidden_performance_2026",
+      "forest_height": 10,
+      "rounds": 16,
+      "batch_size": 256,
+      "seed": 2026,
+      "kind": "performance"
+    }
+  ],
+  "thresholds": [147734, 18532, 2164, 1790, 1579, 1548, 1487, 1363]
+}

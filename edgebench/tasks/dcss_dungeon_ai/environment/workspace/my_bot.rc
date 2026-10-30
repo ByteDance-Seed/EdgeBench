@@ -1,0 +1,18 @@
+# DCSS Bot RC file
+include = my_bot_include.rc
+weapon = mace
+autopickup = $?!+"/)
+explore_greedy = true
+travel_delay = -1
+rest_delay = -1
+show_more = false
+clear_messages = true
+easy_confirm = all
+default_manual_training = true
+force_more_message =
+show_travel_trail = false
+allow_self_target = yes
+easy_door = true
+easy_eat_chunks = true
+easy_quit_item_prompts = true
+morgue_dir = /opt/tiger/game/DCSS/morgue

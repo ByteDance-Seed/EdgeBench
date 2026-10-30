@@ -1,0 +1,124 @@
+{
+  "outputs": [
+    {
+      "path": "A卷原卷.docx",
+      "format": "Word document"
+    },
+    {
+      "path": "A卷原卷.pdf",
+      "format": "PDF"
+    },
+    {
+      "path": "A卷答案和评分细则.docx",
+      "format": "Word document"
+    },
+    {
+      "path": "A卷答案和评分细则.pdf",
+      "format": "PDF"
+    },
+    {
+      "path": "B卷原卷.docx",
+      "format": "Word document"
+    },
+    {
+      "path": "B卷原卷.pdf",
+      "format": "PDF"
+    },
+    {
+      "path": "B卷答案和评分细则.docx",
+      "format": "Word document"
+    },
+    {
+      "path": "B卷答案和评分细则.pdf",
+      "format": "PDF"
+    },
+    {
+      "path": "C卷原卷.docx",
+      "format": "Word document"
+    },
+    {
+      "path": "C卷原卷.pdf",
+      "format": "PDF"
+    },
+    {
+      "path": "C卷答案和评分细则.docx",
+      "format": "Word document"
+    },
+    {
+      "path": "C卷答案和评分细则.pdf",
+      "format": "PDF"
+    },
+    {
+      "path": "D卷原卷.docx",
+      "format": "Word document"
+    },
+    {
+      "path": "D卷原卷.pdf",
+      "format": "PDF"
+    },
+    {
+      "path": "D卷答案和评分细则.docx",
+      "format": "Word document"
+    },
+    {
+      "path": "D卷答案和评分细则.pdf",
+      "format": "PDF"
+    },
+    {
+      "path": "E卷原卷.docx",
+      "format": "Word document"
+    },
+    {
+      "path": "E卷原卷.pdf",
+      "format": "PDF"
+    },
+    {
+      "path": "E卷答案和评分细则.docx",
+      "format": "Word document"
+    },
+    {
+      "path": "E卷答案和评分细则.pdf",
+      "format": "PDF"
+    },
+    {
+      "path": "五套组卷蓝图表.xlsx",
+      "format": "Excel workbook"
+    },
+    {
+      "path": "套间重复率自检表.xlsx",
+      "format": "Excel workbook"
+    }
+  ],
+  "submit_paths": [
+    "A卷原卷.docx",
+    "A卷原卷.pdf",
+    "A卷答案和评分细则.docx",
+    "A卷答案和评分细则.pdf",
+    "B卷原卷.docx",
+    "B卷原卷.pdf",
+    "B卷答案和评分细则.docx",
+    "B卷答案和评分细则.pdf",
+    "C卷原卷.docx",
+    "C卷原卷.pdf",
+    "C卷答案和评分细则.docx",
+    "C卷答案和评分细则.pdf",
+    "D卷原卷.docx",
+    "D卷原卷.pdf",
+    "D卷答案和评分细则.docx",
+    "D卷答案和评分细则.pdf",
+    "E卷原卷.docx",
+    "E卷原卷.pdf",
+    "E卷答案和评分细则.docx",
+    "E卷答案和评分细则.pdf",
+    "五套组卷蓝图表.xlsx",
+    "套间重复率自检表.xlsx"
+  ],
+  "attachments_dir": "attachments",
+  "source_fields_preserved": [
+    "task_name",
+    "task_description"
+  ],
+  "title_exact": true,
+  "description_exact": true,
+  "renderer": "codex_with_preservation_validator"
+}

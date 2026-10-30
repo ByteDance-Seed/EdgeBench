@@ -1,0 +1,47 @@
+{
+  "outputs": [
+    {
+      "path": "nav_history.csv",
+      "format": "CSV"
+    },
+    {
+      "path": "signal_matrix.csv",
+      "format": "CSV"
+    },
+    {
+      "path": "positions.csv",
+      "format": "CSV"
+    },
+    {
+      "path": "trades.csv",
+      "format": "CSV"
+    },
+    {
+      "path": "risk_budget_allocation.csv",
+      "format": "CSV"
+    },
+    {
+      "path": "config.json",
+      "format": "JSON"
+    }
+  ],
+  "submit_paths": [
+    "run.py",
+    "main.py",
+    "config.json",
+    "config.yaml",
+    "nav_history.csv",
+    "signal_matrix.csv",
+    "positions.csv",
+    "trades.csv",
+    "risk_budget_allocation.csv",
+    "performance_report.md",
+    "performance_report.xlsx",
+    "stress_test_report.md",
+    "stress_test_results.xlsx",
+    "sensitivity_analysis_report.md",
+    "sensitivity_analysis.xlsx",
+    "diagnostics.json"
+  ],
+  "attachments_dir": "attachments"
+}

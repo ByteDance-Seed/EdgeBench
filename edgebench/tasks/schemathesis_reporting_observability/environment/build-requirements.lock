@@ -1,0 +1,14 @@
+# Build backend for the editable install of /app (v1: hatchling 1.30.1 per the installed WHEEL file, plus editables, which wrote _editable_impl_schemathesis.pth).
+# Installed into a throw-away --target dir only; not present in the final image (as in v1, where pip used an isolated build env).
+editables==0.6 \
+    --hash=sha256:d70e4698078a1d033e7786d9c64e5be070d058a67c21417024d38a58ac20aa43  # editables-0.6-py3-none-any.whl
+hatchling==1.30.1 \
+    --hash=sha256:161eacafb3c6f91526e92116d21426369f2c36e98c36a864f11a96345ad4ee31  # hatchling-1.30.1-py3-none-any.whl
+packaging==26.2 \
+    --hash=sha256:5fc45236b9446107ff2415ce77c807cee2862cb6fac22b8a73826d0693b0980e  # packaging-26.2-py3-none-any.whl
+pathspec==1.1.1 \
+    --hash=sha256:a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189  # pathspec-1.1.1-py3-none-any.whl
+pluggy==1.6.0 \
+    --hash=sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746  # pluggy-1.6.0-py3-none-any.whl
+trove-classifiers==2026.6.1.19 \
+    --hash=sha256:ab4c4ec93cc4a4e7815fa759906e05e6bb3f2fbd92ea0f897288c6a43efd15b3  # trove_classifiers-2026.6.1.19-py3-none-any.whl

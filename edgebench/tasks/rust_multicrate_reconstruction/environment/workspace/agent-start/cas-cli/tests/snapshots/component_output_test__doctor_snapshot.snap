@@ -1,0 +1,22 @@
+---
+source: cas-cli/tests/component_output_test.rs
+assertion_line: 181
+expression: redacted
+---
+cas doctor
+──────────────────────────────────────────────────
+[OK] cas directory: Found at [TEMP_PATH]
+[OK] database: SQLite database found
+[OK] schema: v182 (up to date)
+[OK] tables: [N] tables, 418 columns, 135 rows total
+[OK] entry store: [N] entries accessible
+[WARN] search index: Index not found. Will be created on first search.
+[OK] configuration: Loaded (sync: enabled)
+[OK] sync target: Will sync to .claude/rules/cas (not yet created)
+[OK] memory stats: [N] total () | tiers:  | compressed: [N] | helpful: [N] | harmful: [N]
+[OK] rules: [N] rules ()
+[OK] tasks: [N] tasks () | 0 open, 0 blocked
+[OK] embeddings: No local vector embeddings (semantic search uses cloud).
+[OK] mcp config: MCP configured in .mcp.json
+
+[WARN] All critical checks passed with some warnings.

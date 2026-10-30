@@ -1,0 +1,12 @@
+ansicolors==1.1.8
+docker==7.1.0
+h5py==3.13.0
+matplotlib==3.10.1
+numpy==2.2.4
+pyyaml==6.0.2
+psutil==7.0.0
+scikit-learn==1.6.1
+jinja2==3.1.6
+pytest==8.3.5
+datasets==3.4.0
+requests==2.32.3

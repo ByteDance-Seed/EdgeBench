@@ -1,0 +1,34 @@
+schema_version = 0
+id = "treant_forest"
+name = "Treant Forest"
+category = "Combinatorial Optimization"
+language = "Python"
+description = "Strategically place obstacles in a grid maze to maximize the shortest-path length between start and goal, or block the path entirely."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python310"
+platform = "linux/amd64"
+cwd = "/home/workspace/treants_forest"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["solution.py"]
+exclude = []
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 870
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# eval_treants_forest.py runs at most 8 cases in parallel, each `python3 solution.py` under a 120
+# s wall-clock timeout. Scores of time-limited solutions depend on host CPU speed; see NOTES.md.
+
+[score]
+direction = "maximize"
+rescale = { kind = "piecewise_max", baseline = 5369.0, rank30 = 88189.0, rank1 = 330195.0, super_anchor = 451198.0 }

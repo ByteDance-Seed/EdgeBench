@@ -1,0 +1,54 @@
+{
+  "name": "arc-lang",
+  "version": "0.6.16",
+  "description": "Arc ⚡ — A programming language designed by AI agents, for AI agents. 27-63% fewer tokens than JavaScript.",
+  "type": "module",
+  "bin": {
+    "arc": "dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist/",
+    "stdlib/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "copy-stdlib": "node -e \"const fs=require('fs');const p=require('path');function cp(s,d){fs.mkdirSync(d,{recursive:true});for(const f of fs.readdirSync(s)){const sp=p.join(s,f),dp=p.join(d,f);fs.statSync(sp).isDirectory()?cp(sp,dp):fs.copyFileSync(sp,dp)}}cp(p.join(__dirname,'..','stdlib'),p.join(__dirname,'stdlib'))\"",
+    "postinstall": "node -e \"console.log('\\n  ⚡ Arc installed! Try: arc repl\\n     Docs: https://docs.arclang.dev\\n     Playground: https://play.arclang.dev\\n')\"",
+    "prepublishOnly": "npm run copy-stdlib && tsc",
+    "run": "tsx src/index.ts run",
+    "parse": "tsx src/index.ts parse"
+  },
+  "keywords": [
+    "arc",
+    "programming-language",
+    "ai",
+    "ai-agents",
+    "compiler",
+    "token-efficient",
+    "language",
+    "interpreter",
+    "repl"
+  ],
+  "author": "Kai <nebula7458@proton.me> (https://arclang.dev)",
+  "license": "MIT",
+  "homepage": "https://arclang.dev",
+  "repository": {
+    "type": "git",
+    "url": "#"
+  },
+  "bugs": {
+    "url": "#/issues"
+  },
+  "dependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.12"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.3"
+  }
+}

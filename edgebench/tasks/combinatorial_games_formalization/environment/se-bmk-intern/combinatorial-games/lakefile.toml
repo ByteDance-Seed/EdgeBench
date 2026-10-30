@@ -1,0 +1,20 @@
+name = "CombinatorialGames"
+version = "0.1.0"
+keywords = ["math"]
+defaultTargets = ["CombinatorialGames"]
+lintDriver = "batteries/runLinter"
+
+[leanOptions]
+pp.unicode.fun = true
+autoImplicit = false
+relaxedAutoImplicit = false
+weak.linter.mathlibStandardSet = true
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.28.0"
+
+[[lean_lib]]
+name = "CombinatorialGames"
+roots = ["CombinatorialGames", "ListDeclAxiom"]

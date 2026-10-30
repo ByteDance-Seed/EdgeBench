@@ -1,0 +1,41 @@
+schema_version = 0
+id = "trinity_text_adventure"
+name = "Trinity Text Adventure"
+category = "Interactive Games & Simulators"
+language = "Python"
+description = "Play Infocom's Trinity via an HTTP game API. The game requires precise object manipulation and understanding of symbolic and temporal clues across interconnected zones."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python310"
+platform = "linux/amd64"
+cwd = "/home/jericho_agent"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+# Game mode: nothing is submitted as an archive (v1 submit_paths = []).
+paths = []
+exclude = []
+
+[judge]
+# Game mode has no archive grader (v1 eval_cmd = ""). The loader requires a cmd, so this
+# one only states that an archive is not a gradable submission. See NOTES.md.
+cmd = "echo '{\"valid\": false, \"summary\": \"game-mode task: scored from game sessions, not archives\"}' > /opt/sforge/result.json"
+timeout_sec = 600
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs); game containers use these too.
+
+[score]
+# Raw score of a run = best session `score` (in-game score when the session was closed or
+# ended), as in v1 (selection score_first). Trinity's max_score is 100.
+direction = "maximize"
+rescale = { kind = "linear", lower = 0.0, upper = 100.0 }
+
+[game]
+# The harness copies its game_server_app.py here (v1: /tmp/game_server_app.py).
+server_cmd = "python /opt/sforge/game_server_app.py --rom /home/roms/trinity.z4"

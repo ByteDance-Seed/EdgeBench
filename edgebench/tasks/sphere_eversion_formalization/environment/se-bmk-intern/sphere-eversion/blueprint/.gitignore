@@ -1,0 +1,8 @@
+*.pdf
+*.paux
+*.aux
+print
+web
+__pycache__
+*.fdb_latexmk
+

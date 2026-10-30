@@ -1,0 +1,23 @@
+name: SForge bug
+description: A problem in the harness (sforge commands, backends, agents, judge server)
+labels: ["sforge"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The command you ran, its output, and what you expected.
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: SForge version or commit, Python, Docker, backend (docker / k8s / e2b)
+    validations:
+      required: true
+  - type: input
+    id: task
+    attributes:
+      label: Task and agent
+      description: If it concerns a particular task or agent

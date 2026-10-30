@@ -1,0 +1,47 @@
+\chapter{Homomorphism version of PFR}
+
+In this section, $G, G'$ are finite abelian $2$-groups.
+
+\begin{lemma}[Hahn-Banach type theorem]\label{hb-thm}\lean{hahn_banach}\leanok  Let $H_0$ be a subgroup of $G$.  Then every homomorphism $\phi: H_0 \to G'$ can be extended to a homomorphism $\tilde \phi: G \to G'$.
+\end{lemma}
+
+\begin{proof}\leanok  By induction it suffices to treat the case where $H_0$ has index $2$ in $G$, but then the extension can be constructed by hand.
+\end{proof}
+
+\begin{lemma}[Goursat type theorem]\label{goursat}\lean{goursat}\leanok  Let $H$ be a subgroup of $G \times G'$.  Then there exists a subgroup $H_0$ of $G$, a subgroup $H_1$ of $G'$, and a homomorphism $\phi: G \to G'$ such that
+$$ H := \{ (x, \phi(x) + y): x \in H_0, y \in H_1 \}.$$
+In particular, $|H| = |H_0| |H_1|$.
+\end{lemma}
+
+\begin{proof}\uses{hb-thm}\leanok We can take $H_0$ to be the projection of $H$ to $G$, and $H_1$ to be the slice $H_1 := \{ y: (0,y) \in H \}$.  One can construct $\phi$ on $H_0$ one generator at a time by the greedy algorithm, and then extend to $G$ by \Cref{hb-thm}.  The cardinality bound is clear from direct counting.
+\end{proof}
+
+\begin{theorem}[Homomorphism form of PFR]\label{hom-pfr}\lean{homomorphism_pfr}\leanok  Let $f: G \to G'$ be a function, and let $S$ denote the set
+$$ S := \{ f(x+y)-f(x)-f(y): x,y \in G \}.$$
+Then there exists a homomorphism $\phi: G \to G'$ such that
+$$ |\{ f(x) - \phi(x): x \in G \}| \leq |S|^{10}.$$
+\end{theorem}
+
+\begin{proof}\uses{goursat, pfr_aux-improv}\leanok
+Consider the graph $A \subset G \times G'$ defined by
+$$ A := \{ (x,f(x)): x \in G \}.$$
+Clearly, $|A| = |G|$.  By hypothesis, we have
+$$ A+A \subset \{ (x,f(x)+s): x \in G, s \in S\}$$
+and hence $|A+A| \leq |S| |A|$.  Applying \Cref{pfr-9-aux'}, we may find a
+subspace $H \subset G \times G'$ such that $|H|/ |A| \in [|S|^{-8}, |S|^{8}]$
+and $A$ is covered by $c + H$ with $|c| \le |S|^5|A|^{1/2} / |H|^{1/2}$. If
+we let $H_0, H_1$ be as in \Cref{goursat}, this implies on taking projections
+that $G$ is covered by at most $|c|$ translates of $H_0$. This implies that
+$$ |c| |H_0| \geq |G|;$$
+since $|H_0| |H_1| = |H|$, we conclude that
+$$ |H_1| \leq |c| |H|/|G| = |c| |H|/|A|.$$
+By hypothesis, $A$ is covered by at most $|c|$ translates of $H$, and hence
+by at most $|c| |H_1|$ translates of $\{ (x,\phi(x)): x \in G \}$. As $\phi$
+is a homomorphism, each such translate can be written in the form $\{
+(x,\phi(x)+d): x \in G \}$ for some $d \in G'$. Since
+$$
+|c| |H_1| \le |c|^2 \frac{|H|}{|A|} \le \left(|S|^5 \frac{|A|^{1/2}}{|H|^{1/2}}\right)^2 \frac{|H|}{|A|}
+= |S|^{10},
+$$
+the result follows.
+\end{proof}

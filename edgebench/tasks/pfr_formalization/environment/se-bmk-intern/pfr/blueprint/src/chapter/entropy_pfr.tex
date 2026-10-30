@@ -1,0 +1,431 @@
+\chapter{Entropy version of PFR}
+
+\begin{definition}\label{eta-def}
+ \leanok
+  $\eta := 1/9$.
+\end{definition}
+
+Throughout this chapter,  $G = \F_2^n$, and $X^0_1, X^0_2$ are $G$-valued random variables.
+
+\begin{definition}[$\tau$ functional]\label{tau-def}
+  \uses{eta-def, ruz-dist-def}
+  \lean{tau}\leanok
+If $X_1,X_2$ are two $G$-valued random variables, then
+$$  \tau[X_1; X_2] := d[X_1; X_2] + \eta  d[X^0_1; X_1] + \eta d[X^0_2; X_2].$$
+\end{definition}
+
+\begin{lemma}[$\tau$ depends only on distribution]\label{tau-copy}\leanok
+  \uses{tau-def}
+  \lean{ProbabilityTheory.IdentDistrib.tau_eq}  If $X'_1, X'_2$ are copies of $X_1,X_2$, then $\tau[X'_1;X'_2] = \tau[X_1;X_2]$.
+\end{lemma}
+
+
+\begin{proof}\uses{copy-ent}\leanok Immediate from \Cref{copy-ent}.
+\end{proof}
+
+\begin{definition}[$\tau$-minimizer]\label{tau-min-def}
+\uses{tau-def}
+\lean{tau_minimizes}\leanok
+A pair of $G$-valued random variables $X_1, X_2$ are said to be a $\tau$-minimizer if one has
+  $$\tau[X_1;X_2] \leq \tau[X'_1;X'_2]
+  $$
+for all $G$-valued random variables $X'_1, X'_2$.
+\end{definition}
+
+
+\begin{proposition}[$\tau$ has minimum]\label{tau-min}\uses{tau-min-def}
+  \lean{tau_minimizer_exists}\leanok
+A pair $X_1, X_2$ of $\tau$-minimizers exist.
+\end{proposition}
+
+\begin{proof}\uses{tau-copy}\leanok By \Cref{tau-copy}, $\tau$ only depends on the probability distributions of $X_1, X_2$. This ranges over a compact space, and $\tau$ is continuous.  So $\tau$ has a minimum.
+\end{proof}
+
+\section{Basic facts about minimizers}
+
+In this section we assume that $X_1,X_2$ are $\tau$-minimizers. We also write $k := d[X_1;X_2]$.
+
+\begin{lemma}[Distance lower bound]\label{distance-lower}
+  \uses{tau-min-def}\leanok
+  \lean{distance_ge_of_min}
+  For any $G$-valued random variables $X'_1,X'_2$, one has
+$$ d[X'_1;X'_2] \geq k - \eta (d[X^0_1;X'_1] - d[X^0_1;X_1] ) - \eta (d[X^0_2;X'_2] - d[X^0_2;X_2] ).$$
+\end{lemma}
+
+\begin{proof}
+  \uses{tau-def, tau-min}\leanok
+  Immediate from \Cref{tau-def} and \Cref{tau-min}.
+\end{proof}
+
+\begin{lemma}[Conditional distance lower bound]\label{cond-distance-lower}
+  \uses{tau-min-def, cond-dist-def}
+  \lean{condRuzsaDistance_ge_of_min}\leanok
+  For any $G$-valued random variables $X'_1,X'_2$ and random variables $Z,W$, one has
+$$ d[X'_1|Z;X'_2|W] \geq k - \eta (d[X^0_1;X'_1|Z] - d[X^0_1;X_1] ) - \eta (d[X^0_2;X'_2|W] - d[X^0_2;X_2] ).$$
+\end{lemma}
+
+\begin{proof}\uses{distance-lower}\leanok  Apply \Cref{distance-lower} to conditioned random variables and then average.
+\end{proof}
+
+\section{First estimate}
+
+We continue the assumptions from the preceding section.
+
+Let $X_1, X_2, \tilde X_1, \tilde X_2$ be independent random variables, with $X_1,\tilde X_1$ copies of $X_1$ and $X_2,\tilde X_2$ copies of $X_2$.  (This is possible thanks to \Cref{independent-exist}.)
+
+We also define the quantity
+$$ I_1 :=  I [X_1+X_2 : \tilde X_1 + X_2 | X_1+X_2+\tilde X_1+\tilde X_2].$$
+
+\begin{lemma}[Fibring identity for first estimate]\label{first-fibre}
+  \lean{rdist_add_rdist_add_condMutual_eq}\leanok
+  We have
+  \begin{align*}
+    &   d[X_1+\tilde X_2;X_2+\tilde X_1] + d[X_1|X_1+\tilde X_2; X_2|X_2+\tilde X_1] \\
+    &\quad + \bbI[X_1+ X_2 : \tilde X_1 + X_2 \,|\, X_1 + X_2 + \tilde X_1 + \tilde X_2] = 2k.
+  \end{align*}
+\end{lemma}
+
+\begin{proof}\uses{cor-fibre} \leanok  Immediate from \Cref{cor-fibre}.
+\end{proof}
+
+\begin{lemma}[Lower bound on distances]\label{first-dist-sum}
+  \lean{rdist_of_sums_ge}\leanok
+  We have
+  \begin{align*}
+    d[X_1+\tilde X_2; X_2+\tilde X_1] \geq k &- \eta (d[X^0_1; X_1+\tilde X_2] - d[X^0_1; X_1]) \\& \qquad- \eta (d[X^0_2; X_2+\tilde X_1] - d[X^0_2; X_2])
+  \end{align*}
+\end{lemma}
+
+
+\begin{proof}\uses{distance-lower}\leanok Immediate from \Cref{distance-lower}.
+\end{proof}
+
+\begin{lemma}[Lower bound on conditional distances]\label{first-cond}
+  \lean{condRuzsaDist_of_sums_ge}\leanok
+  We have
+  \begin{align*}
+    & d[X_1|X_1+\tilde X_2; X_2|X_2+\tilde X_1]  \\  & \qquad\quad \geq k - \eta (d[X^0_1; X_1 | X_1 + \tilde X_2] - d[X^0_1; X_1]) \\
+    & \qquad\qquad\qquad\qquad  - \eta(d[X^0_2; X_2 | X_2 + \tilde X_1] - d[X^0_2; X_2]).
+  \end{align*}
+\end{lemma}
+
+\begin{proof}\uses{cond-distance-lower}\leanok Immediate from \Cref{cond-distance-lower}.
+\end{proof}
+
+\begin{lemma}[Upper bound on distance differences]\label{first-upper}\leanok
+  \lean{diff_rdist_le_1, diff_rdist_le_2, diff_rdist_le_3, diff_rdist_le_4}
+  We have
+  \begin{align*}
+    d[X^0_1; X_1+\tilde X_2] - d[X^0_1; X_1] &\leq \tfrac{1}{2} k + \tfrac{1}{4} \bbH[X_2] - \tfrac{1}{4} \bbH[X_1]\\
+    d[X^0_2;X_2+\tilde X_1] - d[X^0_2; X_2] &\leq \tfrac{1}{2} k + \tfrac{1}{4} \bbH[X_1] - \tfrac{1}{4} \bbH[X_2], \\
+    d[X_1^0;X_1|X_1+\tilde X_2] - d[X_1^0;X_1] &\leq \tfrac{1}{2} k + \tfrac{1}{4} \bbH[X_1] - \tfrac{1}{4} \bbH[X_2]  \\
+    d[X_2^0; X_2|X_2+\tilde X_1] - d[X_2^0; X_2] &\leq \tfrac{1}{2}k + \tfrac{1}{4} \bbH[X_2] - \tfrac{1}{4} \bbH[X_1].
+  \end{align*}
+\end{lemma}
+
+\begin{proof}\uses{first-useful} \leanok  Immediate from \Cref{first-useful} (and recalling that $k$ is defined to be $d[X_1;X_2]$).
+\end{proof}
+
+\begin{lemma}[First estimate]\label{first-estimate}
+  \lean{first_estimate}\leanok We have $I_1 \leq 2 \eta k$.
+\end{lemma}
+
+\begin{proof}\uses{first-fibre, first-dist-sum, first-cond, first-upper}\leanok  Take a suitable linear combination of \Cref{first-fibre}, \Cref{first-dist-sum}, \Cref{first-cond}, and \Cref{first-upper}.
+\end{proof}
+
+One can also extract the following useful inequality from the proof of the above lemma.
+
+\begin{lemma}[Entropy bound on quadruple sum]\label{foursum-bound}
+  \lean{ent_ofsum_le}\leanok
+  With the same notation, we have
+  \begin{equation}
+    \label{HS-bound}
+    \bbH[X_1+X_2+\tilde X_1+\tilde X_2] \le \tfrac{1}{2} \bbH[X_1]+\tfrac{1}{2} \bbH[X_2] + (2 + \eta) k - I_1.
+  \end{equation}
+\end{lemma}
+
+\begin{proof}\uses{first-cond, first-fibre, first-upper, ruz-indep}\leanok
+  Subtracting \Cref{first-cond} from \Cref{first-fibre}, and combining the resulting inequality with \Cref{first-upper} gives the bound
+\[
+  d[X_1+\tilde X_2;X_2+\tilde X_1] \le (1 + \eta) k - I_1,
+\]
+and the claim follows from \Cref{ruz-indep} and the definition of $k$.
+\end{proof}
+
+
+\section{Second estimate}
+
+We continue the assumptions from the preceding section.
+We introduce the quantity
+$$ I_2 := \bbI[X_1+X_2 : X_1 + \tilde X_1 | X_1+X_2+\tilde X_1+\tilde X_2].$$
+
+\begin{lemma}[Distance between sums]\label{dist-sums}
+  \lean{rdist_of_sums_ge'}\leanok
+We have
+$$ d[X_1+\tilde X_1; X_2+\tilde X_2] \geq k - \frac{\eta}{2} ( d[X_1; X_1] + d[X_2;X_2] ).$$
+\end{lemma}
+
+\begin{proof}\uses{distance-lower, first-useful}\leanok From \Cref{distance-lower} one has
+\begin{align*}
+    d[X_1+\tilde X_1; X_2+\tilde X_2] \geq k &- \eta(d[X^0_1;X_1] - d[X^0_1;X_1+\tilde X_1]) \\
+    &- \eta(d[X^0_2;X_2] - d[X^0_2;X_2+\tilde X_2]).
+\end{align*}
+Now \Cref{first-useful} gives
+$$
+d[X^0_1;X_1+\tilde X_1] - d[X^0_1;X_1] \leq \tfrac{1}{2} d[X_1;X_1]$$
+and
+$$
+  d[X^0_2;X_2+\tilde X_2] - d[X^0_2;X_2] \leq \tfrac{1}{2} d[X_2;X_2],
+$$
+and the claim follows.
+\end{proof}
+
+\begin{lemma}\label{second-estimate-aux}\lean{second_estimate_aux}\leanok
+We have
+\[d[X_1;X_1] + d[X_2;X_2] \leq 2 k + \frac{2(2 \eta k - I_1)}{1-\eta}. \]
+\end{lemma}
+\begin{proof}
+\uses{ruz-indep, foursum-bound, dist-sums}\leanok
+We may use \Cref{ruz-indep} to expand
+  \begin{align*}
+   & d[X_1+\tilde X_1;X_2+\tilde X_2] \\ &= \bbH[X_1+\tilde X_1 + X_2 + \tilde X_2]  - \tfrac{1}{2} \bbH[X_1+\tilde X_1] - \tfrac{1}{2} \bbH[X_2+\tilde X_2] \\
+    &= \bbH[X_1+\tilde X_1 + X_2 + \tilde X_2]  - \tfrac{1}{2} \bbH[X_1] - \tfrac{1}{2} \bbH[X_2]  \\ & \qquad\qquad\qquad   - \tfrac{1}{2} \left( d[X_1;X_1] + d[X_2; X_2] \right),
+  \end{align*}
+  and hence by \Cref{foursum-bound}
+  \[
+    d[X_1+\tilde X_1; X_2+\tilde X_2] \leq (2+\eta) k - \tfrac{1}{2} \left( d[X_1;X_1] + d[X_2;X_2] \right) - I_1.
+  \]
+  Combining this bound with \Cref{dist-sums} we obtain
+  the result.
+\end{proof}
+
+\begin{lemma}[Second estimate]\label{second-estimate}
+  \lean{second_estimate}\leanok
+We have
+$$ I_2 \leq 2 \eta k + \frac{2 \eta (2 \eta k - I_1)}{1 - \eta}.$$
+\end{lemma}
+
+\begin{proof}
+  \uses{cor-fibre,distance-lower,first-useful,second-estimate-aux}\leanok
+  We apply \Cref{cor-fibre}, but now with the choice
+  \[
+    (Y_1,Y_2,Y_3,Y_4) := (X_2, X_1, \tilde X_2, \tilde X_1).
+  \]
+  Now \Cref{cor-fibre} can be rewritten as
+  \begin{align*}
+    &d[X_1+\tilde X_1;X_2+\tilde X_2] + d[X_1|X_1+\tilde X_1; X_2|X_2+\tilde X_2] \\
+    &\quad + \bbI[X_1+X_2 : X_1 + \tilde X_1 \,|\, X_1+X_2+\tilde X_1+\tilde X_2] = 2k,
+  \end{align*}
+  recalling once again that $k := d[X_1;X_2]$.  From \Cref{cond-distance-lower} one has
+  \begin{align*}
+    d[X_1|X_1+\tilde X_1; X_2|X_2+\tilde X_2]   \geq k &- \eta (d[X^0_1;X_1] - d[X^0_1;X_1|X_1+\tilde X_1]) \\& - \eta (d[X^0_2;X_2] - d[X^0_2;X_2|X_2+\tilde X_2]) .
+  \end{align*}
+  while from \Cref{first-useful} we have
+  \[
+    d[X^0_1;X_1|X_1+\tilde X_1] -  d[X^0_1;X_1] \leq  \tfrac{1}{2} d[X_1;X_1],
+  \]
+  and
+  \[
+    d[X^0_2;X_2|X_2+\tilde X_2] -  d[X^0_2;X_2] \leq \tfrac{1}{2} d[X_1;X_2].
+    \]
+  Combining all these inequalities with \Cref{dist-sums}, we have
+  \begin{equation}\label{combined}
+  \bbI[X_1+X_2 : X_1 + \tilde X_1 | X_1+X_2+\tilde X_1+\tilde X_2] \leq \eta ( d[X_1; X_1] + d[X_2; X_2] ).
+  \end{equation}
+  Together with \Cref{second-estimate-aux}, this gives the conclusion.
+\end{proof}
+
+
+\section{Endgame}
+
+Let $X_1,X_2,\tilde X_1,\tilde X_2$ be as before, and introduce the random variables
+\[U := X_1 + X_2, \qquad V := \tilde X_1 + X_2, \qquad W := X_1 + \tilde X_1\] and
+\[  S := X_1 + X_2 + \tilde X_1 + \tilde X_2.\]
+
+\begin{lemma}[Symmetry identity]\label{symm-lemma}
+  \lean{I₃_eq}\leanok
+We have
+$$ I(U:W | S) = I(V:W | S).$$
+\end{lemma}
+
+\begin{proof}\uses{copy-ent, conditional-mutual-alt, chain-rule}\leanok
+This should follow from \Cref{copy-ent}, \Cref{conditional-mutual-alt}, and \Cref{chain-rule}.
+\end{proof}
+
+\begin{lemma}[Bound on conditional mutual informations]\label{uvw-s}
+\uses{conditional-mutual-def}
+\lean{I₃_eq,sum_condMutual_le}\leanok
+We have
+$$
+I(U : V \, | \, S) + I(V : W \, | \,S) + I(W : U \, | \, S) \leq 6 \eta k - \frac{1 - 5 \eta}{1-\eta} (2 \eta k - I_1).
+$$
+\end{lemma}
+
+\begin{proof}
+  \uses{second-estimate,symm-lemma}\leanok
+From the definitions of $I_1,I_2$ and \Cref{symm-lemma}, we see that
+\[
+  I_1 = I(U : V \, | \, S), \qquad I_2 = I(W : U \, | \, S), \qquad I_2 = I(V : W \, | \,S).
+\]
+Applying \Cref{first-estimate} and \Cref{second-estimate} we have the inequalities
+\[  I_2 \leq 2 \eta k + \frac{2\eta(2 \eta k - I_1)}{1-\eta} .
+\]
+We conclude that
+$$
+   I_1 + I_2 + I_2 \leq I_1+4\eta k+ \frac{4\eta(2 \eta k - I_1)}{1-\eta}
+$$
+and the claim follows from some calculation.
+\end{proof}
+
+\begin{lemma}[Bound on distance increments]\label{total-dist}\leanok
+  \lean{sum_dist_diff_le}
+   We have
+\begin{align*}
+  \sum_{i=1}^2 \sum_{A\in\{U,V,W\}} \big(d[X^0_i;A|S] & - d[X^0_i;X_i]\big) \\
+    &\leq (6 - 3\eta) k + 3(2 \eta k - I_1).
+\end{align*}
+\end{lemma}
+
+\begin{proof}
+  \uses{second-useful, foursum-bound}\leanok
+  By \Cref{second-useful} (taking $X = X_1^0$, $Y = X_1$, $Z = X_2$ and $Z' = \tilde X_1 + \tilde X_2$, so that $Y + Z = U$ and $Y + Z + Z' = S$) we have, noting that $\bbH[Y+ Z] = \bbH[Z']$,
+  \[
+    d[X^0_1;U|S] - d[X^0_1;X_1] \leq \tfrac{1}{2} (\bbH[S] -  \bbH[X_1]).
+  \]
+  Further applications of \Cref{second-useful} give
+  \begin{align*}
+  d[X^0_2;U|S] - d[X^0_2; X_2] &\leq \tfrac{1}{2} (\bbH[S] -  \bbH[X_2]) \\
+  d[X^0_1;V|S] - d[X^0_1;X_1] &\leq \tfrac{1}{2} (\bbH[S] -  \bbH[X_1])\\
+  d[X^0_2;V|S] - d[X^0_2;X_2] &\leq \tfrac{1}{2} (\bbH[S] -  \bbH[X_2])
+  \end{align*}
+  and
+  \[d[X^0_1;W|S] - d[X^0_1;X_1] \leq \tfrac{1}{2} (\bbH[S] + \bbH[W] - \bbH[X_1] - \bbH[W']),\] where $W' := X_2 + \tilde X_2$.
+  To treat $d[X^0_2;W|S]$, first note that this equals $d[X^0_2;W'|S]$, since for a fixed choice $s$ of $S$ we have $W' = W + s$ (here we need some helper lemma about Ruzsa distance). Now we may apply \Cref{second-useful} to obtain
+  \[d[X^0_2;W'|S] - d[X^0_2;X_2] \leq \tfrac{1}{2} (\bbH[S] + \bbH[W'] - \bbH[X_2] - \bbH[W]).\]
+  Summing these six estimates and using \Cref{foursum-bound}, we conclude that
+  \begin{align*}
+    \sum_{i=1}^2 \sum_{A\in\{U,V,W\}} \big(d[X^0_i;A|S] & - d[X^0_i;X_i]\big) \\
+      &\leq 3 \bbH[S] - \tfrac{3}{2} \bbH[X_1] - \tfrac{3}{2} \bbH[X_2]\\
+      &\leq (6 - 3\eta) k + 3(2 \eta k - I_1)
+  \end{align*}
+  as required.
+\end{proof}
+
+\begin{lemma}[Key identity]\label{key-ident}
+\lean{sum_uvw_eq_zero}\leanok
+We have $U+V+W=0$.
+\end{lemma}
+
+\begin{proof} \leanok Obvious because we are in characteristic two.
+\end{proof}
+
+For the next two lemmas, let $(T_1,T_2,T_3)$ be a $G^3$-valued random variable such that $T_1+T_2+T_3=0$ holds identically. Set
+\begin{equation}\label{delta-t1t2t3-def}
+  \delta := \sum_{1 \leq i < j \leq 3} \bbI[T_i;T_j].
+\end{equation}
+
+\begin{lemma}[Constructing good variables, I]\label{construct-good-prelim}
+  \lean{construct_good_prelim}\leanok
+  One has
+  \begin{align*}  k \leq
+    \delta + \eta (& d[X^0_1;T_1]-d[X^0_1;X_1])
+      + \eta (d[X^0_2;T_2]-d[X^0_2;X_2]) \\ & + \tfrac12 \eta \bbI[T_1:T_3] + \tfrac12 \eta \bbI[T_2:T_3].
+  \end{align*}
+\end{lemma}
+
+(Note: in the paper, this lemma was phrased in a more intuitive formulation that is basically the contrapositive of the one here. Similarly for the next two lemmas.)
+
+\begin{proof}\uses{entropic-bsg, cond-dist-fact,distance-lower}\leanok
+  We apply \Cref{entropic-bsg} with $(A,B) = (T_1, T_2)$ there.
+  Since $T_1 + T_2 = T_3$, the conclusion is that
+  \begin{align} \nonumber \sum_{t_3} \bbP[T_3 = t_3] & d[(T_1 | T_3 = t_3); (T_2 | T_3 = t_3)] \\ & \leq 3 \bbI[T_1 : T_2] + 2 \bbH[T_3] - \bbH[T_1] - \bbH[T_2].\label{bsg-t1t2}
+  \end{align}
+  The right-hand side in~\eqref{bsg-t1t2} can be rearranged as
+  \begin{align*} & 2( \bbH[T_1] + \bbH[T_2] + \bbH[T_3]) - 3 \bbH[T_1,T_2] \\ & = 2(\bbH[T_1] + \bbH[T_2] + \bbH[T_3]) - \bbH[T_1,T_2] - \bbH[T_2,T_3] - \bbH[T_1, T_3] = \delta,\end{align*}
+  using the fact (from \Cref{relabeled-entropy}) that all three terms $\bbH[T_i,T_j]$ are equal to $\bbH[T_1,T_2,T_3]$ and hence to each other.
+  We also have
+  \begin{align*}
+  &  \sum_{t_3} P[T_3 = t_3] \bigl(d[X^0_1; (T_1 | T_3=t_3)] - d[X^0_1;X_1]\bigr) \\
+  &\quad = d[X^0_1; T_1 | T_3] - d[X^0_1;X_1] \leq d[X^0_1;T_1] - d[X^0_1;X_1] + \tfrac{1}{2} \bbI[T_1 : T_3]
+  \end{align*}
+  by \Cref{cond-dist-fact}, and similarly
+  \begin{align*}
+  &  \sum_{t_3} \bbP[T_3 = t_3] (d[X^0_2;(T_2 | T_3=t_3)] - d[X^0_2; X_2]) \\
+  &\quad\quad\quad\quad\quad\quad \leq d[X^0_2;T_2] - d[X^0_2;X_2] + \tfrac{1}{2} \bbI[T_2 : T_3].
+  \end{align*}
+  Putting the above observations together, we have
+  \begin{align*}
+   \sum_{t_3} \bbP[T_3=t_3] \psi[(T_1 | T_3=t_3); (T_2 | T_3=t_3)] \leq \delta + \eta (d[X^0_1;T_1]-d[X^0_1;X_1]) \\
+     + \eta (d[X^0_2;T_2]-d[X^0_2;X_2]) + \tfrac12 \eta \bbI[T_1:T_3] + \tfrac12 \eta \bbI[T_2:T_3]
+   \end{align*}
+where we introduce the notation
+\[\psi[Y_1; Y_2] := d[Y_1;Y_2] +  \eta (d[X_1^0;Y_1] - d[X_1^0;X_1]) + \eta(d[X_2^0;Y_2] - d[X_2^0;X_2]).\]
+On the other hand, from \Cref{distance-lower} we have $k \leq \psi[Y_1;Y_2]$, and the claim follows.
+  \end{proof}
+
+
+\begin{lemma}[Constructing good variables, II]\label{construct-good}
+  \lean{construct_good}\leanok
+One has
+\begin{align*}  k & \leq  \delta + \frac{\eta}{3} \biggl( \delta + \sum_{i=1}^2 \sum_{j = 1}^3 (d[X^0_i;T_j] - d[X^0_i; X_i]) \biggr).
+  \end{align*}
+\end{lemma}
+
+\begin{proof}
+\uses{construct-good-prelim}\leanok
+Average \Cref{construct-good-prelim} over all six permutations of $T_1,T_2,T_3$.
+\end{proof}
+
+
+
+
+\begin{theorem}[$\tau$-decrement]\label{de-prop}
+  \lean{tau_strictly_decreases}\leanok
+  Let $X_1, X_2$ be tau-minimizers.  Then $d[X_1;X_2] = 0$.
+\end{theorem}
+
+\begin{proof}
+  \uses{construct-good, key-ident, uvw-s, total-dist, first-estimate, eta-def}\leanok
+  Set $k := d[X_1;X_2]$.  Applying \Cref{construct-good} with any random variables $(T_1,T_2,T_3)$ such that $T_1+T_2+T_3=0$ holds identically, we deduce that
+\[
+  k \leq \delta + \frac{\eta}{3} \biggl( \delta + \sum_{i=1}^2 \sum_{j = 1}^3 (d[X^0_1;T_j] - d[X^0_i;X_i]) \biggr).
+\]
+Note that $\delta$ is still defined by~\eqref{delta-t1t2t3-def} and thus depends on $T_1,T_2,T_3$.
+In particular we may apply this for
+\[
+  T_1 = (U | S = s),\qquad T_2 = (V | S = s), \qquad T_3 = (W | S = s)
+\]
+for $s$ in the range of $S$ (which is a valid choice by \Cref{key-ident}) and then average over $s$ with weights $p_S(s)$, to obtain
+\[k \leq \tilde \delta + \frac{\eta}{3} \biggl( \tilde \delta + \sum_{i=1}^2 \sum_{A\in\{U,V,W\}} \bigl(  d[X^0_i;A|S] - d[X^0_i;X_i]\bigr) \biggr),\]
+where
+\[
+  \tilde \delta :=  \bbI[U : V | S] + \bbI[V : W | S] + \bbI[W : U | S].
+\]
+Putting this together with \Cref{uvw-s} and \Cref{total-dist}, we conclude that
+\begin{align*}
+  k &\leq \Bigl(1+\frac{\eta}{3}\Bigr)\Bigl(6\eta k-\frac{1-5\eta}{1-\eta}(2\eta k-I_1)\Bigr)+\frac{\eta}{3}\Bigl((6-3\eta)k+3(2\eta k-I_1)\Bigr)\\
+  &= (8\eta + \eta^2) k - \biggl( \frac{1 - 5 \eta}{1-\eta}\Bigl(1 + \frac{\eta}{3}\Bigr) -  \eta \biggr)(2 \eta k - I_1)\\
+  &\leq (8 \eta + \eta^2) k
+ \end{align*}
+since the quantity $2 \eta k - I_1$ is non-negative (by \Cref{first-estimate}), and its coefficient in the above expression is non-positive provided that $\eta(2\eta + 17) \le 3$, which is certainly the case with \Cref{eta-def}.
+Moreover, from \Cref{eta-def} we have $8 \eta + \eta^2 < 1$. It follows that $k=0$, as desired.
+\end{proof}
+
+
+\section{Conclusion}
+
+\begin{theorem}[Entropy version of PFR]\label{entropy-pfr}
+  \lean{entropic_PFR_conjecture}\leanok
+  Let $G = \F_2^n$, and suppose that $X^0_1, X^0_2$ are $G$-valued random variables.
+  Then there is some subgroup $H \leq G$ such that
+  \[
+    d[X^0_1;U_H] + d[X^0_2;U_H] \le 11 d[X^0_1;X^0_2],
+  \]
+  where $U_H$ is uniformly distributed on $H$.
+  Furthermore, both $d[X^0_1;U_H]$ and $d[X^0_2;U_H]$ are at most $6 d[X^0_1;X^0_2]$.
+\end{theorem}
+
+\begin{proof} \uses{de-prop, tau-min, lem:100pc, ruzsa-triangle} \leanok  Let $X_1, X_2$ be the $\tau$-minimizer from \Cref{tau-min}.  From \Cref{de-prop}, $d[X_1;X_2]=0$.  From \Cref{lem:100pc}, $d[X_1;U_H] = d[X_2; U_H] = 0$.  Also from $\tau$-minimization we have $\tau[X_1;X_2] \leq \tau[X^0_2;X^0_1]$.  Using this and the Ruzsa triangle inequality we can conclude.
+\end{proof}
+
+Note: a ``stretch goal'' for this project would be to obtain a `decidable` analogue of this result (see the remark at the end of Section 2 for some related discussion).

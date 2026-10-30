@@ -1,0 +1,254 @@
+#!/usr/bin/env python3
+"""Scoring program for Treant's Forest (AHC054).
+Usage: ./tester <input_file> <output_file>
+
+The input_file contains the grid and destination candidates (produced by gen).
+The output_file contains the solution's treant placements, one line per turn:
+  m x0 y0 x1 y1 ...  (place m treants)
+  -1                  (cutoff: stop placing treants)
+
+The tester replays the interaction deterministically and outputs:
+  stderr: "Score = <int>" (number of turns = absolute score), exit 0
+  stderr: "wrong answer: <reason>", exit 1
+"""
+import sys
+from collections import deque
+from typing import List, Tuple, Optional, Set
+
+def main():
+    if len(sys.argv) < 3:
+        print("Usage: ./tester <input_file> <output_file>", file=sys.stderr)
+        sys.exit(1)
+
+    input_file = sys.argv[1]
+    output_file = sys.argv[2]
+
+    # Read input
+    with open(input_file, 'r') as f:
+        lines = f.read().strip().split('\n')
+
+    parts = lines[0].split()
+    N = int(parts[0])
+    ti, tj = int(parts[1]), int(parts[2])
+
+    grid = []
+    for i in range(1, 1 + N):
+        row = list(lines[i])
+        grid.append(row)
+
+    # Destination candidates
+    dest_candidates = []
+    for i in range(1 + N, len(lines)):
+        line = lines[i].strip()
+        if not line:
+            continue
+        p = line.split()
+        dest_candidates.append((int(p[0]), int(p[1])))
+
+    entrance = (0, N // 2)
+
+    # Read output (treant placements)
+    try:
+        with open(output_file, 'r') as f:
+            out_lines = f.read().strip().split('\n')
+    except Exception as e:
+        print(f"wrong answer: cannot read output file: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # Replay the interaction
+    adventurer_pos = entrance
+    revealed = set()
+    revealed.add(entrance)
+    destination = None
+    max_turns = N * N * 2
+    out_idx = 0
+    turns = 0
+    cutoff = False
+
+    def is_valid(r, c):
+        return 0 <= r < N and 0 <= c < N and grid[r][c] == '.'
+
+    def reveal_cells(pr, pc):
+        newly = set()
+        for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+            r, c = pr, pc
+            while True:
+                r += dr
+                c += dc
+                if not (0 <= r < N and 0 <= c < N):
+                    break
+                newly.add((r, c))
+                if grid[r][c] == 'T':
+                    break
+        return newly
+
+    def find_path(start, goal):
+        if start == goal:
+            return [start]
+        visited = {start: None}
+        queue = deque([start])
+        while queue:
+            pos = queue.popleft()
+            r, c = pos
+            for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+                nr, nc = r+dr, c+dc
+                npos = (nr, nc)
+                if is_valid(nr, nc) and npos not in visited:
+                    visited[npos] = pos
+                    if npos == goal:
+                        path = [goal]
+                        cur = pos
+                        while cur is not None:
+                            path.append(cur)
+                            cur = visited[cur]
+                        path.reverse()
+                        return path
+                    queue.append(npos)
+        return None
+
+    def is_reachable(start, goal):
+        return find_path(start, goal) is not None
+
+    def get_tentative_reachable(start):
+        visited = set([start])
+        queue = deque([start])
+        while queue:
+            r, c = queue.popleft()
+            for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+                nr, nc = r+dr, c+dc
+                npos = (nr, nc)
+                if npos in visited:
+                    continue
+                if 0 <= nr < N and 0 <= nc < N:
+                    if npos in revealed:
+                        if grid[nr][nc] == '.':
+                            visited.add(npos)
+                            queue.append(npos)
+                    else:
+                        # Unrevealed = tentatively empty
+                        visited.add(npos)
+                        queue.append(npos)
+        return visited
+
+    def check_connectivity():
+        """Check if entrance can reach goal."""
+        return is_reachable(entrance, (ti, tj))
+
+    # dest_candidate_idx for deterministic destination selection
+    dest_candidate_idx = 0
+
+    while turns < max_turns:
+        pi, pj = adventurer_pos
+
+        # Check if goal achieved
+        if (pi, pj) == (ti, tj):
+            break
+
+        # --- Solution places treants ---
+        if not cutoff:
+            if out_idx >= len(out_lines):
+                # No more output: treat as "0" (place nothing)
+                pass
+            else:
+                line = out_lines[out_idx].strip()
+                out_idx += 1
+
+                if line == '-1':
+                    cutoff = True
+                elif line:
+                    parts_out = line.split()
+                    try:
+                        m = int(parts_out[0])
+                    except ValueError:
+                        print(f"wrong answer: invalid output line: {line}", file=sys.stderr)
+                        sys.exit(1)
+
+                    if len(parts_out) != 1 + 2*m:
+                        print(f"wrong answer: expected {1+2*m} tokens, got {len(parts_out)}", file=sys.stderr)
+                        sys.exit(1)
+
+                    positions = []
+                    for k in range(m):
+                        try:
+                            x = int(parts_out[1 + 2*k])
+                            y = int(parts_out[1 + 2*k + 1])
+                        except (ValueError, IndexError):
+                            print(f"wrong answer: cannot parse treant position", file=sys.stderr)
+                            sys.exit(1)
+                        positions.append((x, y))
+
+                    # Validate placements
+                    for x, y in positions:
+                        if not (0 <= x < N and 0 <= y < N):
+                            print(f"wrong answer: position ({x},{y}) out of bounds", file=sys.stderr)
+                            sys.exit(1)
+                        if (x, y) in revealed:
+                            print(f"wrong answer: cannot place treant at revealed cell ({x},{y})", file=sys.stderr)
+                            sys.exit(1)
+                        if grid[x][y] != '.':
+                            print(f"wrong answer: cannot place treant at ({x},{y}): not empty", file=sys.stderr)
+                            sys.exit(1)
+
+                    # Apply treants
+                    for x, y in positions:
+                        grid[x][y] = 'T'
+
+                    # Check connectivity
+                    if not check_connectivity():
+                        print(f"wrong answer: no path from entrance to goal after placing treants", file=sys.stderr)
+                        sys.exit(1)
+
+        # --- Adventurer moves ---
+        turns += 1
+
+        # Reveal cells
+        newly = reveal_cells(pi, pj)
+        revealed.update(newly)
+
+        # If AA revealed, set destination
+        if (ti, tj) in revealed:
+            destination = (ti, tj)
+
+        # Check destination reachability
+        if destination is not None:
+            if not is_reachable(adventurer_pos, destination):
+                destination = None
+
+        # Choose destination if needed
+        if destination is None or (destination in revealed and destination != (ti, tj)):
+            reachable = get_tentative_reachable(adventurer_pos)
+            unrevealed_reachable = [cell for cell in reachable if cell not in revealed]
+
+            if unrevealed_reachable:
+                # Use destination candidates for deterministic choice
+                chosen = None
+                for qi, qj in dest_candidates[dest_candidate_idx:]:
+                    dest_candidate_idx += 1
+                    if (qi, qj) in unrevealed_reachable:
+                        chosen = (qi, qj)
+                        break
+                if chosen is None:
+                    # Wrap around if needed (fallback)
+                    for qi, qj in dest_candidates:
+                        if (qi, qj) in unrevealed_reachable:
+                            chosen = (qi, qj)
+                            break
+                if chosen is not None:
+                    destination = chosen
+
+        # Move towards destination
+        if destination is not None:
+            path = find_path(adventurer_pos, destination)
+            if path and len(path) > 1:
+                adventurer_pos = path[1]
+
+        # Check if goal reached after move
+        if adventurer_pos == (ti, tj):
+            break
+
+    # Score = number of turns (maximize)
+    print(f"Score = {turns}", file=sys.stderr)
+    sys.exit(0)
+
+if __name__ == "__main__":
+    main()

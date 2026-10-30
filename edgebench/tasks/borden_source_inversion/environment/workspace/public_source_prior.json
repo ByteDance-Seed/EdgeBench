@@ -1,0 +1,20 @@
+{
+  "x_center_min": 143.206106870229,
+  "x_center_max": 390.6106870229007,
+  "y_center_min": 134.61538461538458,
+  "y_center_max": 326.9230769230769,
+  "z_center_min": 216.47691748455108,
+  "z_center_max": 222.0,
+  "half_length_x_min": 5.0,
+  "half_length_x_max": 80.0,
+  "half_length_y_min": 5.0,
+  "half_length_y_max": 60.0,
+  "half_length_z_min": 0.5,
+  "half_length_z_max": 5.0,
+  "C0_min": 20.0,
+  "C0_max": 800.0,
+  "t_start_min": 0.0,
+  "t_start_max": 3000.0,
+  "duration_min": 100.0,
+  "duration_max": 8000.0
+}

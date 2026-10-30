@@ -1,0 +1,36 @@
+[package]
+name = "cas-code"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Code analysis and indexing for CAS (Coding Agent System)"
+license = "MIT"
+
+[dependencies]
+# CAS crates
+cas-types = { path = "../cas-types" }
+
+# Tree-sitter for AST parsing
+tree-sitter = "0.26"
+tree-sitter-rust = "0.24"
+tree-sitter-typescript = "0.23"
+tree-sitter-python = "0.25"
+tree-sitter-go = "0.25"
+tree-sitter-elixir = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "2.0"
+
+# Date/Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Utilities
+sha2 = "0.10"
+hex = "0.4"
+
+[dev-dependencies]
+tempfile = "3.14"

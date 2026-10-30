@@ -1,0 +1,20 @@
+---
+source: cas-cli/src/ui/components/snapshot_tests.rs
+expression: tf.output()
+---
+--- Tasks ---
+
+ID: cas-abc1
+Title: Build testing harness
+Status: in_progress
+Priority: P1
+
+--------------------------------------------------------------------------------
+
+ID: cas-def2
+Title: Migrate doctor command
+Status: open
+Priority: P2
+
+--------------------------------------------------------------------------------
+[INFO] 2 tasks shown

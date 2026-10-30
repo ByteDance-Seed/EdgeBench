@@ -1,0 +1,160 @@
+#!/usr/bin/env python3
+"""Scoring program for Molecules (AHC057).
+Usage: ./tester <input_file> <output_file>
+Outputs "Score = <int>" to stderr on success, or "wrong answer: <reason>" on failure.
+Exit code: 0 on success, 1 on failure.
+"""
+import sys
+import math
+
+def main():
+    if len(sys.argv) < 3:
+        print("Usage: ./tester <input_file> <output_file>", file=sys.stderr)
+        sys.exit(1)
+
+    input_file = sys.argv[1]
+    output_file = sys.argv[2]
+
+    # Read input
+    with open(input_file, 'r') as f:
+        data = f.read().split()
+    idx = 0
+    N = int(data[idx]); idx += 1
+    T = int(data[idx]); idx += 1
+    M = int(data[idx]); idx += 1
+    K = int(data[idx]); idx += 1
+    L = int(data[idx]); idx += 1
+
+    points = []
+    for i in range(N):
+        x = int(data[idx]); idx += 1
+        y = int(data[idx]); idx += 1
+        vx = int(data[idx]); idx += 1
+        vy = int(data[idx]); idx += 1
+        points.append([x, y, vx, vy])
+
+    # Read output
+    try:
+        with open(output_file, 'r') as f:
+            lines = f.read().strip().split('\n')
+    except Exception as e:
+        print(f"wrong answer: cannot read output file: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    bonds = []
+    for line in lines:
+        if not line.strip():
+            continue
+        parts = line.split()
+        if len(parts) != 3:
+            print(f"wrong answer: invalid line format: {line}", file=sys.stderr)
+            sys.exit(1)
+        try:
+            t_val = int(parts[0])
+            i_val = int(parts[1])
+            j_val = int(parts[2])
+        except ValueError:
+            print(f"wrong answer: invalid numbers: {line}", file=sys.stderr)
+            sys.exit(1)
+
+        if t_val < 0 or t_val >= T:
+            print(f"wrong answer: time t={t_val} out of range [0, {T})", file=sys.stderr)
+            sys.exit(1)
+        if i_val < 0 or i_val >= N or j_val < 0 or j_val >= N:
+            print(f"wrong answer: indices out of range: i={i_val}, j={j_val}", file=sys.stderr)
+            sys.exit(1)
+        if i_val == j_val:
+            print(f"wrong answer: cannot bond point with itself: i=j={i_val}", file=sys.stderr)
+            sys.exit(1)
+
+        bonds.append((t_val, i_val, j_val))
+
+    if len(bonds) != N - M:
+        print(f"wrong answer: expected {N - M} bonds, got {len(bonds)}", file=sys.stderr)
+        sys.exit(1)
+
+    bonds.sort(key=lambda x: x[0])
+
+    def toroidal_dist(x1, y1, x2, y2):
+        dx = abs(x1 - x2)
+        dy = abs(y1 - y2)
+        dx = min(L - dx, dx)
+        dy = min(L - dy, dy)
+        return round(math.sqrt(dx * dx + dy * dy))
+
+    # Simulate
+    parent = list(range(N))
+    size = [1] * N
+    vel_x = [float(p[2]) for p in points]
+    vel_y = [float(p[3]) for p in points]
+    pos = [[float(p[0]), float(p[1])] for p in points]
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(x, y, vx_new, vy_new):
+        px, py = find(x), find(y)
+        if px == py:
+            return False
+        if size[px] < size[py]:
+            px, py = py, px
+        parent[py] = px
+        size[px] += size[py]
+        vel_x[px] = vx_new
+        vel_y[px] = vy_new
+        return True
+
+    total_cost = 0.0
+    bond_idx = 0
+
+    for t in range(T):
+        while bond_idx < len(bonds) and bonds[bond_idx][0] == t:
+            _, i, j = bonds[bond_idx]
+            pi, pj = find(i), find(j)
+            if pi == pj:
+                print(f"wrong answer: bonding already connected points at t={t}: {i}, {j}", file=sys.stderr)
+                sys.exit(1)
+
+            cost = toroidal_dist(pos[i][0], pos[i][1], pos[j][0], pos[j][1])
+            total_cost += cost
+
+            si, sj = size[pi], size[pj]
+            vxi, vyi = vel_x[pi], vel_y[pi]
+            vxj, vyj = vel_x[pj], vel_y[pj]
+            vx_new = (si * vxi + sj * vxj) / (si + sj)
+            vy_new = (si * vyi + sj * vyj) / (si + sj)
+
+            union(i, j, vx_new, vy_new)
+            bond_idx += 1
+
+        for i in range(N):
+            pi = find(i)
+            pos[i][0] = (pos[i][0] + vel_x[pi]) % L
+            pos[i][1] = (pos[i][1] + vel_y[pi]) % L
+
+    # Check final state
+    comp_roots = set()
+    for i in range(N):
+        comp_roots.add(find(i))
+
+    if len(comp_roots) != M:
+        print(f"wrong answer: expected {M} components, got {len(comp_roots)}", file=sys.stderr)
+        sys.exit(1)
+
+    for c in comp_roots:
+        if size[c] != K:
+            print(f"wrong answer: component {c} has size {size[c]}, expected {K}", file=sys.stderr)
+            sys.exit(1)
+
+    # Score = round(10^6 * log2(L * (N - M) / (D_sum + 1)))
+    numerator = L * (N - M)
+    score = max(0, round(1e6 * math.log2(numerator / (total_cost + 1))))
+
+    print(f"Score = {score}", file=sys.stderr)
+    sys.exit(0)
+
+if __name__ == "__main__":
+    main()

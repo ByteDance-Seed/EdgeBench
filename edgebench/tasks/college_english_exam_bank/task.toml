@@ -1,0 +1,52 @@
+schema_version = 0
+id = "college_english_exam_bank"
+name = "College English Exam Bank"
+category = "Professional Knowledge Work"
+language = "Python"
+description = "Produce five parallel examination papers with answer keys for a college English course, plus a blueprint table and an overlap self-check matrix ensuring cross-paper diversity meets pedagogical thresholds."
+version = "1.0.0"
+status = "migrated"   # LLM-judged: scores vary between runs; see NOTES.md
+
+[environment]
+base = "python"
+platform = "linux/amd64"
+cwd = "/home/workspace"
+internet = true                 # as v1 (the agent had internet access)
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = [
+  "A卷原卷.docx", "A卷原卷.pdf", "A卷答案和评分细则.docx", "A卷答案和评分细则.pdf",
+  "B卷原卷.docx", "B卷原卷.pdf", "B卷答案和评分细则.docx", "B卷答案和评分细则.pdf",
+  "C卷原卷.docx", "C卷原卷.pdf", "C卷答案和评分细则.docx", "C卷答案和评分细则.pdf",
+  "D卷原卷.docx", "D卷原卷.pdf", "D卷答案和评分细则.docx", "D卷答案和评分细则.pdf",
+  "E卷原卷.docx", "E卷原卷.pdf", "E卷答案和评分细则.docx", "E卷答案和评分细则.pdf",
+  "五套组卷蓝图表.xlsx", "套间重复率自检表.xlsx",
+]
+exclude = [".git", "__pycache__", "*.pyc"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 900
+internet = true            # the LLM judge calls a model API (see below)
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# LLM JUDGE. The grader (scoring/grade_with_codex.py) runs the Codex CLI as a grading agent and
+# needs, inside the judge container, an OpenAI-Responses-compatible endpoint plus network access:
+#   SFORGE_JUDGE_API_KEY, SFORGE_JUDGE_API_BASE_URL (default https://openrouter.ai/api/v1),
+#   SFORGE_JUDGE_MODEL (v1 production used gpt-5.5-2026-04-24).
+# The harness gives the judge none of these; the operator must pass them via
+# SFORGE_JUDGE_EXTRA_ENV and allow judge egress. Without them every submission scores
+# valid=false, 0. Scores are not deterministic (same submission: 11.0 and 17.5 in v1).
+
+[score]
+direction = "maximize"
+# raw score = v1 structured_json score = 100 * raw_total / max_total of the Codex judge (0..100).
+# v1 defined no rescale (score_0_100 was null), so none is set here either.
+
+[[blobs]]                       # `附件4：PPT.rar` (576596708 B), used twice by work and judge; see NOTES.md
+path = "environment/blobs/ppt_rar.tar.gz"
+sha256 = "7d725fb579bda1bab135f5a5b914bb60ae9e56da73b412b2452bf84c9c3bd486"

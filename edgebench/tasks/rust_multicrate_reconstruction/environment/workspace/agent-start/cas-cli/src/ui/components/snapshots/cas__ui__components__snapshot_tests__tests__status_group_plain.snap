@@ -1,0 +1,8 @@
+---
+source: cas-cli/src/ui/components/snapshot_tests.rs
+expression: tf.output()
+---
+[OK] Store connected
+[OK] Index healthy
+[WARN] Config missing
+[ERROR] Auth failed

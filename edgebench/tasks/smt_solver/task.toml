@@ -1,0 +1,40 @@
+schema_version = 0
+id = "smt_solver"
+name = "Smt Solver"
+category = "Combinatorial Optimization"
+language = "Python"
+description = "Build an SMT solver from scratch for four quantifier-free theories (uninterpreted functions, linear real and integer arithmetic, and their combination). External SMT solvers are forbidden; model witnesses are independently validated."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python310"
+platform = "linux/amd64"
+cwd = "/home/workspace/smt_solver"
+internet = false
+cpus = 16
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["build.sh", "solve", "src/"]
+exclude = ["__pycache__/", "*.pyc", ".pytest_cache/", "benchmarks/", "hidden_benchmarks/", "expected_answers.json", "selection_manifest.json", "public_score.json", "hidden_score.json", "*.log"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 7200
+cpus = 16
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# evaluate.py runs 16 solver processes in parallel, each under a 60 s wall-clock timeout; see
+# NOTES.md.
+
+[score]
+direction = "maximize"
+# raw score = evaluate.py final_score in 0..1 (difficulty-weighted credit), v1 structured_json `score`
+rescale = { kind = "linear", lower = 0.0, upper = 1.0 }
+
+[[blobs]]
+# hidden_benchmarks/ (774 .smt2 + expected_answers.json + selection_manifest.json, 3.29 GB unpacked); see NOTES.md
+path = "judge/blobs/hidden_benchmarks.tar.gz"
+sha256 = "04dd46f747c6c3006fe293784a5c699214f8026ef5a84d37a905f83c0cfe045e"
