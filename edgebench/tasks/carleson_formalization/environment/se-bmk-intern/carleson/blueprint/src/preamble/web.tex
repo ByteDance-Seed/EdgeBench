@@ -1,0 +1,6 @@
+% Those macros are used for the web version of the blueprint.
+% This file is not meant to be built. Build src/web.tex or src/print.text instead.
+
+% In some distributions, \C is already defined so \newcommand fails, however, \def seems to
+% break the web-build our CI does, so we declare this separately for the pdf and the web version
+\newcommand{\C}{{\mathbb{C}}}

@@ -1,0 +1,210 @@
+[package]
+name = "cas"
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Coding Agent System - unified tasks, memory, rules, and skills for AI agents"
+license = "MIT"
+keywords = ["ai", "agent", "memory", "tasks", "cli"]
+categories = ["command-line-utilities"]
+
+[lib]
+name = "cas"
+path = "src/lib.rs"
+
+[[bin]]
+name = "cas"
+path = "src/main.rs"
+
+[dependencies]
+# Core types (workspace crate)
+cas-types = { path = "../crates/cas-types" }
+
+# Storage (workspace crate)
+cas-store = { path = "../crates/cas-store" }
+
+# Core business logic (workspace crate)
+cas-core = { path = "../crates/cas-core" }
+
+# Code analysis (workspace crate)
+cas-code = { path = "../crates/cas-code" }
+
+# Diff parsing, rendering, and syntax highlighting
+cas-diffs = { path = "../crates/cas-diffs" }
+
+# Search infrastructure (workspace crate)
+cas-search = { path = "../crates/cas-search" }
+
+# Terminal multiplexer (workspace crate)
+cas-mux = { path = "../crates/cas-mux" }
+
+# Terminal recording
+cas-recording = { path = "../crates/cas-recording" }
+
+# Factory protocol (WebSocket message types)
+cas-factory-protocol = { path = "../crates/cas-factory-protocol" }
+
+# Factory orchestration
+cas-factory = { path = "../crates/cas-factory" }
+
+# Terminal emulation (for factory TUI client)
+ghostty_vt = { path = "../crates/ghostty_vt" }
+
+# CLI Framework
+clap = { version = "4.5", features = ["derive", "env", "string"] }
+
+# Database
+rusqlite = { version = "0.38", features = ["bundled", "backup"] }
+
+# Full-text Search (BM25)
+tantivy = "0.25"
+
+# Ripgrep libraries for grep mode
+grep = "0.4"
+grep-searcher = "0.1"
+grep-regex = "0.1"
+grep-matcher = "0.1"
+
+# Parallel processing
+rayon = "1.10"
+
+# Terminal UI
+ratatui = "0.30"
+crossterm = "0.29"
+
+# Clipboard support. Text clipboard APIs are sufficient for CAS; disabling
+# arboard's default image-data feature avoids pulling unused macOS/Windows
+# image clipboard crates into the Linux evaluator image.
+arboard = { version = "3.4", default-features = false }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+toml = "0.9"
+
+# Error Handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Date/Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# File System
+dirs = "6.0"
+walkdir = "2.5"
+ignore = "0.4"
+notify = { version = "8.0", default-features = false, features = ["macos_fsevent"] }
+notify-debouncer-mini = "0.7"
+glob = "0.3"
+fs2 = "0.4"
+
+# Text Processing
+regex = "1.11"
+unicode-normalization = "0.1"
+similar = "2.7"
+pulldown-cmark = "0.13"
+
+# Utilities
+rand = "0.9.2"
+hostname = "0.4"
+
+# O(1) LRU cache support (LinkedHashMap)
+hashlink = "0.10"
+
+# Unix process management (for fork-based daemon)
+nix = { version = "0.29", features = ["process", "signal"] }
+libc = "0.2"
+
+# Desktop notifications (cross-platform)
+notify-rust = "4.11"
+
+# Async runtime (for AI extraction and MCP server)
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "net", "sync"] }
+
+# WebSocket support (for factory server)
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+
+# LRU cache (for playback engine)
+lru = "0.12"
+
+# UUID generation
+uuid = { version = "1.11", features = ["v4"] }
+
+# Analytics (opt-in telemetry) - use blocking client, not async
+posthog-rs = { version = "0.3", default-features = false }
+
+# Claude SDK (vendored for offline benchmark builds)
+claude_rs = { path = "../vendor-deps/claude_rs" }
+
+# MCP Server
+rmcp = { version = "0.16", features = ["server", "macros", "transport-io", "client", "transport-child-process", "transport-streamable-http-client-reqwest"], optional = true }
+schemars = { version = "1.0", optional = true }
+cas-mcp = { path = "../crates/cas-mcp", optional = true }
+
+# MCP Proxy (code-mode-mcp) — optional, not included in public builds
+# To enable: place code-mode-mcp at ../../code-mode-mcp and build with --features mcp-proxy
+# cmcp_core = { package = "code-mode-mcp", path = "../../code-mode-mcp", optional = true }
+
+# HTTP Client (for auth and cloud sync)
+ureq = { version = "2.12", features = ["json"] }
+flate2 = "1.0"
+
+# Self-update from GitHub releases
+self_update = { version = "0.42", default-features = false, features = ["archive-tar", "archive-zip", "compression-flate2", "compression-zip-deflate", "rustls"] }
+sha2 = "0.10.9"
+base64 = "0.22"
+
+# OAuth flow
+webbrowser = "1.0"
+tiny_http = "0.12"
+
+tar = "0.4"
+zstd = "0.13"
+hex = "0.4.3"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+
+# Crash reporting
+sentry = { version = "0.35", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
+
+[features]
+default = ["mcp-server"]
+mcp-server = ["dep:rmcp", "dep:schemars", "dep:cas-mcp"]
+# mcp-proxy requires code-mode-mcp — uncomment cmcp_core dep above and add dep:cmcp_core here to enable
+mcp-proxy = ["mcp-server"]
+claude_rs_e2e = []
+# factory-recording feature removed - recording is now always available
+
+[build-dependencies]
+chrono = "0.4"
+dotenvy = "0.15"
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.1"
+tempfile = "3.14"
+pretty_assertions = "1.4"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+futures = "0.3"
+cas-tui-test = { path = "../crates/cas-tui-test" }
+
+# Snapshot testing
+insta = { version = "1.42", features = ["yaml", "json", "redactions"] }
+
+# HTTP mocking for cloud sync tests
+wiremock = "0.6"
+
+# Parametrized tests and fixtures
+rstest = "0.24"
+
+# Property-based testing
+proptest = "1.5"
+
+# Benchmarking
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "code_indexing"
+harness = false

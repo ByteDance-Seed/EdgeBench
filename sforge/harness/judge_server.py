@@ -24,7 +24,7 @@ import time
 import uuid
 from dataclasses import dataclass, field, replace
 from enum import Enum
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -33,18 +33,18 @@ from pydantic import BaseModel
 
 from sforge import __version__
 from sforge.harness.backend import ContainerBackend
-from sforge.harness.benchmark import load_benchmark
 from sforge.harness.config import (
     SForgeConfig,
     create_backend_from_config,
-    get_container_env,
     load_config,
-    sanitize_e2b_proxy_env,
+    resource_env,
 )
-from sforge.harness.constants import get_admin_secret
+from sforge.harness.constants import CONTAINER_DIR, get_admin_secret
 from sforge.harness.docker_build import BuildImageError, build_judge_image
+from sforge.harness.llm_gateway import UsageLog, add_gateway_routes, make_client
 from sforge.harness.run_evaluation import judge_submission
-from sforge.harness.selection import select_best
+from sforge.harness.grading import select_best
+from sforge.harness.score_rescale import rescale_score
 from sforge.harness.task_spec import TaskSpec, load_all_tasks
 
 logger = logging.getLogger("sforge.judge_server")
@@ -137,7 +137,9 @@ class RegisterRequest(BaseModel):
     submission_cooldown: int | None = None
     e2b_template_map: dict[str, str] | None = None
     e2b_template_namespace: str | None = None
-    e2b_sandbox_ttl: int | None = None
+    # LLM gateway: the run's model API; the agent only sees the judge URL.
+    llm_base_url: str | None = None
+    llm_api_key: str | None = None
 
 
 class RegisterResponse(BaseModel):
@@ -257,10 +259,10 @@ class JudgeState:
             "moves": sess.moves,
             "steps": sess.steps,
         }
-        if sess.max_score and sess.max_score > 0:
-            entry["pass_rate"] = sess.current_score / sess.max_score
-        else:
-            entry["pass_rate"] = 0.0
+        entry["valid"] = sess.current_score is not None
+        task_spec = self.tasks.get(sess.task_id)
+        if task_spec is not None and entry["valid"]:
+            entry["score_0_100"] = rescale_score(task_spec.judge.rescale, sess.current_score)
         with self._history_lock:
             history_key = f"{sess.run_id}/{sess.task_id}"
             self.run_history.setdefault(history_key, []).append(entry)
@@ -290,7 +292,8 @@ class JudgeState:
                          submission_cooldown: int | None = None,
                          e2b_template_map: dict[str, str] | None = None,
                          e2b_template_namespace: str | None = None,
-                         e2b_sandbox_ttl: int | None = None) -> str:
+                         llm_base_url: str | None = None,
+                         llm_api_key: str | None = None) -> str:
         if task_id not in self.tasks:
             raise ValueError(f"Unknown task: {task_id}")
         token = secrets.token_hex(16)
@@ -305,6 +308,11 @@ class JudgeState:
                 "max_agent_submissions": max_agent_submissions,
                 "submission_cooldown": submission_cooldown,
                 "last_agent_submit_at": 0.0,
+                "llm_base_url": llm_base_url,
+                "llm_api_key": llm_api_key,
+                "usage_log": UsageLog(
+                    self.config.log_dir / "runs" / run_id / task_id / "llm_requests.jsonl"
+                ),
             }
             run_key = self._run_key(run_id, task_id)
             self.run_resource_limits[run_key] = {
@@ -321,16 +329,10 @@ class JudgeState:
                 if not e2b_template_namespace
                 else e2b_template_namespace
             )
-            effective_e2b_sandbox_ttl = (
-                self.config.e2b_sandbox_ttl
-                if e2b_sandbox_ttl is None
-                else e2b_sandbox_ttl
-            )
             e2b_config_changed = backend == "e2b" and (
                 effective_e2b_template_map != self.config.e2b_template_map
                 or effective_e2b_template_namespace
                 != self.config.e2b_template_namespace
-                or effective_e2b_sandbox_ttl != self.config.e2b_sandbox_ttl
             )
             if backend and (
                 backend != self.backend.backend_name or e2b_config_changed
@@ -340,11 +342,10 @@ class JudgeState:
                     backend,
                     k8s_namespace=k8s_namespace or self.config.k8s_namespace,
                     k8s_node_selector=k8s_node_selector or self.config.k8s_node_selector,
-                    k8s_image_registry=k8s_image_registry or self.config.k8s_image_registry,
+                    k8s_image_registry=k8s_image_registry or self.config.pod_image_registry,
                     k8s_kubeconfig=k8s_kubeconfig or self.config.k8s_kubeconfig,
                     e2b_template_map=effective_e2b_template_map,
                     e2b_template_namespace=effective_e2b_template_namespace,
-                    e2b_sandbox_ttl=effective_e2b_sandbox_ttl,
                 )
         return token
 
@@ -360,6 +361,14 @@ class JudgeState:
             if backend is not None:
                 return backend
         return self.backend
+
+    def gateway_run(self, token: str) -> dict:
+        """Run info for the LLM gateway; KeyError for unknown tokens or runs
+        registered without an upstream."""
+        info = self.resolve_token(token)
+        if not info.get("llm_base_url"):
+            raise KeyError("No LLM upstream for this run")
+        return info
 
     def resolve_token(self, token: str) -> dict:
         with self._tokens_lock:
@@ -422,13 +431,8 @@ class JudgeState:
             "round": round_id,
         }
         if report_dict:
-            entry["pass_rate"] = report_dict.get("pass_rate", 0.0)
-            entry["score"] = report_dict.get("score")
-            entry["passed"] = report_dict.get("passed", 0)
-            entry["failed"] = report_dict.get("failed", 0)
-            entry["total_tests"] = report_dict.get("total_tests", 0)
-            entry["valid"] = report_dict.get("valid", True)
-            entry["summary"] = report_dict.get("summary")
+            for key in ("score", "score_0_100", "valid", "summary", "error"):
+                entry[key] = report_dict.get(key)
         if error:
             entry["error"] = error
         history_key = f"{run_id}/{task_id}"
@@ -445,33 +449,23 @@ class JudgeState:
         with self._history_lock:
             entries = list(self.run_history.get(history_key, []))
 
-        # Resolve selection policy from task spec
-        resolved_tid = task_id
-        if not resolved_tid:
-            for e in entries:
-                if e.get("task_id"):
-                    resolved_tid = e["task_id"]
-                    break
+        resolved_tid = task_id or next((e["task_id"] for e in entries if e.get("task_id")), None)
         task_spec = self.tasks.get(resolved_tid) if resolved_tid else None
-        policy = task_spec.judge.selection if task_spec else "pass_rate_first"
-        direction = task_spec.judge.score_direction if task_spec else "maximize"
-
-        best = select_best(entries, direction, policy)
+        best = select_best(entries, task_spec.judge.direction if task_spec else "maximize") or {}
 
         sub_entries = [e for e in entries if e.get("type") == "submission"]
         return {
             "run_id": run_id,
-            "best_score": best["best_score"],
-            "best_pass_rate": best["best_pass_rate"],
-            "best_round": best["best_round"],
+            "best_score": best.get("score"),
+            "best_score_0_100": best.get("score_0_100"),
+            "best_round": best.get("round", ""),
             "agent_submissions": sum(1 for e in sub_entries if (e.get("round") or "").startswith("agent-")),
             "auto_submissions": sum(1 for e in sub_entries if (e.get("round") or "").startswith("auto-")),
             "entries": entries,
         }
 
     def load_tasks(self) -> None:
-        benchmark = load_benchmark(self.config.tasks_dir)
-        task_list = load_all_tasks(self.config.tasks_dir, benchmark)
+        task_list = load_all_tasks(self.config.benchmark)
         self.tasks = {t.task_id: t for t in task_list}
 
     def submit(self, task_id: str, archive: bytes, run_id: str | None = None, round: str | None = None,
@@ -528,7 +522,6 @@ class JudgeState:
                 log_dir=sub_log_dir,
             )
             report_dict = report.to_dict()
-            report_dict.pop("score_0_100", None)
             self.submissions[submission_id]["status"] = SubmissionStatus.COMPLETED
             self.submissions[submission_id]["report"] = report_dict
             self._record_submission(log_run_id, submission_id, task_id, round, report_dict, None)
@@ -573,17 +566,14 @@ class JudgeState:
         backend = self._get_backend(run_id, task_id)
 
         if backend.backend_name == "docker":
-            from sforge.harness.backend.docker_backend import DockerBackend
-            assert isinstance(backend, DockerBackend)
-            build_judge_image(task_spec, self.config, backend.client, force_rebuild=False)
+            build_judge_image(task_spec, self.config)
 
         session_id = uuid.uuid4().hex[:12]
         container_name = f"sforge.game.{task_id}.{session_id}"
         port = GAME_CONTAINER_PORT
-        env = get_container_env(self.config, include_judge_extra=True)
+        env = dict(self.config.judge_extra_env)  # no model key or proxies (see run_evaluation)
         game_headers = {}
         if backend.backend_name == "e2b":
-            sanitize_e2b_proxy_env(env)
             # E2B exposes the service through a public gateway. Protect the
             # in-sandbox app as well as the outer Judge route.
             game_token = uuid.uuid4().hex
@@ -598,6 +588,7 @@ class JudgeState:
             cpu = task_spec.judge.cpu_limit
         if mem is None:
             mem = task_spec.judge.mem_limit
+        env.update(resource_env(cpu, mem))
         handle = None
         committed = False
         try:
@@ -615,7 +606,7 @@ class JudgeState:
 
             backend.copy_to_container(
                 handle, GAME_SERVER_APP_PATH,
-                PurePosixPath("/tmp/game_server_app.py"),
+                CONTAINER_DIR / "game_server_app.py",
             )
             backend.exec_run(
                 handle, f"/bin/bash -c '{task_spec.judge.game_server_cmd} &'",
@@ -893,7 +884,9 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
         return ResultResponse(
             submission_id=submission_id,
             status=result["status"],
-            report=result["report"],
+            # Agents poll this; keep the rescale anchors out of their view.
+            report={k: v for k, v in (result["report"] or {}).items() if k != "score_0_100"}
+            if result["report"] is not None else None,
             error=result["error"],
         )
 
@@ -916,7 +909,8 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
                 submission_cooldown=req.submission_cooldown,
                 e2b_template_map=req.e2b_template_map,
                 e2b_template_namespace=req.e2b_template_namespace,
-                e2b_sandbox_ttl=req.e2b_sandbox_ttl,
+                llm_base_url=req.llm_base_url,
+                llm_api_key=req.llm_api_key,
             )
             return RegisterResponse(token=token)
         except ValueError as e:
@@ -974,25 +968,36 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
         full = state.get_run_history(info["run_id"], info["task_id"])
         if admin_secret == state.admin_secret:
             return full
-        # Filter to agent-only view: hide auto-eval entries
+        # Agent view: no auto-eval entries, no normalized scores (the rescale
+        # anchors are not the agent's business).
         agent_entries = [
-            e for e in full.get("entries", [])
+            {k: v for k, v in e.items() if k != "score_0_100"}
+            for e in full.get("entries", [])
             if not (e.get("round") or "").startswith("auto-")
         ]
-        resolved_tid = info["task_id"]
-        task_spec = state.tasks.get(resolved_tid) if resolved_tid else None
-        policy = task_spec.judge.selection if task_spec else "pass_rate_first"
-        direction = task_spec.judge.score_direction if task_spec else "maximize"
-        best = select_best(agent_entries, direction, policy)
+        task_spec = state.tasks.get(info["task_id"])
+        best = select_best(agent_entries, task_spec.judge.direction if task_spec else "maximize") or {}
         return {
             "run_id": info["run_id"],
-            "best_score": best["best_score"],
-            "best_pass_rate": best["best_pass_rate"],
-            "best_round": best["best_round"],
+            "best_score": best.get("score"),
+            "best_round": best.get("round", ""),
             "agent_submissions": sum(1 for e in agent_entries if e.get("type") == "submission"),
             "auto_submissions": 0,
             "entries": agent_entries,
         }
+
+    @app.get("/api/v1/usage")
+    def usage(token: str = Query(...), admin_secret: str = Query("")) -> dict:
+        """Token usage recorded by the LLM gateway for this run (host-side)."""
+        if admin_secret != state.admin_secret:
+            raise HTTPException(status_code=403, detail="Invalid admin secret")
+        try:
+            info = state.resolve_token(token)
+        except KeyError:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return info["usage_log"].summary()
+
+    add_gateway_routes(app, state, make_client(config.https_proxy, config.no_proxy))
 
     # --- Game session routes ---
 

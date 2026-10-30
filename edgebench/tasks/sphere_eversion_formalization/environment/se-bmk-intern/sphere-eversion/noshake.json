@@ -1,0 +1,6 @@
+{"ignoreImport": ["Init", "Lean", "SphereEversion.Notations"],
+ "ignore":
+ {"SphereEversion.ToMathlib.Data.Nat.Basic": ["Mathlib.Tactic.Choose"],
+  "SphereEversion.Notations": ["Mathlib.Analysis.Calculus.ContDiff.Basic"],
+  "SphereEversion.Local.Corrugation":
+  ["SphereEversion.ToMathlib.MeasureTheory.BorelSpace"]}}

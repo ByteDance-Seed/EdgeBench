@@ -4,10 +4,10 @@ title: "Single Task (E2B)"
 
 # Single Task (E2B)
 
-Run one EdgeBench task (`ad_placement_optimization`) in [E2B](https://e2b.dev) cloud Sandboxes. No local Docker daemon or Kubernetes cluster is needed; the only thing you host yourself is the Judge Server.
+Run one EdgeBench task (`ad_placement_optimization`) in [E2B](https://e2b.dev) cloud Sandboxes. No local Docker daemon or Kubernetes cluster is needed; the only thing you host yourself is the judge, which `sforge run` starts for you.
 
-::: tip When to use E2B
-E2B is the easiest way to run tasks when you cannot run Docker locally. Work, Judge, and Game environments are all created as E2B Sandboxes from pre-built official Templates. Concurrency and Sandbox lifetime are bounded by your E2B plan; see [Plan Limits and Run Sizing](/en/configuration/container-backends#plan-limits-and-run-sizing) before scaling up.
+::: tip
+Your E2B plan bounds concurrency and Sandbox lifetime; keep `--timeout` well below the plan's maximum Sandbox lifetime. See [Container Backends](/en/configuration/container-backends#e2b).
 :::
 
 ::: warning Cost
@@ -19,77 +19,51 @@ Frontier-model runs are expensive — one task over the official 12-hour budget 
 | Requirement | Check |
 |-------------|-------|
 | E2B account and API key | `E2B_API_KEY` from the E2B dashboard |
-| A host with a **publicly routable** address for the Judge Server | Sandboxes submit to it over the internet |
-| Python >= 3.10 | `python --version` |
-
-> **Note:** The agent timeout must fit within your E2B plan's maximum Sandbox
-> lifetime, including time for evaluation and cleanup. Check your plan before
-> running long tasks.
+| A host with a **publicly routable** address | Sandboxes reach the judge on it over the internet |
+| Python 3.11–3.13 | `python --version` |
 
 ## Using Claude Code with Anthropic API
 
 ### 1. Install SForge with the E2B extra
 
 ```bash
-pip install "sforge[e2b]"
-```
-
-### 2. Fetch task definitions
-
-```bash
-sforge fetch-tasks edgebench
-```
-
-Downloads the EdgeBench task JSONs and `BENCHMARK.yaml` into `./tasks/`.
-Verify with:
-
-```bash
-sforge list
-```
-
-### 3. Configure E2B
-
-E2B Sandboxes start from Templates, not Docker images, so there is no
-`sforge pull` step. Official Templates for every published EdgeBench task are
-already built; SForge derives the Template name from each task's image
-reference. Set the following on **both** the Judge Server host and the run
-host:
-
-```bash
+git clone https://github.com/ByteDance-Seed/EdgeBench.git
+cd EdgeBench
+pip install -e ".[e2b]"
 export E2B_API_KEY="e2b_xxxx"
-export SFORGE_E2B_TEMPLATE_NAMESPACE=edgebench
 ```
 
-If the Judge Server and `sforge run` are on **different machines**, they also
-need a shared admin secret. The Judge Server only accepts registrations whose
-secret matches its own, and each side otherwise generates its own random one
-under `SFORGE_LOG_DIR/.judge-admin-secret`. Export the same value on both hosts:
+### 2. Build the task's Templates
+
+E2B Sandboxes start from Templates, not Docker images. Build one Template per task
+image from the pre-built images on Docker Hub; this is a one-time step per task version.
+Run from the repository root:
 
 ```bash
-export SFORGE_ADMIN_SECRET="$(openssl rand -base64 32)"   # same value on both hosts
+python - ad_placement_optimization <<'EOF'
+import sys
+from e2b import Template
+from sforge.harness.backend.e2b_backend import e2b_template_reference
+from sforge.harness.config import load_config
+from sforge.harness.docker_build import remote_ref
+from sforge.harness.task_spec import load_task
+
+config = load_config({"benchmark_dir": "edgebench"})
+for task_id in sys.argv[1:]:
+    spec = load_task(config.benchmark.root / "tasks" / task_id)
+    for key in (spec.work_image_key, spec.judge_image_key):
+        name = e2b_template_reference(key)  # edgebench.work.ad_placement_optimization:<hash> -> edgebench-work-ad-placement-optimization:<hash>
+        Template.build(Template().from_image(remote_ref(config.image_registry, key)), name,
+                       cpu_count=4, memory_mb=16384)
+        print("built", name)
+EOF
 ```
 
-When both run on the same machine with the same log directory, they share the
-generated file automatically and nothing needs to be set. Never pass the secret
-to the agent.
+CPU and memory are fixed when a Template is built; pick values your plan allows and the
+task needs. SForge finds the Templates by the derived name; for Templates under a
+shared namespace or other names, see [Container Backends](/en/configuration/container-backends#e2b).
 
-### 4. Start the judge server
-
-On the publicly reachable host:
-
-```bash
-sforge serve --host 0.0.0.0 --port 8080
-```
-
-The Judge Server needs `E2B_API_KEY` too: when a run registers, it creates
-the Judge and Game Sandboxes on E2B, evaluates each submitted archive in an
-ephemeral Judge Sandbox, and returns scores. Make sure port 8080 is open to
-the internet.
-
-### 5. Run the agent
-
-On the run host (can be the same machine), point `--judge-url` at the Judge
-Server's public address:
+### 3. Run the agent
 
 ```bash
 SFORGE_AGENT_API_KEY="sk-ant-xxxx" \
@@ -97,34 +71,29 @@ sforge run --backend e2b \
   --task ad_placement_optimization --agent claude-code \
   --model claude-opus-4-8[1m] \
   --timeout 7200 \
-  --judge-url http://YOUR_PUBLIC_HOST:8080 \
+  --judge-advertise YOUR_PUBLIC_HOST --judge-port 8080 \
   --run-id ad-placement-optimization-e2b-001
 ```
 
-This launches Claude Opus 4.8 in an E2B Work Sandbox for 2 hours.
-You will see the agent's work output streamed to stdout in real time.
+`sforge run` serves the judge on port 8080 of this machine, and the Sandboxes reach
+it at `http://YOUR_PUBLIC_HOST:8080`, so that port must be open to the internet. The
+API key stays on this machine.
 
-Each `sforge run` with `--backend e2b` evaluates tasks independently; passing
-several task IDs schedules several separate Sandbox sets.
-
-### 6. View results
-
-You can view the progress in real time via the built-in web UI:
+### 4. View results
 
 ```bash
-sforge visualizer
+sforge viewer
 # Open http://127.0.0.1:8000
 ```
 
 Or inspect files directly:
 
 ```bash
-ls logs/runs/*/ad_placement_optimization/
-cat logs/runs/*/ad_placement_optimization/final_result.json
+ls logs/runs/ad-placement-optimization-e2b-001/ad_placement_optimization/
+cat logs/runs/ad-placement-optimization-e2b-001/ad_placement_optimization/final_result.json
 ```
 
-Sandboxes are deleted automatically when the run finishes. If one lingers for
-more than a minute, see [Troubleshooting](/en/configuration/container-backends#troubleshooting).
+Sandboxes are deleted automatically when the run finishes.
 
 
 ## Using a Third-Party Model
@@ -132,42 +101,23 @@ more than a minute, see [Troubleshooting](/en/configuration/container-backends#t
 The model-routing and context-window settings are identical to the Docker
 example; only the backend flags change. Follow
 [Using a Third-Party Model](/en/examples/single-task-docker#using-a-third-party-model)
-and add `--backend e2b --judge-url http://YOUR_PUBLIC_HOST:8080` to the
-`sforge run` command, for example:
+and add the E2B flags to the `sforge run` command, for example:
 
 ```bash
 export SFORGE_AGENT_API_KEY="your-deepseek-key"
 export SFORGE_AGENT_API_BASE_URL="https://api.deepseek.com/anthropic"
-export SFORGE_CLAUDE_CACHE_OPT=1
 export SFORGE_AGENT_EXTRA_ENV="ANTHROPIC_MODEL=deepseek-v4-pro[1m],ANTHROPIC_DEFAULT_OPUS_MODEL=deepseek-v4-pro[1m],ANTHROPIC_DEFAULT_SONNET_MODEL=deepseek-v4-pro[1m],ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4-pro[1m],CLAUDE_CODE_SUBAGENT_MODEL=deepseek-v4-pro[1m]"
 
 sforge run --backend e2b \
   --task ad_placement_optimization --agent claude-code \
   --model deepseek-v4-pro[1m] \
   --timeout 7200 \
-  --judge-url http://YOUR_PUBLIC_HOST:8080 \
+  --judge-advertise YOUR_PUBLIC_HOST --judge-port 8080 \
   --run-id ad-placement-deepseek-e2b-001
 ```
 
 
-## Network Isolation
-
-The `internet` field in each task JSON and the `--disable-internet` /
-`--enable-internet` flags work the same as on Docker. On E2B, SForge applies
-the allowlist through E2B's native `update_network` API instead of host
-iptables, so nothing is left behind on your machine. E2B rules are host-level
-rather than port-level: allowing a hostname allows all of its ports.
-
-Host `HTTP_PROXY` / `HTTPS_PROXY` variables are **not** forwarded into
-Sandboxes. If the model API must go through a proxy, it has to be reachable
-from the internet and set explicitly via `SFORGE_HTTP_PROXY` /
-`SFORGE_HTTPS_PROXY`. See [Network Isolation](/en/features/network-isolation#e2b-backend).
-
-
 ## LLM-Graded Tasks
 
-LLM-graded tasks such as `college_english_exam_bank` need grading credentials
-in the Judge environment, exactly as on Docker. Set `SFORGE_JUDGE_EXTRA_ENV`
-**before starting the judge server**; see
-[LLM-Graded Tasks](/en/examples/single-task-docker#llm-graded-tasks) for the
-variables.
+`college_english_exam_bank` needs grading credentials, set exactly as on Docker; see
+[LLM-Graded Tasks](/en/examples/single-task-docker#llm-graded-tasks).

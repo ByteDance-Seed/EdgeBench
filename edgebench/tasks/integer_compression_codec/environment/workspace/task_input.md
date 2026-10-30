@@ -1,0 +1,1 @@
+Self-contained code package

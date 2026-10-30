@@ -1,0 +1,15 @@
+{
+  "scoring_policy": "finite_region_hidden_monitoring_prediction",
+  "public_data_policy": "agent sees only noisy censored public observations; clean public concentrations are private",
+  "easy_points_max_after_caps": 5,
+  "public_observed_sanity_score": 10,
+  "transport_equation_score": 8,
+  "hidden_coarse_score": 14,
+  "hidden_precision_score": 71,
+  "region_physics_score": 15,
+  "caps": {
+    "if_hidden_or_future_rrmse_ge_1.60": 15,
+    "if_hidden_rrmse_ge_0.85_or_future_rrmse_ge_0.90": 30,
+    "if_hidden_rrmse_ge_0.35_or_future_rrmse_ge_0.40": 45
+  }
+}

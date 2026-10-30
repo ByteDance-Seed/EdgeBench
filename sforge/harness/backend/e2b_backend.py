@@ -34,10 +34,22 @@ Semantics notes vs the docker backend:
   container's write order.
 - cpu/mem limits and cap_drop are template-level concepts in e2b and are
   ignored at container creation (logged once).
+
+Provider profiles (``SFORGE_E2B_PROVIDER``):
+
+- ``e2b`` (default): official E2B. Secure sandboxes, network API isolation,
+  Template preflight.
+- ``vefaas``: Volcano Engine veFaaS e2b-compatible sandboxes. The provider
+  ignores create-time envs and image ENV, caps metadata values below 64
+  chars, scopes sandbox listing per function, has no network API and no
+  Template API. The profile re-injects create-time envs on every exec,
+  recovers the image ENV from the envd process, lists by function id, and
+  isolates egress through a net-rules sidecar.
 """
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import logging
@@ -51,6 +63,7 @@ import uuid
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 
+from sforge.harness.constants import CONTAINER_DIR
 from sforge.harness.backend.base import (
     ContainerBackend,
     ContainerHandle,
@@ -66,6 +79,7 @@ logger = logging.getLogger(__name__)
 # to the full TTL at TTL/3 intervals, so a crashed harness leaks a sandbox for
 # at most one TTL.
 DEFAULT_SANDBOX_TTL = 3600
+NETCTL_DIR = "/mnt/netctl"  # where the veFaaS network sidecar watches for rules
 
 # Upper bound for the blocking, non-streaming exec_run path. The interface
 # carries no per-call timeout there and every caller only runs short
@@ -88,6 +102,21 @@ SANDBOX_CLEANUP_GRACE_PERIOD = 60
 
 _METADATA_NAME_KEY = "sforge_name"
 _E2B_NAME_PATTERN = re.compile(r"[a-z0-9_-]{1,128}")
+_PROVIDERS = ("e2b", "vefaas")
+
+
+def _metadata_name(name: str) -> str:
+    """veFaaS caps sandbox metadata values below 64 chars (official e2b has
+    no such limit). Mirror _sanitize_k8s_name: truncate the task_id segment
+    of '{prefix}.{role}.{task_id}.{unique-id}' names so the unique suffix
+    survives, then clamp. Must be applied on both write and lookup."""
+    if len(name) < 64:
+        return name
+    parts = name.split(".")
+    if len(parts) == 4:
+        parts[2] = parts[2][:15].rstrip("-_")
+        name = ".".join(parts)
+    return name[:63]
 
 
 class E2BSandboxHandle(ContainerHandle):
@@ -97,11 +126,13 @@ class E2BSandboxHandle(ContainerHandle):
         self,
         sandbox,
         name: str,
-        default_user: str | None = None,
+        base_envs: dict[str, str] | None = None,
     ) -> None:
         self._sandbox = sandbox
         self._name = name
-        self.default_user = default_user
+        # Create-time envs, re-injected on every exec: some providers (veFaaS)
+        # ignore the envs passed to Sandbox.create.
+        self.base_envs = dict(base_envs) if base_envs else {}
         self._lease_lock = threading.Lock()
         self._closing = False
 
@@ -120,6 +151,106 @@ class E2BSandboxHandle(ContainerHandle):
     @property
     def raw(self):
         return self._sandbox
+
+
+class _SidecarSignalIsolation(NetworkIsolationStrategy):
+    """Egress lockdown executed by a co-located net-rules sidecar (veFaaS).
+
+    For providers without a network API whose main container must not be
+    trusted to hold the rules itself (a root agent could remove them). The
+    sandbox function must be created with a sidecar that shares an emptydir
+    at ``NETCTL_DIR`` and runs:
+
+        wait for <ctl>/lockdown; sh <ctl>/rules.sh (fallback: drop all);
+        write LOCKED/FAILED to <ctl>/status; sleep forever
+
+    ``apply()`` writes the whitelist script derived from the harness's
+    ``AllowedEndpoint`` list, pins hostnames into /etc/hosts (DNS stays
+    blocked, mirroring the docker strategy's extra_hosts), raises the flag,
+    and blocks until the sidecar confirms ``LOCKED``. The sidecar applies
+    the rules in the shared pod netns, applies them exactly once, and never
+    re-reads the control files — the agent starts only after confirmation
+    and cannot undo the rules from the main container without NET_ADMIN.
+
+    Used by the ``vefaas`` provider profile.
+    """
+
+    CONFIRM_TIMEOUT = 60
+
+    def __init__(self, sandbox, allowed_endpoints: list, log: logging.Logger) -> None:
+        self._sandbox = sandbox
+        self._endpoints = allowed_endpoints
+        self._logger = log
+        self._ctl = NETCTL_DIR
+
+    def _rules_script(self) -> str:
+        lines = [
+            "set -e",
+            "iptables -N SFORGE",
+            "iptables -A SFORGE -m state --state ESTABLISHED,RELATED -j RETURN",
+            "iptables -A SFORGE -o lo -j RETURN",
+        ]
+        for ep in self._endpoints:
+            lines.append(
+                f"iptables -A SFORGE -d {ep.ip} -p tcp --dport {ep.port} -j RETURN"
+            )
+        lines += [
+            "iptables -A SFORGE -j DROP",
+            "iptables -I OUTPUT 1 -j SFORGE",
+            # IPv6: blocked entirely, like the docker strategy.
+            "ip6tables -N SFORGE6",
+            "ip6tables -A SFORGE6 -m state --state ESTABLISHED,RELATED -j RETURN",
+            "ip6tables -A SFORGE6 -o lo -j RETURN",
+            "ip6tables -A SFORGE6 -j DROP",
+            "ip6tables -I OUTPUT 1 -j SFORGE6",
+        ]
+        return "\n".join(lines) + "\n"
+
+    def apply(self) -> None:
+        hosts_lines = [
+            f"{ep.ip} {ep.hostname}"
+            for ep in self._endpoints
+            if getattr(ep, "hostname", None)
+        ]
+        if hosts_lines:
+            entries = "\\n".join(hosts_lines)
+            self._sandbox.commands.run(
+                f"printf '{entries}\\n' >> /etc/hosts", user="root", timeout=30,
+            )
+
+        self._sandbox.files.write(
+            f"{self._ctl}/rules.sh", self._rules_script(), user="root"
+        )
+        self._sandbox.commands.run(
+            f"touch {self._ctl}/lockdown", user="root", timeout=30,
+        )
+
+        deadline = time.time() + self.CONFIRM_TIMEOUT
+        status = ""
+        while time.time() < deadline:
+            result = self._sandbox.commands.run(
+                f"cat {self._ctl}/status 2>/dev/null || true",
+                user="root", timeout=30,
+            )
+            status = result.stdout.strip()
+            if status:
+                break
+            time.sleep(2)
+
+        if not status.startswith("LOCKED"):
+            raise RuntimeError(
+                "sidecar network isolation not confirmed "
+                f"(status={status!r}): refusing to start the agent on an "
+                "unrestricted sandbox"
+            )
+        self._logger.info(
+            "e2b sidecar network isolation applied: allowed=%s, status=%s",
+            [(ep.ip, ep.port) for ep in self._endpoints], status,
+        )
+
+    def cleanup(self) -> None:
+        # Rules and sidecar die with the sandbox.
+        pass
 
 
 class E2BNetworkIsolation(NetworkIsolationStrategy):
@@ -176,9 +307,18 @@ class E2BBackend(ContainerBackend):
         sandbox_ttl: int | None = None,
         *,
         template_namespace: str | None = None,
+        provider: str | None = None,
         sandbox_cls=None,
         template_cls=None,
     ) -> None:
+        self._provider = (
+            provider or os.environ.get("SFORGE_E2B_PROVIDER", "") or "e2b"
+        ).strip().lower()
+        if self._provider not in _PROVIDERS:
+            raise ValueError(
+                f"Unknown SFORGE_E2B_PROVIDER {self._provider!r}; "
+                f"expected one of {', '.join(_PROVIDERS)}"
+            )
         if sandbox_cls is None:
             try:
                 from e2b import Sandbox as sandbox_cls
@@ -210,11 +350,7 @@ class E2BBackend(ContainerBackend):
                 "E2B Template namespace must contain only lowercase letters, "
                 "numbers, dashes, and underscores, and be at most 128 characters"
             )
-        self._sandbox_ttl = (
-            int(os.environ.get("SFORGE_E2B_SANDBOX_TTL", DEFAULT_SANDBOX_TTL))
-            if sandbox_ttl is None
-            else sandbox_ttl
-        )
+        self._sandbox_ttl = DEFAULT_SANDBOX_TTL if sandbox_ttl is None else sandbox_ttl
         if self._sandbox_ttl <= 0:
             raise ValueError("E2B Sandbox TTL must be greater than zero")
         self._handles: dict[str, E2BSandboxHandle] = {}
@@ -227,6 +363,16 @@ class E2BBackend(ContainerBackend):
     def backend_name(self) -> str:
         return "e2b"
 
+    @property
+    def uses_hostname_egress(self) -> bool:
+        return self._provider == "e2b"
+
+    @property
+    def public_dns(self) -> tuple[str, ...]:
+        # Volcano VPC DNS resolves some public domains (e.g. google.com) to a
+        # blackhole.
+        return ("8.8.8.8", "1.1.1.1") if self._provider == "vefaas" else ()
+
     # --- Template resolution ---
 
     def resolve_template(self, image_key: str) -> str:
@@ -236,8 +382,7 @@ class E2BBackend(ContainerBackend):
         without the image tag); otherwise the repo part is normalized to the
         template-name charset, the image tag carries over as the Template tag,
         and ``SFORGE_E2B_TEMPLATE_NAMESPACE`` is prepended when configured
-        (``edgebench.work.foo_bar:abc123`` ->
-        ``edgebench/edgebench-work-foo-bar:abc123``).
+        (``bench.work.foo_bar:abc123`` -> ``team/bench-work-foo-bar:abc123``).
         """
         if image_key in self._template_map:
             return self._template_map[image_key]
@@ -259,8 +404,8 @@ class E2BBackend(ContainerBackend):
         cap_drop: list[str] | None = None,
         cpu_limit: int | None = None,
         mem_limit: str | None = None,
-        user: str | None = None,
         annotations: dict[str, str] | None = None,
+        network: bool = True,
     ) -> E2BSandboxHandle:
         if (cpu_limit or mem_limit or cap_drop) and not self._warned_limits:
             self._warned_limits = True
@@ -272,22 +417,34 @@ class E2BBackend(ContainerBackend):
         template = self.resolve_template(image)
         envs = {k: str(v) for k, v in (environment or {}).items() if v is not None}
         metadata = {str(key): str(value) for key, value in (annotations or {}).items()}
-        metadata[_METADATA_NAME_KEY] = name
+        metadata[_METADATA_NAME_KEY] = _metadata_name(name)
         create_kwargs = {
             "template": template,
             "envs": envs,
             "metadata": metadata,
             "timeout": self._sandbox_ttl,
-            "secure": True,
-            "network": {"allow_public_traffic": False},
-            "lifecycle": {"on_timeout": "kill"},
         }
-        sandbox = self._create_sandbox(name, create_kwargs)
-        handle = E2BSandboxHandle(sandbox, name, default_user=user)
+        if self._provider == "e2b":
+            create_kwargs.update(
+                secure=True,
+                network={"allow_public_traffic": False},
+                lifecycle={"on_timeout": "kill"},
+            )
+        sandbox = self._create_sandbox(name, create_kwargs, image_key=image)
+        handle = E2BSandboxHandle(sandbox, name, base_envs=envs)
         with self._handles_lock:
             self._handles[handle.id] = handle
             self._ensure_renewal_thread()
         try:
+            if self._provider == "vefaas":
+                # veFaaS: image config ENV never reaches execs; recover it from
+                # the envd process. Explicit create-time envs keep precedence.
+                image_env = self._harvest_image_env(sandbox)
+                if image_env:
+                    image_env = self._augment_path(sandbox, image_env)
+                    handle.base_envs = {**image_env, **handle.base_envs}
+                    self._persist_profile_env(sandbox, image_env)
+
             # host.docker.internal has no meaning outside the docker backend and
             # would shadow real DNS if written into /etc/hosts.
             hosts = {
@@ -307,9 +464,9 @@ class E2BBackend(ContainerBackend):
                 sandbox.commands.run(
                     command,
                     background=True,
-                    user=user,
+                    user="root",
                     timeout=0,
-                    envs=envs or None,
+                    envs=self._merged_envs(handle, None),
                 )
         except BaseException:
             try:
@@ -322,7 +479,120 @@ class E2BBackend(ContainerBackend):
             raise
         return handle
 
-    def _create_sandbox(self, name: str, create_kwargs: dict):
+    # Runtime/bookkeeping variables in the envd process env that don't come
+    # from (or shouldn't be replayed as) the image config. The prefixes cover
+    # the veFaaS/TCE pod environment observed in practice (_BYTEFAAS_*, MY_*,
+    # PORT0..2, GOMAXPROCS etc.); an image legitimately setting one of these
+    # would be dropped, which is the safer failure mode.
+    _IMAGE_ENV_SKIP = {"HOSTNAME", "HOME", "PWD", "OLDPWD", "SHLVL", "_",
+                       "TERM", "SHELL", "USER", "LOGNAME",
+                       "GOMAXPROCS", "AVAILABILITY_ZONE", "ROUTE_IP",
+                       "PORT0", "PORT1", "PORT2"}
+    _IMAGE_ENV_SKIP_PREFIXES = ("_FAAS_", "FAAS_", "ENVD_", "E2B_", "KUBERNETES_",
+                                "_BYTEFAAS_", "TCE_", "MY_", "APP_", "BYTED_",
+                                "RUNTIME_", "SERVICE_", "INFSEC_", "METRICS_", "IS_")
+
+    def _harvest_image_env(self, sandbox) -> dict[str, str]:
+        """Read the image config ENV back out of the running sandbox.
+
+        veFaaS quirk pair: envd execs get a clean environment (upstream envd
+        behavior — OCI image ENV never reaches commands, unlike docker/k8s),
+        but the platform's runtime-agent starts the envd *process* with image
+        ENV merged into its environment. Reading /proc/<envd>/environ is
+        therefore the only client-side source of the image ENV; the result is
+        folded into handle.base_envs so every exec sees it.
+
+        """
+        # Match on argv[0] only: our own `bash -l -c <script>` exec carries
+        # "envd" inside the script text, but its argv[0] is /bin/bash.
+        script = (
+            "for d in /proc/[0-9]*; do "
+            "a=$(tr '\\0' '\\n' < $d/cmdline 2>/dev/null | head -1); "
+            'case "$a" in *envd*) '
+            "echo __ENV_B64__$(base64 < $d/environ | tr -d '\\n')__END__; "
+            "exit 0;; esac; done"
+        )
+        try:
+            result = sandbox.commands.run(script, user="root", timeout=30)
+            blob = (result.stdout or "").split("__ENV_B64__", 1)[1].split("__END__", 1)[0]
+            raw = base64.b64decode(blob)
+        except Exception as exc:  # noqa: BLE001 — creation must not fail over this
+            logger.warning("e2b backend: could not harvest image env: %s", exc)
+            return {}
+        env: dict[str, str] = {}
+        for chunk in raw.split(b"\0"):
+            if not chunk or b"=" not in chunk:
+                continue
+            key, _, value = chunk.decode("utf-8", "replace").partition("=")
+            if not value:  # empty values would shadow useful shell defaults
+                continue
+            if key in self._IMAGE_ENV_SKIP or key.startswith(self._IMAGE_ENV_SKIP_PREFIXES):
+                continue
+            env[key] = value
+        if env:
+            logger.info("e2b backend: harvested %d image env vars (%s)",
+                        len(env), ", ".join(sorted(env)))
+        return env
+
+    def _augment_path(self, sandbox, env: dict[str, str]) -> dict[str, str]:
+        """Recover the image's PATH additions the platform threw away.
+
+        The runtime-agent spawns envd with the *platform* PATH, so the image
+        config's own PATH (e.g. rust's /usr/local/cargo/bin prepend) is the
+        one variable the harvest cannot see. Derive the lost entries from the
+        image's *_HOME/*_ROOT vars: any existing ``<value>/bin`` directory is
+        prepended to PATH.
+        """
+        candidates = []
+        for key, value in sorted(env.items()):
+            if key.endswith(("_HOME", "_ROOT", "PATH")) and key != "PATH" \
+                    and value.startswith("/"):
+                candidates.append(value.rstrip("/") + "/bin")
+        # Toolchains whose images ship no *_HOME/*_ROOT marker at all
+        # (golang sets only GOPATH/GOLANG_VERSION; its install dir is fixed).
+        if any(k.startswith(("GOLANG_", "GO")) for k in env):
+            candidates.append("/usr/local/go/bin")
+        if not candidates:
+            return env
+        probe = "; ".join(
+            f"[ -d {shlex.quote(d)} ] && echo {shlex.quote(d)}" for d in candidates
+        ) + "; true"
+        try:
+            result = sandbox.commands.run(probe, user="root", timeout=30)
+            existing = [ln.strip() for ln in (result.stdout or "").splitlines() if ln.strip()]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("e2b backend: PATH augmentation probe failed: %s", exc)
+            return env
+        base = env.get("PATH") or "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        extra = [d for d in existing if d not in base.split(":")]
+        if extra:
+            env = {**env, "PATH": ":".join(extra + [base])}
+            logger.info("e2b backend: PATH augmented with %s", ", ".join(extra))
+        return env
+
+    @staticmethod
+    def _persist_profile_env(sandbox, env: dict[str, str]) -> None:
+        """Persist harvested image env where login shells can't lose it.
+
+        envd runs every exec as ``bash -l``, and /etc/profile unconditionally
+        rebuilds PATH — wiping the process-level PATH injected via exec envs
+        (rust images expose cargo only through the image PATH, so evals died
+        with missing_executable:cargo). /etc/profile.d/ is sourced *after*
+        that reset, so an export script there makes the image env stick for
+        every user's shell. Non-PATH vars are exported too; per-exec envs
+        still win for anything envd applies after the shell starts.
+        stderr is silenced so locale warnings can't pollute eval output.
+        """
+        lines = "".join(f"export {k}={shlex.quote(v)}\n" for k, v in sorted(env.items()))
+        script = "{\n" + lines + "} 2>/dev/null\n"
+        try:
+            sandbox.files.write("/etc/profile.d/zz-sforge-image-env.sh", script, user="root")
+        except Exception as exc:  # noqa: BLE001 — creation must not fail over this
+            logger.warning("e2b backend: could not persist image env to profile.d: %s", exc)
+
+    def _create_sandbox(
+        self, name: str, create_kwargs: dict, image_key: str | None = None,
+    ):
         """Create a Sandbox, reconciling an ambiguous API timeout by name.
 
         A create request may reach E2B even when the client times out before
@@ -338,7 +608,7 @@ class E2BBackend(ContainerBackend):
                 if not _is_retryable_transport_error(exc):
                     raise
                 try:
-                    matches = list(self._iter_sandboxes_by_name(name))
+                    matches = list(self._iter_sandboxes_by_name(name, image_key))
                 except RuntimeError as lookup_exc:
                     logger.warning(
                         "Could not reconcile timed-out E2B Sandbox creation "
@@ -442,11 +712,13 @@ class E2BBackend(ContainerBackend):
                     return
                 time.sleep(attempt)
 
-    def container_exists(self, name: str) -> bool:
-        return any(True for _ in self._iter_sandboxes_by_name(name))
+    def container_exists(self, name: str, image_key: str | None = None) -> bool:
+        return any(True for _ in self._iter_sandboxes_by_name(name, image_key))
 
-    def remove_container_by_name(self, name: str) -> None:
-        for info in self._iter_sandboxes_by_name(name):
+    def remove_container_by_name(
+        self, name: str, image_key: str | None = None,
+    ) -> None:
+        for info in self._iter_sandboxes_by_name(name, image_key):
             for attempt in range(1, 4):
                 try:
                     self._sandbox_cls.kill(info.sandbox_id)
@@ -462,16 +734,31 @@ class E2BBackend(ContainerBackend):
                         ) from exc
                     time.sleep(attempt)
 
-    def _iter_sandboxes_by_name(self, name: str):
+    def _iter_sandboxes_by_name(self, name: str, image_key: str | None = None):
         from e2b import SandboxQuery  # local: keeps module import-light
 
-        query = SandboxQuery(metadata={_METADATA_NAME_KEY: name})
+        meta_name = _metadata_name(name)
+        name_filter = {_METADATA_NAME_KEY: meta_name}
+        queries = [SandboxQuery(metadata=name_filter)]
+        if self._provider == "vefaas" and image_key:
+            # veFaaS returns nothing unless the query carries the platform-set
+            # vefaas_function_id (listing is scoped per function). Template
+            # refs may carry a ":tag" suffix; the function id precedes it.
+            function_id = self.resolve_template(image_key).partition(":")[0]
+            queries.append(SandboxQuery(
+                metadata={"vefaas_function_id": function_id, **name_filter}
+            ))
+        seen: set[str] = set()
         try:
-            paginator = self._sandbox_cls.list(query=query)
-            while paginator.has_next:
-                for info in paginator.next_items():
-                    if (info.metadata or {}).get(_METADATA_NAME_KEY) == name:
-                        yield info
+            for query in queries:
+                paginator = self._sandbox_cls.list(query=query)
+                while paginator.has_next:
+                    for info in paginator.next_items():
+                        if info.sandbox_id in seen:
+                            continue
+                        seen.add(info.sandbox_id)
+                        if (info.metadata or {}).get(_METADATA_NAME_KEY) == meta_name:
+                            yield info
         except Exception as exc:
             raise RuntimeError(
                 f"Could not list E2B Sandboxes named {name!r}: {exc}"
@@ -480,6 +767,9 @@ class E2BBackend(ContainerBackend):
     # --- Image ---
 
     def image_exists(self, image_key: str) -> bool:
+        if self._provider == "vefaas":
+            # No Template API; Sandbox.create() fails clearly for unknown ones.
+            return True
         if self._template_cls is None:
             return False
         template = self.resolve_template(image_key)
@@ -516,7 +806,7 @@ class E2BBackend(ContainerBackend):
         # explicitly when a user-owned destination requires it.
         run_user = "root"
         sandbox.commands.run(
-            f"mkdir -p {shlex.quote(str(dst.parent))}",
+            f"mkdir -p {CONTAINER_DIR} {shlex.quote(str(dst.parent))}",
             user=run_user,
             timeout=60,
         )
@@ -525,7 +815,7 @@ class E2BBackend(ContainerBackend):
             buf = io.BytesIO()
             with tarfile.open(fileobj=buf, mode="w") as tar:
                 tar.add(src, arcname=dst.name)
-            tmp = f"/tmp/.sforge-copy-{uuid.uuid4().hex}.tar"
+            tmp = f"{CONTAINER_DIR}/copy-{uuid.uuid4().hex}.tar"
             self._retry_file_transfer(
                 f"upload {src}",
                 lambda: sandbox.files.write(
@@ -557,9 +847,9 @@ class E2BBackend(ContainerBackend):
         shutdown_event: threading.Event | None = None,
     ) -> bytes:
         sandbox = self._raw(handle)
-        archive = f"/tmp/.sforge-download-{uuid.uuid4().hex}.tar"
+        archive = f"{CONTAINER_DIR}/download-{uuid.uuid4().hex}.tar"
         command = (
-            f"tar cf {shlex.quote(archive)} "
+            f"mkdir -p {CONTAINER_DIR} && tar cf {shlex.quote(archive)} "
             f"-C {shlex.quote(str(src.parent))} {shlex.quote(src.name)}"
         )
         try:
@@ -624,15 +914,14 @@ class E2BBackend(ContainerBackend):
         handle: ContainerHandle,
         cmd: str | list[str],
         *,
-        user: str | None = None,
         workdir: str | None = None,
         environment: dict[str, str] | None = None,
         detach: bool = False,
     ) -> ExecResult:
         sandbox = self._raw(handle)
-        run_user = user or self._default_user(handle)
+        run_user = "root"
         cmd_str = _as_shell(cmd)
-        envs = environment or None
+        envs = self._merged_envs(handle, environment)
 
         if detach:
             sandbox.commands.run(
@@ -670,7 +959,6 @@ class E2BBackend(ContainerBackend):
         timeout: int | None = 60,
         *,
         log_file: Path | None = None,
-        user: str | None = None,
         workdir: str | None = None,
         environment: dict[str, str] | None = None,
         stream_to_stdout: bool = False,
@@ -683,7 +971,6 @@ class E2BBackend(ContainerBackend):
             cmd,
             timeout,
             log_file=log_file,
-            user=user,
             workdir=workdir,
             environment=environment,
             stream_to_stdout=stream_to_stdout,
@@ -704,7 +991,6 @@ class E2BBackend(ContainerBackend):
         cmd: str | list[str],
         timeout: int | None = 60,
         *,
-        user: str | None = None,
         workdir: str | None = None,
         environment: dict[str, str] | None = None,
     ) -> StreamingExecResult:
@@ -712,7 +998,6 @@ class E2BBackend(ContainerBackend):
             handle,
             cmd,
             timeout,
-            user=user,
             workdir=workdir,
             environment=environment,
         )
@@ -730,7 +1015,6 @@ class E2BBackend(ContainerBackend):
         timeout: int | None,
         *,
         log_file: Path | None = None,
-        user: str | None = None,
         workdir: str | None = None,
         environment: dict[str, str] | None = None,
         stream_to_stdout: bool = False,
@@ -741,7 +1025,7 @@ class E2BBackend(ContainerBackend):
         import sys
 
         sandbox = self._raw(handle)
-        run_user = user or self._default_user(handle)
+        run_user = "root"
         chunks: list[str] = []
         exit_code: int | None = None
         exception: Exception | None = None
@@ -775,16 +1059,16 @@ class E2BBackend(ContainerBackend):
             # command therefore runs in the background — it survives a dropped
             # stream — and its exit code is persisted in the sandbox so it is
             # recoverable even if the process finishes while we are detached.
-            rc_file = f"/tmp/.sforge-rc-{uuid.uuid4().hex}"
+            rc_file = f"{CONTAINER_DIR}/rc-{uuid.uuid4().hex}"
             wrapped = (
-                f"{{ {_as_shell(cmd)}\n}}; __ec=$?; echo $__ec > {rc_file}; exit $__ec"
+                f"mkdir -p {CONTAINER_DIR}; {{ {_as_shell(cmd)}\n}}; __ec=$?; echo $__ec > {rc_file}; exit $__ec"
             )
             proc = sandbox.commands.run(
                 wrapped,
                 background=True,
                 user=run_user,
                 cwd=workdir,
-                envs=environment or None,
+                envs=self._merged_envs(handle, environment),
                 timeout=0,
             )
 
@@ -914,6 +1198,10 @@ class E2BBackend(ContainerBackend):
     ) -> ServiceEndpoint:
         sandbox = self._raw(handle)
         token = getattr(sandbox, "traffic_access_token", None)
+        if not token and self._provider == "vefaas":
+            # No secure sandboxes; the game server's own per-session token
+            # (SFORGE_GAME_TOKEN) is the only gate.
+            return ServiceEndpoint(url=f"https://{sandbox.get_host(port)}")
         if not token:
             raise RuntimeError(
                 "E2B did not return a traffic access token for the secured service"
@@ -934,6 +1222,10 @@ class E2BBackend(ContainerBackend):
         allowed_endpoints: list,
         logger_: logging.Logger,
     ) -> NetworkIsolationStrategy:
+        if self._provider == "vefaas":
+            return _SidecarSignalIsolation(
+                self._raw(handle), allowed_endpoints, logger_
+            )
         return E2BNetworkIsolation(self._raw(handle), allowed_endpoints, logger_)
 
     # --- Lease renewal ---
@@ -983,8 +1275,13 @@ class E2BBackend(ContainerBackend):
     # --- Helpers ---
 
     @staticmethod
-    def _default_user(handle: ContainerHandle) -> str | None:
-        return getattr(handle, "default_user", None)
+    def _merged_envs(
+        handle: ContainerHandle, environment: dict[str, str] | None,
+    ) -> dict[str, str] | None:
+        """Create-time envs merged under per-call ones (per-call wins)."""
+        base = getattr(handle, "base_envs", None) or {}
+        merged = {**base, **(environment or {})}
+        return merged or None
 
     @staticmethod
     def _raw(handle: ContainerHandle):

@@ -1,0 +1,35 @@
+schema_version = 0
+id = "dcss_dungeon_ai"
+name = "Dcss Dungeon Ai"
+category = "Interactive Games & Simulators"
+language = "Python"
+description = "Write a Lua bot for Dungeon Crawl Stone Soup that autonomously explores, fights, and descends dungeon levels as a Minotaur Berserker under a wall-clock time budget. Scored by mean in-game score across multiple runs."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python310"
+platform = "linux/amd64"
+cwd = "/home/dcss_agent"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["my_bot.rc", "my_bot_include.rc"]
+exclude = [".git"]
+
+[judge]
+cmd = "python3 /judge/grade.py"
+timeout_sec = 1100
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# eval_dcss.py plays 5 hidden-seed games in parallel under GNU screen, each with a 900 s
+# wall-clock budget (then a forced abandon), so scores depend on wall-clock speed and on keys
+# injected asynchronously (see NOTES.md).
+
+[score]
+direction = "maximize"
+rescale = { kind = "log1p_max", upper = 50000.0, baseline = 400.0 }

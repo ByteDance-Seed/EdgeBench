@@ -1,0 +1,34 @@
+schema_version = 0
+id = "schemathesis_reporting_observability"
+name = "Schemathesis Reporting Observability"
+category = "Systems & Software Engineering"
+language = "Python"
+description = "Implement five targets in Schemathesis: a post-validation hook system, multi-format test report writers (VCR, HAR, JUnit, NDJSON), pytest plugin integration, and schema-branch-aware example generation."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python"            # bases/python (python:3.11 + git curl jq build-essential)
+platform = "linux/amd64"
+cwd = "/app"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["."]
+exclude = [".git", "__pycache__", "*.pyc", "*.egg-info", ".eggs", "*.so", "TODO.md"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 1800
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# A run (5 pytest files, 53 checks) takes 10-50 s.
+
+[score]
+direction = "maximize"
+# raw score = test.sh TOTAL_SCORE = weighted mean of per-phase check pass ratios, weights 2,2,3,2,1 (0..1).
+rescale = { kind = "linear", lower = 0.0, upper = 1.0 }

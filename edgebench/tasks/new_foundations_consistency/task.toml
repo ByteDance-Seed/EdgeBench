@@ -1,0 +1,31 @@
+schema_version = 0
+id = "new_foundations_consistency"
+name = "New Foundations Consistency"
+category = "Formal Math & Theorem Proving"
+language = "Lean 4"
+description = "Complete proof obligations in the ConNF Lean 4 project formalizing the consistency of Quine's New Foundations, involving permutation models and tangled type theory."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "lean-4.21.0-rc3-mathlib-5b77ef3"
+platform = "linux/amd64"
+cwd = "/home/workspace/"
+internet = false
+cpus = 8
+memory = "16g"
+
+[submission]
+paths = ["se-bmk-intern/con-nf"]
+exclude = ["se-bmk-intern/con-nf/.lake"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 2400
+cpus = 8
+memory = "16g"
+
+[score]
+direction = "maximize"
+# raw score = repaired / 2246 baseline sorry declarations (v1 eval_lean `score`)
+rescale = { kind = "linear", lower = 0.0, upper = 1.0 }

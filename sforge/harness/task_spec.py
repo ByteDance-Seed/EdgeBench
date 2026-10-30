@@ -12,259 +12,189 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Benchmarks and their tasks.
+
+A benchmark is a directory with ``benchmark.toml``, ``tasks/<id>/{task.toml,
+instruction.md, environment/, judge/}`` and optional shared toolchain images in
+``bases/<name>/``, passed to task Dockerfiles as ``--build-arg BASE_IMAGE``.
+The task directory is the source of truth for a task. Image tags are content
+hashes of what goes into each image, so an image is rebuilt exactly when its
+inputs change.
+"""
+
 from __future__ import annotations
 
 import hashlib
-import json
+import tomllib
 from dataclasses import dataclass
+from functools import cache, cached_property
 from pathlib import Path
 
-from sforge.harness.benchmark import BenchmarkMeta
-from sforge.harness.constants import (
-    SForgeTask,
-    START_TEST_OUTPUT,
-    END_TEST_OUTPUT,
-)
+from sforge.harness.constants import CONTAINER_DIR
 from sforge.harness.score_rescale import RescaleSpec, parse_rescale_spec
 
+# Written by the grader inside the judge container (see the task-format docs).
+RESULT_PATH = f"{CONTAINER_DIR}/result.json"
 
-@dataclass
+
+@dataclass(frozen=True)
 class WorkSpec:
-    specs_dir: str
-    agent_query: str
-    setup_cmds: list[str] | None = None
-    image_tag: str | None = None
+    instruction: str
     cpu_limit: int | None = None
     mem_limit: str | None = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class JudgeSpec:
-    eval_cmd: str
-    eval_timeout: int
-    parser: str
-    setup_cmds: list[str] | None = None
-    image_tag: str | None = None
-    game_server_cmd: str | None = None
-    score_direction: str = "maximize"
-    selection: str = "pass_rate_first"
+    cmd: str
+    timeout: int
+    direction: str = "maximize"
     rescale: RescaleSpec | None = None
     cpu_limit: int | None = None
     mem_limit: str | None = None
+    game_server_cmd: str | None = None
+    # Graders run submission code; they get no network unless the task needs it
+    # (e.g. an LLM-judged task).
+    internet: bool = False
 
 
-def _compute_base_image_hash(base_image_key: str, base_image_spec: dict) -> str:
-    data = json.dumps({"key": base_image_key, "spec": base_image_spec}, sort_keys=True)
-    return hashlib.sha256(data.encode()).hexdigest()
+@dataclass(frozen=True)
+class Blob:
+    """A large file kept out of git: fetched by sha256 into ``task_dir/path``."""
+    path: str
+    sha256: str
 
 
-@dataclass
+@dataclass(frozen=True)
+class Benchmark:
+    root: Path
+    name: str                   # image name prefix: <name>.{base,work,judge}.<id>
+    registry: str | None = None  # where pre-built images live (sforge pull, k8s)
+    blob_url: str | None = None  # where task blobs are downloaded from, as <url>/<sha256>
+
+
+@cache
+def load_benchmark(root: Path) -> Benchmark:
+    root = root.resolve()
+    path = root / "benchmark.toml"
+    if not path.exists():
+        raise FileNotFoundError(f"{path} not found: pass --benchmark <dir> or set SFORGE_BENCHMARK")
+    data = tomllib.loads(path.read_text())
+    return Benchmark(root, data["name"], data.get("registry"), data.get("blob_url"))
+
+
+@dataclass(frozen=True)
 class TaskSpec:
     task_id: str
     name: str
-    base_image: str  # key into BENCHMARK.json base_images, e.g. "python310"
+    version: str
+    task_dir: Path
+    benchmark: Benchmark
     platform: str
     cwd: str
+    internet: bool
     submit_paths: list[str]
     submit_exclude: list[str]
     work: WorkSpec
     judge: JudgeSpec
-    benchmark_name: str = ""
-    base_image_spec: dict | None = None
-    game_mode: bool = False
-    internet: bool = True
+    base: str | None = None
+    blobs: tuple[Blob, ...] = ()
 
     @property
-    def base_image_tag(self) -> str:
-        """Full Docker image name with hash tag, e.g. 'edgebench.base.python310:a1b2c3d4e5f6'."""
-        return f"{self.benchmark_name}.base.{self.base_image}:{self.base_image_hash[:12]}"
+    def game_mode(self) -> bool:
+        return self.judge.game_server_cmd is not None
 
     @property
+    def base_dir(self) -> Path | None:
+        return self.benchmark.root / "bases" / self.base if self.base else None
+
+    @cached_property
+    def base_image_key(self) -> str | None:
+        if not self.base:
+            return None
+        return f"{self.benchmark.name}.base.{self.base}:{_tree_hash(self.base_dir)}"
+
+    @cached_property
     def work_image_key(self) -> str:
-        tag = self.work.image_tag if self.work.image_tag else self.work_image_hash[:12]
-        return f"{self.benchmark_name}.work.{self.task_id}:{tag}"
+        return f"{self.benchmark.name}.work.{self.task_id}:{self._hash('environment')}"
 
-    @property
+    @cached_property
     def judge_image_key(self) -> str:
-        tag = self.judge.image_tag if self.judge.image_tag else self.judge_image_hash[:12]
-        return f"{self.benchmark_name}.judge.{self.task_id}:{tag}"
+        return f"{self.benchmark.name}.judge.{self.task_id}:{self._hash('environment', 'judge')}"
 
-    @property
-    def base_image_hash(self) -> str:
-        return _compute_base_image_hash(self.base_image, self.base_image_spec or {})
-
-    @property
-    def work_image_hash(self) -> str:
-        if self.work.setup_cmds is None:
-            raise ValueError(
-                f"Task '{self.task_id}': cannot compute work image hash without setup_cmds"
-            )
-        data = json.dumps({
-            "base_hash": self.base_image_hash,
-            "platform": self.platform,
-            "cwd": self.cwd,
-            "setup_cmds": self.work.setup_cmds,
-        }, sort_keys=True)
-        return hashlib.sha256(data.encode()).hexdigest()
-
-    @property
-    def judge_image_hash(self) -> str:
-        if self.judge.setup_cmds is None:
-            raise ValueError(
-                f"Task '{self.task_id}': cannot compute judge image hash without setup_cmds"
-            )
-        data = json.dumps({
-            "base_hash": self.base_image_hash,
-            "platform": self.platform,
-            "cwd": self.cwd,
-            "setup_cmds": self.judge.setup_cmds,
-        }, sort_keys=True)
-        return hashlib.sha256(data.encode()).hexdigest()
-
-    @property
-    def work_needs_build(self) -> bool:
-        return self.work.setup_cmds is not None
-
-    @property
-    def judge_needs_build(self) -> bool:
-        return self.judge.setup_cmds is not None
-
-    def base_remote_ref(self, registry: str) -> str:
-        return f"{registry}/{self.base_image_tag}"
-
-    def work_remote_ref(self, registry: str) -> str:
-        return f"{registry}/{self.work_image_key}"
-
-    def judge_remote_ref(self, registry: str) -> str:
-        return f"{registry}/{self.judge_image_key}"
-
-    @property
-    def setup_workspace_script(self) -> str:
-        if self.work.setup_cmds is None:
-            raise ValueError(
-                f"Task '{self.task_id}': no setup_cmds for work image (using pre-built image_tag)"
-            )
-        lines = ["#!/bin/bash", "set -euxo pipefail"] + self.work.setup_cmds
-        return "\n".join(lines) + "\n"
-
-    @property
-    def setup_judge_script(self) -> str:
-        if self.judge.setup_cmds is None:
-            raise ValueError(
-                f"Task '{self.task_id}': no setup_cmds for judge image (using pre-built image_tag)"
-            )
-        lines = ["#!/bin/bash", "set -euxo pipefail"] + self.judge.setup_cmds
-        return "\n".join(lines) + "\n"
-
-    @property
-    def eval_script(self) -> str:
-        """Generate eval.sh for the judge container."""
-        lines = [
-            "#!/bin/bash",
-            "set -uxo pipefail",
-            f'echo "{START_TEST_OUTPUT}"',
-            f"{self.judge.eval_cmd} 2>&1",
-            "EXIT_CODE=$?",
-            f'echo "{END_TEST_OUTPUT}"',
-            'echo "Exit code: $EXIT_CODE"',
-            "exit 0",
-        ]
-        return "\n".join(lines) + "\n"
+    def _hash(self, *parts: str) -> str:
+        # Blobs count by their declared sha256, so the key is the same whether
+        # or not they have been downloaded yet.
+        blobs = {self.task_dir / b.path for b in self.blobs}
+        h = hashlib.sha256((self.base_image_key or "").encode())
+        for part in parts:
+            h.update(_tree_hash(self.task_dir / part, skip=blobs).encode())
+        for b in self.blobs:
+            if b.path.split("/", 1)[0] in parts:
+                h.update(f"B {b.path} {b.sha256}\n".encode())
+        return h.hexdigest()[:12]
 
 
-def _validate_image_tag_consistency(
-    task_id: str,
-    role: str,
-    setup_cmds: list[str] | None,
-    image_tag: str | None,
-    computed_hash_fn,
-) -> None:
-    """When both setup_cmds and image_tag are present, verify the hash matches."""
-    if setup_cmds is not None and image_tag is not None:
-        computed = computed_hash_fn()[:12]
-        if computed != image_tag:
-            raise ValueError(
-                f"Task '{task_id}' {role}: image_tag '{image_tag}' does not match "
-                f"hash computed from setup_cmds '{computed}'. "
-                f"Update image_tag or setup_cmds to make them consistent."
-            )
-    if setup_cmds is None and image_tag is None:
-        raise ValueError(
-            f"Task '{task_id}' {role}: must have either setup_cmds or image_tag (or both)."
-        )
+def _tree_hash(root: Path, skip: set[Path] = frozenset()) -> str:
+    """Hash of every file under *root*: relative path, executable bit, content."""
+    h = hashlib.sha256()
+    for path in sorted(p for p in root.rglob("*") if (p.is_file() or p.is_symlink()) and p not in skip):
+        rel = path.relative_to(root).as_posix()
+        if path.is_symlink():
+            h.update(f"L {rel} {path.readlink()}\n".encode())
+            continue
+        mode = "x" if path.stat().st_mode & 0o111 else "-"
+        h.update(f"F {rel} {mode} ".encode())
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        h.update(b"\n")
+    return h.hexdigest()[:12]
 
 
-def make_task_spec(task_path: Path, benchmark: BenchmarkMeta) -> TaskSpec:
-    """Load a TaskSpec from a task JSON file, resolving base image from benchmark metadata."""
-    with open(task_path) as f:
-        data: SForgeTask = json.load(f)
-
-    base_image_key = data["base_image"]
-    base_image_spec = benchmark.base_images.get(base_image_key)
-    if base_image_spec is None:
-        raise ValueError(
-            f"Task '{data['task_id']}' references base_image '{base_image_key}' "
-            f"which is not defined in BENCHMARK.json. "
-            f"Available: {list(benchmark.base_images.keys())}"
-        )
-
-    work_data = data["work"]
-    work = WorkSpec(
-        specs_dir=work_data.get("specs_dir", ""),
-        agent_query=work_data.get("agent_query", ""),
-        setup_cmds=work_data.get("setup_cmds"),
-        image_tag=work_data.get("image_tag"),
-        cpu_limit=work_data.get("cpu_limit"),
-        mem_limit=work_data.get("mem_limit"),
-    )
-    judge_data = data["judge"]
-    judge = JudgeSpec(
-        eval_cmd=judge_data.get("eval_cmd", ""),
-        eval_timeout=judge_data.get("eval_timeout", 600),
-        parser=judge_data.get("parser", ""),
-        setup_cmds=judge_data.get("setup_cmds"),
-        image_tag=judge_data.get("image_tag"),
-        game_server_cmd=judge_data.get("game_server_cmd"),
-        score_direction=judge_data.get("score_direction", "maximize"),
-        selection=judge_data.get("selection", "pass_rate_first"),
-        rescale=parse_rescale_spec(judge_data.get("rescale")),
-        cpu_limit=judge_data.get("cpu_limit"),
-        mem_limit=judge_data.get("mem_limit"),
+def load_task(task_dir: Path, benchmark: Benchmark | None = None) -> TaskSpec:
+    """Load ``<benchmark>/tasks/<id>/``; the benchmark defaults to the one that contains it."""
+    task_dir = task_dir.resolve()
+    benchmark = benchmark or load_benchmark(task_dir.parent.parent)
+    data = tomllib.loads((task_dir / "task.toml").read_text())
+    env = data["environment"]
+    sub = data.get("submission", {})
+    judge = data["judge"]
+    score = data.get("score", {})
+    game = data.get("game", {})
+    if data["id"] != task_dir.name:
+        raise ValueError(f"{task_dir}: task.toml id {data['id']!r} does not match the directory name")
+    return TaskSpec(
+        task_id=data["id"],
+        name=data.get("name", data["id"]),
+        version=data.get("version", "0"),
+        task_dir=task_dir,
+        benchmark=benchmark,
+        platform=env.get("platform", "linux/amd64"),
+        cwd=env["cwd"],
+        internet=env.get("internet", False),
+        submit_paths=sub.get("paths", ["."]),
+        submit_exclude=[e.rstrip("/") for e in sub.get("exclude", [])],
+        work=WorkSpec(
+            instruction=(task_dir / "instruction.md").read_text(),
+            cpu_limit=env.get("cpus"),
+            mem_limit=env.get("memory"),
+        ),
+        judge=JudgeSpec(
+            cmd=judge["cmd"],
+            timeout=judge.get("timeout_sec", 600),
+            direction=score.get("direction", "maximize"),
+            rescale=parse_rescale_spec(score.get("rescale")),
+            cpu_limit=judge.get("cpus"),
+            mem_limit=judge.get("memory"),
+            game_server_cmd=game.get("server_cmd"),
+            internet=judge.get("internet", False),
+        ),
+        base=env.get("base"),
+        blobs=tuple(Blob(b["path"], b["sha256"]) for b in data.get("blobs", [])),
     )
 
-    task_spec = TaskSpec(
-        task_id=data["task_id"],
-        name=data["name"],
-        base_image=base_image_key,
-        platform=data["platform"],
-        cwd=data["cwd"],
-        submit_paths=data["submit_paths"],
-        submit_exclude=[e.rstrip("/") for e in data.get("submit_exclude", ["tests/"])],
-        work=work,
-        judge=judge,
-        benchmark_name=benchmark.name,
-        base_image_spec=base_image_spec,
-        game_mode=data.get("game_mode", False),
-        internet=data.get("internet", True),
-    )
 
-    _validate_image_tag_consistency(
-        data["task_id"], "work",
-        work.setup_cmds, work.image_tag,
-        lambda: task_spec.work_image_hash,
-    )
-    _validate_image_tag_consistency(
-        data["task_id"], "judge",
-        judge.setup_cmds, judge.image_tag,
-        lambda: task_spec.judge_image_hash,
-    )
-
-    return task_spec
-
-
-def load_all_tasks(tasks_dir: Path, benchmark: BenchmarkMeta) -> list[TaskSpec]:
-    """Load all task specs from a directory of JSON files."""
-    tasks = []
-    for task_path in sorted(tasks_dir.glob("*.json")):
-        tasks.append(make_task_spec(task_path, benchmark))
-    return tasks
+def load_all_tasks(benchmark: Benchmark) -> list[TaskSpec]:
+    """Every ``tasks/<id>/task.toml`` of the benchmark."""
+    return [load_task(p.parent, benchmark) for p in sorted((benchmark.root / "tasks").glob("*/task.toml"))]

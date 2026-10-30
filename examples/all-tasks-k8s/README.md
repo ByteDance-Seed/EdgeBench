@@ -1,18 +1,10 @@
-# Example: Run All EdgeBench Tasks on Kubernetes
+# Example: Run All Tasks on Kubernetes
 
-Run the full EdgeBench suite (~50 tasks) across a Kubernetes cluster.
+Run the full public EdgeBench suite (51 tasks) across a Kubernetes cluster.
 
-> [!IMPORTANT]
-> The experiment YAMLs in this directory are the **official EdgeBench
-> leaderboard settings** (12-hour budget, stop hook + auto-eval enabled,
-> resource limits as given). For results comparable to the leaderboard,
-> change only `env`, `model`, and registry values.
+> **Official leaderboard settings:** The experiment YAMLs in this example are the **official EdgeBench leaderboard settings** (12-hour budget, stop hook + auto-eval enabled; CPU and memory come from each task's `task.toml`). For results comparable to the leaderboard, change only `env` and `model`.
 
-> [!WARNING]
-> **Cost.** With frontier models (e.g. Claude Opus), one task over the full
-> 12-hour budget can cost **hundreds to over a thousand USD** in API usage;
-> a full ~50-task run is a five-figure spend. Gauge your burn rate on one
-> task with a short `--timeout` first.
+> **Cost:** With frontier models (e.g. Claude Opus), one task over the full 12-hour budget can cost **hundreds to over a thousand USD** in API usage; a full 51-task run is a five-figure spend. Gauge your burn rate on one task with a short `--timeout` first.
 
 ## Prerequisites
 
@@ -20,45 +12,37 @@ Run the full EdgeBench suite (~50 tasks) across a Kubernetes cluster.
 |-------------|-------|
 | Linux host with `kubectl` configured | `kubectl cluster-info` |
 | NetworkPolicy support (for network isolation) | CNI enforces NetworkPolicy; kubeconfig can create/delete `NetworkPolicy` in the target namespace |
-| Docker Engine (for pushing images) | `docker run hello-world` |
-| Python >= 3.10 | `python --version` |
-| A container registry reachable from K8s nodes | e.g. `<registry-ip>:5000` |
+| An address of this host that pods can reach | e.g. its private IP |
+| Python 3.11–3.13 | `python --version` |
 
 ## Step-by-step
 
 ### 1. Install SForge
 
 ```bash
-pip install sforge
-```
-
-### 2. Fetch task definitions
-
-```bash
-sforge fetch-tasks edgebench
+git clone https://github.com/ByteDance-Seed/EdgeBench.git
+cd EdgeBench
+pip install -e .
 sforge list            # verify tasks are visible
 ```
 
-### 3. Push images to the cluster registry
+### 2. Decide where pods pull images from
 
-K8s pods pull images at runtime. Pulling from Docker Hub or other public
-registries is too slow and will severely impact agent performance — image
-pulls can take minutes per task and eat into the evaluation budget. You
-should push all images to a private registry **within the same VPC** as
-your K8s cluster beforehand.
+By default pods pull the pre-built images from `docker.io/seededge`. Docker Hub
+rate-limits anonymous pulls and some images are large (about 15 GB for the Lean
+tasks), so for repeated runs mirror them into a registry **in the same network** as
+the cluster:
 
 ```bash
-# Pull pre-built images from the public registry
-sforge pull --all --registry seededge
-
-# Push to your private registry
+sforge pull --all                                  # from Docker Hub into local Docker (docker login first)
 sforge push --all --registry <registry-ip>:5000
+export SFORGE_K8S_IMAGE_REGISTRY=<registry-ip>:5000
 ```
 
-Verify an image is available in your registry:
+Pods then pull `<registry-ip>:5000/<image>:<tag>`. Verify with:
 
 ```bash
-curl -s http://<registry-ip>:5000/v2/_catalog | head
+curl -s http://<registry-ip>:5000/v2/_catalog | head -c 300
 ```
 
 <details>
@@ -103,162 +87,57 @@ trust it:
 
 </details>
 
-### 4. Set up the judge server
+### 3. Configure LLM-graded tasks
 
-Start the judge server and set `--judge-url` to the host's IP address
-that K8s pods can reach (not `localhost` or `host.docker.internal`):
-
-```bash
-sforge serve --port 8080
-```
-
-### 5. Configure LLM-graded tasks
-
-The `college_english_exam_bank` task uses an LLM to grade agent submissions.
-Its judge container calls out to a model API, so it needs credentials
-passed via `SFORGE_JUDGE_EXTRA_ENV`.
-
-Set this **before starting the judge server**:
+`college_english_exam_bank` is graded by an LLM; pass its credentials on this host
+(see [LLM-Graded Tasks](../single-task-docker/#llm-graded-tasks)):
 
 ```bash
 export SFORGE_JUDGE_EXTRA_ENV="SFORGE_JUDGE_API_KEY=your-key,SFORGE_JUDGE_API_BASE_URL=https://api.openai.com/v1,SFORGE_JUDGE_MODEL=gpt-5.5"
-sforge serve --port 8080
 ```
 
-| Variable (inside judge container) | Purpose |
-|-----------------------------------|---------|
-| `SFORGE_JUDGE_API_KEY` | API key the grading script uses to call the LLM |
-| `SFORGE_JUDGE_API_BASE_URL` | Base URL of the LLM endpoint for grading |
-| `SFORGE_JUDGE_MODEL` | Model ID used by the grading script |
+### 4. Run the experiment
 
-Non-LLM-graded tasks ignore these variables, so it is safe to set them
-unconditionally for all tasks.
-
-### 6. Run the experiment
-
-The [`experiment.yaml`](experiment.yaml) in this directory defines the
-full EdgeBench suite — all tasks, per-task overrides, model config, and
-resource limits. See [Experiment YAML Walkthrough](#experiment-yaml-walkthrough)
-below for details.
+The annotated [`experiment.yaml`](experiment.yaml)
+lists every task with its run settings; its fields are described in
+[Experiment Configuration](https://bytedance-seed.github.io/EdgeBench/en/configuration/experiments).
 
 ```bash
-sforge run --experiment experiment.yaml \
-  --judge-url http://<judge-host-ip>:8080 \
+sforge run --experiment examples/all-tasks-k8s/experiment.yaml \
+  --judge-advertise <this-host-ip> --judge-port 8080 \
   --run-id edgebench-001
 ```
 
-This launches all tasks staggered over 600 seconds total (the delay is
-evenly divided among tasks). Monitor progress with:
+`sforge run` serves the judge on port 8080 of this host, and pods reach it at
+`http://<this-host-ip>:8080`.
+
+Tasks launch staggered over 600 seconds in total. Monitor progress with:
 
 ```bash
-sforge visualizer
+sforge viewer
 # Open http://127.0.0.1:8000
 ```
 
 Or watch a specific task's log:
 
 ```bash
-tail -f logs/runs/*/ad_placement_optimization/agent_output.txt
-```
-
-
-## Experiment YAML Walkthrough
-
-The `experiment.yaml` in this directory is annotated with comments. Key
-sections:
-
-### `env:`
-
-Environment variables injected into the host process before parsing the
-rest of the config. Most important for K8s:
-
-```yaml
-env:
-  SFORGE_K8S_IMAGE_REGISTRY: "<registry-ip>:5000"   # REQUIRED for k8s
-```
-
-### `stagger:`
-
-Seconds between launching consecutive tasks. With 50+ tasks, launching
-them all at once causes API rate-limit storms and K8s scheduling pressure.
-600 seconds (10 minutes) is a safe default. Set to `0` to launch all
-simultaneously.
-
-### `model:`
-
-```yaml
-model:
-  api_key: ${SFORGE_AGENT_API_KEY}        # resolved from env at load time
-  model: claude-opus-4-8
-
-  # Only needed for third-party / self-hosted endpoints.
-  # Omit when using the Anthropic API directly.
-  # api_base_url: "https://api.deepseek.com/anthropic"
-```
-
-### `defaults:`
-
-Applied to every task unless overridden per-task.
-
-### Per-task overrides
-
-```yaml
-tasks:
-  smt_solver:
-    work_cpu_limit: 16       # needs more CPU than the default 4
-    work_mem_limit: "16g"
-  anchorhead_text_adventure:
-    submission_cooldown: 0   # game-mode task, no cooldown
-  carleson_formalization: *lean_task   # YAML anchor for Lean tasks
-```
-
-### YAML anchors
-
-Shared override blocks can be defined with `x-` prefix and referenced with
-`*`:
-
-```yaml
-x-lean-task: &lean_task
-  work_cpu_limit: 8
-  work_mem_limit: "16g"
-  judge_cpu_limit: 8
-  judge_mem_limit: "16g"
-
-tasks:
-  carleson_formalization: *lean_task
-  pfr_formalization: *lean_task
+tail -f logs/runs/edgebench-001/ad_placement_optimization/agent_output.txt
 ```
 
 
 ## Other Experiment Configs
 
-This directory includes additional experiment configs for other agents
-and third-party models:
+The examples directory includes additional experiment configs for other
+agents and third-party models:
 
 - [`experiment-codex.yaml`](experiment-codex.yaml) — Codex with GPT-5.5
 - [`experiment-deepseek.yaml`](experiment-deepseek.yaml) — Claude Code with DeepSeek V4 Pro (1M context)
 - [`experiment-glm.yaml`](experiment-glm.yaml) — Claude Code with GLM 5.1 (200K context)
 
 ```bash
-sforge run --experiment experiment-codex.yaml \
-  --judge-url http://<judge-host-ip>:8080 \
+sforge run --experiment examples/all-tasks-k8s/experiment-codex.yaml \
+  --judge-advertise <this-host-ip> --judge-port 8080 \
   --run-id edgebench-codex-001
 ```
 
-For a detailed explanation of the Claude Code third-party model settings
-(cache optimization, model routing variables, context window
-configuration), see the [single-task-docker example](../single-task-docker/README.md#using-a-third-party-model).
-
-## Environment Variables Quick Reference
-
-See the [single-task-docker example](../single-task-docker/README.md) for a
-full table of all `SFORGE_*` environment variables and when to use each one.
-
-K8s-specific variables:
-
-| Variable | Required | Purpose |
-|----------|----------|---------|
-| `SFORGE_K8S_IMAGE_REGISTRY` | **Yes** | Registry that K8s pods pull images from. Backend init fails without it. |
-| `SFORGE_K8S_NAMESPACE` | No (default: `default`) | Kubernetes namespace for pods |
-| `SFORGE_K8S_KUBECONFIG` | No | Path to kubeconfig file (uses default context if omitted) |
-| `SFORGE_K8S_NODE_SELECTOR` | No | Node selector for pods, format: `"key1=val1,key2=val2"` |
+The `SFORGE_K8S_*` variables are listed in [Environment Variables](https://bytedance-seed.github.io/EdgeBench/en/configuration/environment-variables#container-backends).

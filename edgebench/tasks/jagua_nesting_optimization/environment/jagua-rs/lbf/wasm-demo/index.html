@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>LBF.wasm</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; max-width: 900px; margin: auto; }
+    input[type="file"] { margin-bottom: 0.5rem; }
+    select, button { margin-top: 1rem; }
+    pre { background: #f5f5f5; padding: 1rem; overflow: auto; }
+    svg { border: 1px solid #ccc; margin-top: 1rem; max-width: 100%; }
+  </style>
+</head>
+<body>
+  <h1>LBF.wasm</h1>
+  <p>
+    This simple demo shows jagua-rs running in the browser using WebAssembly (WASM).
+    <br>
+    Choose a problem type, upload your instance and let LBF algorithm solve it!
+    <br>
+    Logs are output to the javascript console.
+  </p>
+
+  <label for="problem-type">Choose Problem Type:</label>
+  <select id="problem-type">
+    <option value="bpp">BPP (Bin Packing)</option>
+    <option value="spp">SPP (Strip Packing)</option>
+  </select>
+
+  <div>
+    <h3>Upload Instance JSON</h3>
+    <input type="file" id="instance-file" accept=".json" />
+  </div>
+
+  <div>
+    <h3>Upload Config JSON</h3>
+    <input type="file" id="config-file" accept=".json" />
+  </div>
+
+  <button id="reset-instance">Reset Instance</button>
+  <button id="reset-config">Reset Config</button>
+  <br></br>
+
+  <button id="solve-btn">Solve</button>
+
+  <h2>Result</h2>
+  <pre id="result">No result yet.</pre>
+  <div id="svgs"></div>
+
+  <script src="./coi-serviceworker.js"></script>
+  <script type="module" src="./index.js"></script>
+</body>
+</html>

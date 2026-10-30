@@ -1,0 +1,61 @@
+{
+-- DCSS Minotaur Berserker baseline.
+-- Just play: explore, autofight when enemies adjacent, rest when wounded.
+-- Holdout eval uses 900s game budget per game. Local dcss-eval timeout
+-- is only a debugging knob; choose any value that fits your iteration loop.
+-- At the timeout deadline the eval forcibly ends the game by sending Ctrl+G + Esc x2 +
+-- Ctrl+Q + 'yes' + Enter via screen, which makes crawl write a morgue
+-- regardless of game state. You don't need to engineer termination.
+--
+-- crawl.millis() is a monotonic millisecond timestamp; compare deltas from
+-- a captured value if you use it. Usually prefer you.turns() for bot logic.
+
+local prev_turn = -1
+local stuck = 0
+
+function c_message(text, channel)
+    if (text:find("Are you sure") or text:find("[yY] or [nN]"))
+       and not text:find("abandon this character") then
+        crawl.sendkeys("y")
+    elseif text:find("--more--") or text:find("%-%-more%-%-") then
+        crawl.sendkeys(" ")
+    end
+end
+
+function ready()
+    local cur = you.turns()
+    if cur == prev_turn then stuck = stuck + 1
+    else stuck = 0; prev_turn = cur end
+    if stuck == 3 then crawl.sendkeys(" "); return end
+    if stuck == 6 then crawl.sendkeys("\27"); return end
+    if stuck > 10 then stuck = 0; crawl.do_commands({"CMD_WAIT"}); return end
+
+    local hp, mhp = you.hp()
+    local pct = hp * 100 / mhp
+
+    if pct < 60 and not has_adjacent_enemy() then crawl.do_commands({"CMD_REST"}); return end
+    if has_adjacent_enemy() then
+        if pct < 25 then crawl.do_commands({"CMD_WAIT"}); return end
+        crawl.do_commands({"CMD_AUTOFIGHT"}); return
+    end
+
+    local feat = view.feature_at(0, 0)
+    if feat and (feat:find("stone_stairs_down") or feat == "escape_hatch_down") then
+        crawl.sendkeys(">"); return
+    end
+    if stuck > 3 then stuck = 0; crawl.do_commands({"CMD_WAIT"}); return end
+    crawl.sendkeys("o")
+end
+
+function has_adjacent_enemy()
+    for x = -1, 1 do for y = -1, 1 do
+        if not (x == 0 and y == 0) then
+            local m = monster.get_monster_at(x, y)
+            if m and not m:is_firewood() and m:attitude() == 0 then return true end
+        end
+    end end
+    return false
+end
+
+function choose_stat_gain() return "s" end
+}

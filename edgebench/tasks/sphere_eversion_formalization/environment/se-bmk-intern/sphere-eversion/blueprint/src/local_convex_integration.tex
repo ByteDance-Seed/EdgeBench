@@ -1,0 +1,437 @@
+\chapter{Local theory of convex integration}
+\label{chap:local}
+\section{Key construction}
+\label{sec:convex_integration_intro}
+
+The goal of this chapter is to explain the local aspects of
+(Theillière's implementation of) convex integration, the next chapter will
+cover global aspects.
+
+The elementary step of convex integration modifies the derivative of a
+map in one direction. The precise meaning of ``one direction'' relies on the
+following definition.
+
+\begin{definition}
+  \label{def:dual_pair}
+  \leanok
+  \lean{DualPair}
+  A dual pair on a vector space $E$ is a pair $(π, v)$ where $π$ is a linear
+  form on $E$ and $v$ a vector in $E$ such that $π(v) = 1$.
+\end{definition}
+
+Let $E$ and $F$ be finite dimensional real normed vector spaces.
+Let $f \co E → F$ be a smooth map, and let $(π, v)$ be a dual pair on $E$.
+We want to modify $Df$ in the direction of $v$ while almost preserving it
+on $\ker π$.
+Say we wish $Df(x)v$ could live in some open subset $Ω_x ⊂ F$. Assume there is
+a smooth family of loops $γ \co E × 𝕊^1 → F$ such that each
+$γ_x$ takes values in $Ω_x$, and its average value $\overline{γ}_x = \int_{𝕊^1}
+γ_x$ is $Df(x)v$ for all $x$. Obviously such loops can exist
+only if $Df(x)v$ is in the convex hull of $Ω_x$, and we saw in the previous
+chapter that this is almost sufficient (and we'll see this is sufficiently
+almost sufficient for our purposes). Then we can modify $f$ to fulfil our wish
+using the following construction.
+
+\begin{definition}[Theillière 2018]
+  \label{def:corrugation}
+  \uses{def:loop}
+  \leanok
+  \lean{corrugation}
+  The map obtained by corrugation of $f$ in direction $(π, v)$ using $γ$
+  with oscillation number $N$ is
+  \[
+    x ↦ f(x) + \frac1N  ∫_0^{Nπ(x)} \left[γ_x(s) - \overline{γ}_x\right]ds.
+  \]
+\end{definition}
+
+In the above definition, we mostly think of $N$ as a large natural
+number.
+But we don't actually require it, any positive real number will do.
+
+The next proposition implies that, provided $N$ is large enough, we have
+achieved $Df'(x)v ∈ Ω_x$, almost without modifying derivatives in the
+directions of $\ker π$, and almost without moving $f(x)$.
+
+\begin{proposition}[Theillière 2018]
+  \label{prop:theilliere}
+  \lean{fderiv_corrugated_map, corrugation.c0_small_on, remainder_c0_small_on, corrugation.support}\leanok
+  \uses{def:corrugation}
+  Let $f$ be a $\mathcal{C}^1$ function from $E$ to $F$. Let $(π, v)$ be a dual
+  pair on $E$. Let $γ \co E × 𝕊^1 → F$ be a $\mathcal{C}^1$ family of loops
+  such that $\overline{γ_x} = Df(x)v$ for all $x$.
+
+  For any compact set $K ⊂ E$ and any positive $ε$, the function $f'$ obtained
+  by corrugation of $f$ in direction $(π, v)$ using $γ$ with large enough
+  oscillation number $N$ satisfies:
+  \begin{enumerate}
+    \item\label{CP:C0}
+      $∀ x ∈ K, ‖f'(x) - f(x)‖ ≤ ε$
+    \item\label{CP:kerpi}
+      $∀ x ∈ K, ‖(Df'(x) - Df(x))_{|\ker π}‖ ≤ ε$.
+    \item\label{CP:v}
+      $∀ x ∈ K, ‖Df'(x)v - γ(x, Nπ(x))‖ ≤ ε$
+  \end{enumerate}
+  In addition, all the differences estimated above vanish if $x$ is outside the
+  support of $γ$.
+\end{proposition}
+
+\begin{proof}
+  \leanok
+  We set $Γ_x(t) = ∫_0^t \left(γ_x(s) - \overline{γ}_x\right)ds$, so that
+  $f'(x) = f(x) + Γ_x(Nπ(x))/N$.  Because each $Γ_x$ is $1$-periodic, and
+  everything has compact support in $E$, all derivatives of $Γ$ are uniformly
+  bounded.  Item~\ref{CP:C0} in the statement is then obvious.
+  Item~\ref{CP:kerpi} also follows since
+  $∂_if'(x) = ∂_if(x) + ∂_iΓ(x, Nπ(x))/N$. In order to prove
+  Item~\ref{CP:v}, we compute:
+  \begin{align*}
+      Df'(x)v &= Df(x)v + \frac1N ∂_jΓ(x, Nπ(x)) + \frac NN ∂_tΓ(x, Nπ(x))\\
+                       &= Df(x)v + \bigO{\frac1N} + γ(x, Nπ(x)) - Df(x)v\\
+                       &= γ(x, Nπ(x)) + \bigO{\frac1N}.
+  \end{align*}
+  Outside the support of $γ$, $Γ_x$ and its derivative with respect to $x$
+  vanish identically (for the derivative computation, it is important that the
+  support of $γ$ is the \emph{closure} of the set of $x$ where $γ_x$ is not
+  constant).
+\end{proof}
+
+\section{The main inductive step}
+\label{sec:inductive_step}
+
+\begin{definition}
+  \label{def:hol_partial}
+  \leanok
+  \lean{JetSec.IsPartHolonomicAt}
+  Let $E'$ be a linear subspace of $E$.
+  A map $\F = (f, φ) : E → F × \Hom(E, F)$ is $E'$--holonomic if,
+  for every $v$ in $E'$ and every $x$, $Df(x)v = φ(x)v$.
+\end{definition}
+
+\begin{definition}
+  \label{def:rel_loc}
+  \leanok
+  \lean{RelLoc}
+  A first order differential relation for maps from $E$ to $F$ is a
+  subset $\Rel$ of $E × F × \Hom(E, F)$.
+\end{definition}
+
+Until the end of this section, $\Rel$ will always denote a first order
+differential relation for maps from $E$ to $F$.
+
+\begin{definition}
+  \label{def:formal_sol_loc}
+  \leanok
+  \lean{RelLoc.FormalSol}
+  \uses{def:rel_loc}
+  A formal solution of a differential relation $\Rel$ is a map
+  $\F = (f, φ) \co E → F × \Hom(E, F)$ such that, for every $x$,
+  $(x, f(x), φ(x))$ is in $\Rel$.
+\end{definition}
+
+The first component of a map $\F \co E → F × \Hom(E, F)$ will sometimes
+be denoted by $\bs \F \co E → F$ and called the base map of $\F$.
+
+\begin{definition}
+  \label{def:htpy_jet_sec_loc}
+  \leanok
+  \lean{HtpyJetSec}
+  A $1$-jet section from $E$ to $F$ is a function from $E$ to $F × \Hom(E, F)$.
+  A homotopy of $1$-jet sections is a smooth map
+  $\F : ℝ × E → F × \Hom(E, F)$.
+\end{definition}
+
+Typically, $x ↦ \F(t, x)$ will be denoted by $\F_t$. It could seem more natural to take
+$[0, 1] × E$ as the source of a homotopy but this would be less convenient for
+formalization and wouldn't change anything since any map from $ℝ × E$ can be restricted to
+$[0, 1] × E$ and every map from $[0, 1] × E$ could be extended.
+
+\begin{definition}
+  \label{def:rel_slice}
+  \leanok
+  \lean{RelMfld.slice}
+  \uses{def:rel_loc}
+  For every $σ = (x, y, φ)$, the slice of $\Rel$ at $σ$ with respect to $(π, v)$
+  is:
+  \[
+    \Rel(σ, π, v) = \{w ∈ F \;|\; (x, y, φ + (w - φ(v)) ⊗ π) ∈ \Rel\}.
+  \]
+\end{definition}
+
+\begin{lemma}
+  \label{lem:update_lin_map}
+  \leanok
+  \lean{DualPair.update_ker_pi, DualPair.update_v, mem_slice}
+  The linear map $φ + (w - φ(v)) ⊗ π)$ coincides with $φ$ on $\ker π$
+  and sends $v$ to $w$.
+  If $\sigma$ belongs to $\Rel$ then $φ(v)$ belongs to
+  $\{w ∈ F, (x, y, φ + (w - φ(v)) ⊗ π) ∈ \Rel\}$.
+\end{lemma}
+
+\begin{proof}\leanok
+  These are direct checks.
+\end{proof}
+
+
+We'll use the notation $\Conn_w A$ to denote the connected component of $A$
+that contains $w$, or the empty set if $w$ doesn't belong to $A$.
+
+\begin{definition}
+  \label{def:short_formal_sol}
+  \leanok
+  \lean{RelLoc.FormalSol.IsShortAt}
+  \uses{def:formal_sol_loc, def:dual_pair}
+  A formal solution $\F$ of $\Rel$ is $(π, v)$--short if,
+  for every $x$, $Df(x)v$ belongs to the interior of the convex hull of
+  $\Conn_{φ(v)}\Rel((x, f(x), φ(x)), π, v)$.
+\end{definition}
+
+\begin{lemma}
+  \label{lem:integration_step}
+  \leanok
+  \lean{StepLandscape.improveStep_rel_t_eq_0, StepLandscape.improveStep_rel_C,%
+  StepLandscape.improveStep_rel_compl_K₁, StepLandscape.improveStep_c0_close,%
+  StepLandscape.improveStep_part_hol}
+  \uses{def:short_formal_sol, def:hol_partial, def:htpy_jet_sec_loc}
+  Let $\F$ be a formal solution of $\Rel$.
+  Let $K_1 ⊂ E$ be a compact subset, and let $K_0$ be a compact subset of
+  the interior of $K_1$. Let $C$ be a closed subset of $E$.
+  Let $E'$ be a linear subspace of $E$ contained in $\ker π$.
+  Let $ε$ be a positive real number.
+
+  Assume $\Rel$ is open.
+  Assume that $\F$ is $E'$--holonomic near $K_0$, $(π, v)$--short,
+  and holonomic near $C$.
+  Then there is a homotopy $\F_t$ such that:
+  \begin{enumerate}
+    \item
+      $\F_0 = \F$~;
+    \item
+      $\F_t$ is a formal solution of $\Rel$ for all $t$~;
+    \item
+      $\F_t(x) = \F(x)$ for all $t$ when $x$ is near $C$ or outside
+      $K_1$~;
+    \item
+      $d(\bs\F_t(x), \bs \F(x)) ≤ ε$ for all $t$ and all $x$~;
+    \item
+      $\F_1$ is $E' ⊕ ℝv$--holonomic near $K_0$.
+  \end{enumerate}
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  \proves{lem:integration_step}
+  \uses{prop:∃_loops, prop:theilliere, lem:update_lin_map}
+  We denote the components of $\F$ by $f$ and $φ$.
+  Since $\F$ is short, \cref{prop:∃_loops} applied to
+  $g \co x ↦ Df(x)v$, $β \co x ↦ φ(x)v$,
+  $Ω_x = \Rel(\F(x), π, v)$, and $K = C ∩ K_1$ gives us a smooth family of loops
+  $γ \co E × [0, 1] × 𝕊^1 → F$ such that, for all $x$:
+  \begin{itemize}
+    \item $∀ t\, s,\; γ^t_x(s) ∈ \Rel(\F(x), π, v)$
+    \item $∀ s,\; γ^0_x(s) = φ(x)v$
+    \item $\bar γ^1_x = Df(x)v$
+    \item if $x$ is near $C$, $∀t\, s,\; γ^t_x(s) = φ(x)v$
+  \end{itemize}
+  Let $ρ: E → ℝ$ be a smooth cut-off function which equals one on
+  a neighborhood of $K_0$ and whose support is contained in $K_1$.
+
+  Let $N$ be a positive real number.
+  Let $\bar f$ be the corrugated map constructed from $f$, $γ^1$ and $N$.
+  \Cref{prop:theilliere} ensures that, for all $x$,
+  \[
+    D\bar f(x) = Df(x) + \left[γ^1_x(Nπ(x)) - Df(x)v\right] ⊗ π +
+             R_x
+  \]
+  for some remainder term $R$ which is $ε$-small and vanishes whenever $γ_x$ is
+  constant, hence vanishes near $C$.
+
+  We set $\F_t(x) = \big(f_t(x), φ_t(x)\big)$ where:
+  \[
+    f_t(x) = f(x) + \frac{tρ(x)}N \int_0^{Nπ(x)}
+                    \left[γ^t_x(s) - Df(x)v\right]\, ds
+  \]
+  and
+  \[
+    φ_t(x) = φ(x) + \left[γ^{tρ(x)}_x(Nπ(x)) - φ(x)v\right] ⊗ π +
+            \frac{tρ(x)}N B_x.
+  \]
+
+  We now prove that $\F_t$ has the announced properties, starting with
+  he obvious ones.
+  The fact that $\F_0 = \F$ is obvious since $γ^0_x(s) = φ(x)v$ for all
+  $s$.
+
+  When $x$ is near $C$, $Df(x) = φ(x)$ since $\F$ is holonomic near
+  $C$.
+  In addition, $γ^t_x(s) = φ(x)v$ for all $s$ and $t$, hence $B_x$ vanishes.
+  Hence $\F_t(x) = \F(x)$ for all $t$ when $x$ is near $C$.
+
+  Outside of $K_1$, $ρ$ vanishes. Hence $f_t(x) = f(x)$ for all $t$,
+  and $γ^{tρ(x)}_x(s) = φ(x)v$ for all $s$ and $t$, and $φ_t(x) = φ(x)$.
+
+  The distance between $f(x)$ and $f_t(x)$ is zero outside of $K_1$
+  and $ε$-small everywhere.
+
+  We now turn to the interesting parts.
+  The first one is that each $\F_t$ is a formal solution of $\Rel$.
+  We already now that $\F_t$ coincides with $\F$, which is a formal
+  solution, outside of the compact set $K_1$.
+  We set
+  \[
+    \F'_t(x) = \left(f(x),
+                     φ(x) + \left[γ^{tρ(x)}_x(Nπ(x)) - φ(x)v\right] ⊗ π\right).
+  \]
+  Since $\Rel$ is open, and $K_1 × [0, 1]$ is compact and $\F_t$ is
+  within $\bigO{1/N}$ of $\F'_t$, it suffices to prove that $\F'_t$ is a formal
+  solution for all $t$.
+  This is guaranteed by the definition of the slice $\Rel(\F(x), π, v)$
+  to which $γ^{tρ(x)}_x(Nπ(x))$ belongs.
+
+  Finally, let's prove that $\F_1$ is $E' ⊕ ℝv$--holonomic near $K_0$.
+  Since $ρ = 1$ near $K_0$, we have, for $x$ near $K_0$,
+  \[
+    Df_1(x) = Df(x) + \left[γ^1_x(Nπ(x)) - Df(x)v\right] ⊗ π +
+             \frac1N B_x,
+  \]
+  and
+  \[
+    φ_1(x) = φ(x) + \left[γ^1_x(Nπ(x)) - φ(x)v\right] ⊗ π +
+            \frac{1}N B_x.
+  \]
+  Let $p$ be the projection of $E$ onto $\ker π$ along $v$,
+  so that $\Id_E = p + v ⊗ π$.
+  We can rewrite the above formulas as
+  \[
+    Df_1(x) = Df(x) ∘ p + γ^1_x(Nπ(x)) ⊗ π + \frac1N B_x,
+  \]
+  and
+  \[
+    φ_1(x) = φ(x) ∘ p + γ^1_x(Nπ(x)) ⊗ π + \frac{1}N B_x.
+  \]
+  So we see the difference is $Df(x) ∘ p - φ(x) ∘ p$ which vanishes on
+  $E'$ since $\F$ is $E'$--holonomic near $K_0$, and vanishes on $v$ since
+  $p(v) = 0$.
+\end{proof}
+
+\section{Ample differential relations}
+\label{sec:ample_differential_relations}
+
+\begin{definition}
+  \label{def:ample_subset}
+  \leanok
+  \lean{AmpleSet}
+  A subset $Ω$ of a real vector space $E$ is ample if the convex
+  hull of each connected component of $Ω$ is the whole $E$.
+\end{definition}
+
+\begin{lemma}
+  \label{lem:ample_codim_two}
+  \uses{def:ample_subset}
+  \lean{AmpleSet.of_one_lt_codim}
+  \leanok
+  The complement of a linear subspace of codimension at least 2 is
+  ample.
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  Let $F$ be subspace of $E$ with codimension at least $2$.
+  Let $F'$ be a complement subspace.
+  Its dimension is at least $2$ since it is isomorphic to $E/F$
+  and $\dim(E/F) = \codim(F) ≥ 2$.
+  First note the complement of $F$ is path-connected.
+  Indeed let $x$ and $y$ be points outside $F$.
+  Decomposing on $F ⊕ F'$, we get $x = u + u'$ and $y = v + v'$
+  with $u' ≠ 0$ and $v' ≠ 0$.
+  The segments from $x$ to $u'$ and $y$ to $v'$ stay outside $F$,
+  so it suffices to connect $u'$ and $v'$ in $F' ∖ \{0\}$.
+  If the segment from $u'$ to $v'$ doesn't contains the origin then we
+  are done.
+  Otherwise $v' = μu'$ for some (negative) $u'$.
+  Since $\dim(F') ≥ 2$ and $u' ≠ 0$, there exists $f ∈ F'$
+  which is linearly independent from $u'$, hence from $v'$.
+  We can then connect both $u'$ and $v'$ to $f$ by a segment
+  away from zero.
+
+  We now turn to ampleness.
+  The connectedness result reduces to prove that every $e$ in $E$
+  is in the convex hull of $E ∖ F$.
+  If $e$ is not in $F$ then it is the convex combination of itself with
+  coefficient $1$ and we are done.
+  Now assume $e$ is in $F$.
+  The codimension assumption guarantees the existence
+  of a subspace $G$ such that $\dim(G) = 2$ and $G ∩ F = \{0\}$.
+  Let $(g_1, g_2)$ be a basis of $G$.
+  We set $p_1 = e + g_1$, $p_2 = e + g_2$, $p_3 = e - g_1 - g_2$.
+  All these points are in $E ∖ F$ and $e = p_1/3 + p_2/3 + p_3/3$.
+\end{proof}
+
+\begin{definition}
+  \label{def:ample_relation_loc}
+  \leanok
+  \lean{RelLoc.IsAmple}
+  \uses{def:ample_subset, def:rel_slice}
+  A first order differential relation $\Rel$ is ample if all its slices
+  are ample.
+\end{definition}
+
+\begin{lemma}
+  \label{lem:h_principle_open_ample_loc}
+  \leanok
+  \lean{RelLoc.FormalSol.improve}
+  \uses{def:ample_relation_loc, def:holonomic_loc}
+  Let $\F$ be a formal solution of $\Rel$.
+  Let $K_1 ⊂ E$ be a compact subset, and let $K_0$ be a compact subset of
+  the interior of $K_1$.
+  Assume $\F$ is holonomic near a closed subset $C$ of $E$.
+  Let $ε$ be a positive real number.
+
+  If $\Rel$ is open and ample then there is a homotopy $\F_t$ such that:
+  \begin{enumerate}
+    \item
+      $\F_0 = \F$
+    \item
+      $\F_t$ is a formal solution of $\Rel$ for all $t$~;
+    \item
+      $\F_t(x) = \F(x)$ for all $t$ when $x$ is near $C$ or outside $K_1$.
+    \item
+      $d(\bs\F_t(x), \bs \F(x)) ≤ ε$ for all $t$ and all $x$~;
+    \item
+      $\F_1$ is holonomic near $K_0$~;
+    \item
+      $t ↦ F_t$ is constant near $0$ and $1$.
+  \end{enumerate}
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  \uses{lem:integration_step}
+  This is a straightforward induction using \cref{lem:integration_step}.
+  Let $(e_1, \dots, e_n)$ be a basis of $E$,
+  and let $(π_1, \dots, π_n)$ be the dual basis.
+  Let $E'_i$ be the linear subspace of $E$ spanned by
+  $(e_1, \dots, e_i)$, for $1 ≤ i ≤ n$, and let $E'_0$ be the zero
+  subspace of $E$.
+  Each $(π_i, e_i)$ is a dual pair and the kernel of $π_i$ contains
+  $E'_{i - 1}$.
+
+  \Cref{lem:integration_step} allows to build a sequence of homotopies
+  of formal solutions,
+  each homotopy relating a formal solution which is $E'_i$--holonomic to
+  one which is $E'_{i+1}$--holonomic (always near $K_0$).
+  The shortness condition is always satisfies because $\Rel$ is
+  ample.
+  Each homotopy starts where the previous one stopped, stay at
+  $C^0$ distance at most $ε/n$, and is relative to $C$ and
+  the complement of $K_1$.
+
+  It then suffices to do a smooth concatenation of theses homotopies.
+  We first pre-compose with a smooth map from $[0, 1]$ to itself that
+  fixes $0$ and $1$ and has vanishing derivative to all orders at $0$
+  and $1$.
+  Then we precompose by affine isomorphisms from $[0, 1]$
+  to $[i/n, (i + 1)/n]$ before joining them.
+\end{proof}
+
+
+% vim: set expandtab sw=2 tabstop=2:

@@ -1,0 +1,5 @@
+---
+source: cas-cli/src/ui/components/snapshot_tests.rs
+expression: tf.output()
+---
+[INFO] 3 tasks pending

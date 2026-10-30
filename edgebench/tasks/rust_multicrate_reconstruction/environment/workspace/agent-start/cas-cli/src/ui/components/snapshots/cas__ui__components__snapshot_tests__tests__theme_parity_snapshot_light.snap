@@ -1,0 +1,19 @@
+---
+source: cas-cli/src/ui/components/snapshot_tests.rs
+expression: tf.output_plain()
+---
+═══ Heading ═══
+Subheading
+Label  Value
+✓ success message
+⚠ warning message
+✗ error message
+ℹ info message
+Key: value
+Accent: highlighted
+  • bullet item
+────────────────────────────────────────────────────────────────────────────────
+  │ indented
+  │ block
+[q] Quit
+[██████████░░░░░░░░░░] 50%

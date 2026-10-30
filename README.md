@@ -36,11 +36,18 @@
 ## What's New
 
 > [!NOTE]
-> **SForge 1.1.0**
+> **EdgeBench, now community-maintained**
 >
-> - **E2B backend**: `--backend e2b` runs everything in E2B Sandboxes, no Docker or cluster needed. Official Templates are published under the `edgebench` namespace on E2B. See the [E2B example](https://bytedance-seed.github.io/EdgeBench/en/examples/single-task-e2b).
-> - **OpenCode agent**: `--agent opencode` joins Claude Code and Codex as a built-in scaffold.
-> - **Reasoning effort**: `--effort {low,medium,high,max}` sets reasoning effort uniformly across agents.
+> The 51 public EdgeBench tasks now live in this repo under [`edgebench/`](edgebench/), one directory per task with its prompt, environment and grader. Found a problem or want to improve a task? Open an issue or a pull request.
+
+<details>
+<summary><b>SForge 1.1.0</b></summary>
+
+- **E2B backend**: `--backend e2b` runs everything in E2B Sandboxes, no Docker or cluster needed. Official Templates are published under the `edgebench` namespace on E2B. See the [E2B example](https://bytedance-seed.github.io/EdgeBench/en/examples/single-task-e2b).
+- **OpenCode agent**: `--agent opencode` joins Claude Code and Codex as a built-in scaffold.
+- **Reasoning effort**: `--effort {low,medium,high,max}` sets reasoning effort uniformly across agents.
+
+</details>
 
 ---
 
@@ -173,32 +180,30 @@ EdgeBench contains **134 realistic, diverse tasks** spanning six capability cate
 
 ## Evaluation Harness: SForge
 
-EdgeBench is powered by [**SForge**](https://bytedance-seed.github.io/EdgeBench/), a two-container evaluation harness built for long-horizon agent evaluation. Each task materializes as isolated **work** and **judge** Docker images — the agent only sees the work environment, while hidden tests run in ephemeral judge containers.
+EdgeBench is powered by [**SForge**](https://bytedance-seed.github.io/EdgeBench/), a two-container evaluation harness built for long-horizon agent evaluation. SForge is general: it runs any benchmark written in its [task format](https://bytedance-seed.github.io/EdgeBench/en/tasks/task-format), and EdgeBench is the one in [`edgebench/`](edgebench/). Each task materializes as isolated **work** and **judge** Docker images — the agent only sees the work environment, while hidden tests run in ephemeral judge containers.
 
 Key mechanisms:
 - **Two-container isolation** — work and judge environments are fully separated, preventing evaluation hacking at its root
-- **Iterative evaluation with feedback** — agents don't submit once at the end for a one-shot score; instead they submit throughout the run, receive granular feedback (pass rates, failing tests, scores), and improve in a closed loop until timeout — the best result across all submissions is the final score
+- **Iterative evaluation with feedback** — agents don't submit once at the end for a one-shot score; instead they submit throughout the run, receive the grader's score and feedback, and improve in a closed loop until timeout — the best result across all submissions is the final score
 - **Long-horizon execution** — stop hooks prevent premature agent exit, auto-resume recovers from transient failures, and the Kubernetes backend enables parallel runs at scale
 
 ### Quick Start
 
 ```bash
 # Install (requires Docker Engine running on a Linux host)
-pip install sforge
+git clone https://github.com/ByteDance-Seed/EdgeBench.git && cd EdgeBench
+pip install -e .
 
-# 1. Download task definitions
-sforge fetch-tasks edgebench
+# 1. Pull the task's pre-built images (or build them: sforge build --task ad_placement_optimization)
+sforge pull --task ad_placement_optimization
 
-# 2. Pull pre-built Docker images
-sforge pull --task ad_placement_optimization --registry seededge
-
-# 3. Start judge server (separate terminal)
-sforge serve
-
-# 4. Run an agent
+# 2. Run an agent (sforge run also serves the judge)
 SFORGE_AGENT_API_KEY="sk-xxx" \
   sforge run --task ad_placement_optimization --agent claude-code \
     --model "claude-opus-4-8[1m]" --timeout 43200 --run-id edgebench-001
+
+# 3. Watch scores and token usage
+sforge viewer
 ```
 
 **Step-by-step examples:**
@@ -207,15 +212,33 @@ SFORGE_AGENT_API_KEY="sk-xxx" \
 - [Single task on E2B](https://bytedance-seed.github.io/EdgeBench/en/examples/single-task-e2b) — run one task in E2B cloud Sandboxes
 
 > [!IMPORTANT]
-> - **Official setting** — leaderboard numbers use the [official experiment YAMLs](examples/all-tasks-k8s/) unchanged, including the time budget, stop hook, auto-eval, submission cooldowns, and hardware resource limits.
+> - **Official setting** — leaderboard numbers use the [official experiment YAMLs](examples/all-tasks-k8s/) unchanged, including the time budget, stop hook, auto-eval and submission cooldowns. CPU and memory limits are part of each task's `task.toml`.
 > - **Cost** — one 12-hour task with a frontier model can cost hundreds to over a thousand USD; a full ~50-task run is a five-figure spend.
 > - **Scale** — the Docker backend suits only a few tasks at a time; for full-suite runs use the [Kubernetes backend](https://bytedance-seed.github.io/EdgeBench/en/configuration/container-backends).
 
 **Evaluating your own model / agent:**
 - **Your own model** — the built-in Claude Code, Codex, and OpenCode scaffolds work with any compatible API endpoint: point `SFORGE_AGENT_API_BASE_URL` at your endpoint, set your key via `SFORGE_AGENT_API_KEY`, and pass your model name via `--model`. See [Supported Agents](https://bytedance-seed.github.io/EdgeBench/en/guide/agents#using-third-party-models).
 - **Your own agent scaffold** — just add a new agent under [`sforge/harness/agent/`](sforge/harness/agent/) (a small `Agent` subclass declaring how to install and launch it) and register it in the factory, then run with `--agent <your-agent>`. See [Custom Agents](https://bytedance-seed.github.io/EdgeBench/en/guide/agents#custom-agents).
+- **Your own benchmark** — put your tasks in a directory with a `benchmark.toml` and run them with `-b <dir>`. See [Task Format](https://bytedance-seed.github.io/EdgeBench/en/tasks/task-format).
 
 Full documentation: [bytedance-seed.github.io/EdgeBench](https://bytedance-seed.github.io/EdgeBench/)
+
+## Tasks
+
+Each public task is a directory `edgebench/tasks/<task_id>/`:
+
+```
+task.toml        metadata, resources, submission filter, judge command, score rescale
+instruction.md   the prompt given to the agent
+environment/     work image (Dockerfile + workspace files)
+judge/           judge image (Dockerfile + grader, hidden tests, data)
+NOTES.md         source, deviations from v1, regression summary, known issues
+```
+
+Shared toolchains are in `edgebench/bases/`. The rules for EdgeBench tasks are in [`edgebench/tasks/SCHEMA.md`](edgebench/tasks/SCHEMA.md).
+
+To report or fix a task problem, open an issue or a pull request against its directory. A change
+that can move scores bumps the task's `version` in `task.toml`.
 
 ## Citation
 
@@ -232,8 +255,8 @@ If you find EdgeBench useful in your research, please cite our tech report:
 
 ## License
 
-- **EdgeBench Tasks** (task datasets) are released under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
-- **SForge** (evaluation harness code) is released under the [Apache License 2.0](LICENSE).
+- **SForge** and everything outside `edgebench/`: [Apache License 2.0](LICENSE).
+- **EdgeBench** (`edgebench/`): [CC BY 4.0](edgebench/LICENSE). Third-party projects and files inside a task keep their own licenses.
 
 ## Contact
 

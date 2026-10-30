@@ -4,7 +4,7 @@ Thank you for your interest in contributing to SForge! This document covers the 
 
 ## Prerequisites
 
-- Python 3.10+
+- Python 3.11–3.13
 - Docker Engine 24+
 - `pip` for local editable installs
 
@@ -12,13 +12,12 @@ Thank you for your interest in contributing to SForge! This document covers the 
 
 ```bash
 # Clone the repository
-git clone <repo-url> && cd SForge
+git clone https://github.com/ByteDance-Seed/EdgeBench.git && cd EdgeBench
 
 # Install locally for development
 pip install -e .
 
-# Fetch task definitions and verify the CLI
-sforge fetch-tasks edgebench
+# EdgeBench is in edgebench/; verify the CLI sees its tasks
 sforge list
 ```
 
@@ -26,21 +25,30 @@ sforge list
 
 ```
 sforge/
-├── cli.py                  # CLI entry point (build/run/eval/serve/list)
+├── cli.py                  # CLI entry point (list/pull/build/push/run/eval/serve/viewer/replay)
+├── viewer.py               # sforge viewer: run list, score curves, token usage
+├── replay.py               # sforge replay: open archived sessions in the agent's UI
 ├── harness/
 │   ├── config.py           # SForgeConfig — environment variable injection
-│   ├── constants.py        # Base image registry, log markers
-│   ├── task_spec.py        # TaskSpec dataclass (WorkSpec + JudgeSpec)
+│   ├── constants.py        # Paths and other constants
+│   ├── task_spec.py        # Benchmark and TaskSpec (benchmark.toml, task.toml)
 │   ├── agent/              # Pluggable agent abstraction
-│   ├── backend/            # Container backends (Docker, K8s)
-│   ├── docker_build.py     # Image building
+│   ├── backend/            # Container backends (Docker, K8s, E2B)
+│   ├── docker_build.py     # Image build/pull/push, blobs
 │   ├── run_agent.py        # Agent execution orchestration
 │   ├── run_evaluation.py   # Judge submission grading
 │   ├── judge_server.py     # FastAPI REST API
+│   ├── llm_gateway.py      # Model-request forwarding and token accounting
 │   ├── evolve_scripts.py   # In-container script generators
 │   ├── grading.py          # EvalReport and scoring
-│   └── log_parsers/        # Per-format test output parsers
-└── visualizer/             # Web UI for browsing run results
+│   └── score_rescale.py    # Raw task score -> 0..100
+tools/judge_local.py        # Run a judge image on a submission archive
+tools/ci_images.py          # Build/push a benchmark's missing images (used by CI)
+edgebench/                  # The EdgeBench benchmark (CC BY 4.0)
+├── benchmark.toml          # Name, image registry, blob URL
+├── tasks/                  # One directory per task (rules: tasks/SCHEMA.md)
+└── bases/                  # Shared base images used by tasks
+docs/                       # Documentation site (VitePress, en + zh)
 ```
 
 ## Development Workflow
@@ -62,7 +70,7 @@ The project follows standard Python conventions. No automated formatter is enfor
 
 ## License Headers
 
-All `.py` source files must include the Apache 2.0 license header at the top:
+All `.py` source files outside `edgebench/` must include the Apache 2.0 license header at the top:
 
 ```python
 # Copyright (c) 2026 ByteDance Ltd. and/or its affiliates
@@ -82,6 +90,8 @@ All `.py` source files must include the Apache 2.0 license header at the top:
 
 For files with a shebang (`#!/usr/bin/env python3`), the license header goes immediately after the shebang line.
 
+Contributions to `edgebench/` are licensed under CC BY 4.0 ([`edgebench/LICENSE`](edgebench/LICENSE)). Keep the license files and headers of third-party code inside a task as they are.
+
 ## Running Tests
 
 ```bash
@@ -94,21 +104,33 @@ python -m pytest tests/ -v
 
 1. Create `sforge/harness/agent/<agent_name>.py` — subclass `Agent` from `sforge.harness.agent.base`.
 2. Register the agent in `sforge/harness/agent/factory.py`.
-3. Define `install_cmds` (how to install the agent CLI in a container) and implement the `run()` method.
+3. Set `npm_package` and `default_version` (the CLI is installed from a host-built bundle), `run_cmd`, `api_key_env`, and optionally `api_base_env`, `model_env`, `stop_hook` and `resume_cmd`. See [Custom Agents](https://bytedance-seed.github.io/EdgeBench/en/guide/agents#custom-agents).
 
-### Adding a New Task
+### Fixing an EdgeBench Task
 
-1. Create `tasks/<task_id>.json` with `work` and `judge` sections.
-2. Work `setup_cmds` must delete test files and run `git init`; Judge keeps the full test suite.
-3. If the language requires a new base image, add it to `BASE_IMAGE_REGISTRY` in `constants.py`.
-4. If the test output format is new, add a parser (see below).
+The tasks were migrated from v1 without fixing their graders, so scores stay comparable with the
+leaderboard; known problems are listed in each task's `NOTES.md`. Fixes come one task at a time:
 
-### Adding a Log Parser
+1. **Report it.** Open a *Task finding* issue: the claim, who is scored wrongly and by how much, and
+   how to reproduce it on the current judge image.
+2. **Fix it in a pull request** against `edgebench/tasks/<task_id>/`. Bump `version` in `task.toml`,
+   describe the change and its score effect under **Changes** in `NOTES.md`, and remove the fixed
+   entry from **Known issues**.
+3. **Show old vs new.** Grade the same submissions with the old and the new judge on the same host
+   and put the table in the pull request. Build with `sforge build --task <task_id>` and grade with
+   `sforge eval --task <task_id> --archive <sub.tar.gz>`, or run any judge image directly with
+   `tools/judge_local.py --image <tag>`; the old judge's tag stays on Docker Hub.
+4. **Review.** A fix is merged when the problem is real on the current judge, a good-faith solver is
+   scored wrongly or non-repeatably because of it, and the fix removes it without changing scores for
+   correct work (or, if the score scale changes, says how old scores map). Someone who knows the
+   field reviews findings about scoring logic.
+5. **Publish.** CI builds the changed images on the pull request and publishes them as
+   `docker.io/seededge/edgebench.<role>.<name>` after merge. A new blob must be uploaded to the
+   `task-blobs` Release before the change merges.
 
-1. Create `sforge/harness/log_parsers/<format>.py`.
-2. Implement a `parse_<format>(log: str) -> list[TestResult]` function.
-3. Register it in `sforge/harness/log_parsers/__init__.py`.
-4. Reference the parser name in your task JSON's `judge.parser` field.
+A task becomes `status = "verified"` once a review of the task as a whole leaves no open blocking issue.
+New tasks follow the same rules; see SForge's [Task Format](https://bytedance-seed.github.io/EdgeBench/en/tasks/task-format)
+and [`edgebench/tasks/SCHEMA.md`](edgebench/tasks/SCHEMA.md).
 
 ### Modifying the Judge Server API
 
@@ -122,7 +144,7 @@ The judge server (`sforge/harness/judge_server.py`) is a FastAPI app. When chang
 
 - Keep PRs focused — one logical change per PR.
 - Include a summary of what changed and why in the PR description.
-- If your change affects task definitions or the judge API, describe how you tested it end-to-end (e.g., `sforge build` + `sforge serve` + `sforge run`).
+- If your change affects tasks or the judge API, describe how you tested it end-to-end (e.g., `sforge build` + `sforge eval`, or `sforge run`).
 - Do not commit files that contain secrets, API keys, or credentials.
 
 ## Reporting Issues

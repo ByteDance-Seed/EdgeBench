@@ -1,0 +1,35 @@
+schema_version = 0
+id = "vliw_kernel_optimization"
+name = "Vliw Kernel Optimization"
+category = "Systems & Software Engineering"
+language = "Python"
+description = "Optimize a VLIW/SIMD kernel generator for correctness and minimum cycle count on a custom architecture simulator. Hard-coded answers for specific inputs are forbidden."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python"            # bases/python (python:3.11 + git curl jq build-essential); nothing added by the task
+platform = "linux/amd64"
+cwd = "/home/workspace/sebench_performance_takehome"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["solution.py"]
+exclude = ["runner.py", "verifier.py", "problem.py", "test_cases/", "public_tests/", "__pycache__/", ".DS_Store"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 700
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# eval_hidden.py gives runner.py 600 s.
+
+[score]
+direction = "minimize"
+# raw score = max simulated cycle count over the hidden performance cases (one case), valid only when all
+# 9 hidden cases are correct. v1 selection valid_then_score.
+rescale = { kind = "log_min", baseline = 4475.526541978607, expert = 1000.0 }

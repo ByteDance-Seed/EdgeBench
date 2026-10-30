@@ -1,0 +1,11 @@
+[package]
+name = "ghostty_vt"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+description = "Safe Rust wrapper for libghostty-vt terminal emulation"
+
+[dependencies]
+ghostty_vt_sys = { path = "../ghostty_vt_sys" }
+thiserror = "2"

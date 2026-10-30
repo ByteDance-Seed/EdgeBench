@@ -1,0 +1,27 @@
+% This file makes the web version of the blueprint.
+% This file can be built locally.
+
+\documentclass{amsart}
+
+\usepackage{amsmath,amsfonts,amsthm,amssymb}
+\usepackage{graphicx}
+\DeclareGraphicsExtensions{.svg,.png,.jpg}
+\usepackage[showmore, dep_graph, project=../../]{blueprint}
+%\usepackage[dep_graph, coverage, project=../project, dep_by=section]{blueprint}
+
+\usepackage{tikz-cd}
+\usepackage{tikz}
+
+\input{preamble/common}
+\input{preamble/web}
+\usepackage[capitalize]{cleveref}
+
+\github{https://github.com/fpvandoorn/carleson}
+\dochome{https://fpvandoorn.github.io/carleson/docs}
+
+\author{Lars Becker, \and Mar\'ia In\'es de Frutos-Fern\'andez, \and Leo Diedering, \and Floris van Doorn, \and S\'ebastien Gou\"ezel, \and Asgar Jamneshan, \and Evgenia Karunus, \and Edward van de Meent, \and Pietro Monticone, \and Jasper Mulder-Sohn, \and Jim Portegies, \and Joris Roos, \and Michael Rothgang, \and Rajula Srivastava, \and James Sundstrom, \and Jeremy Tan, \and Christoph Thiele}
+
+
+\begin{document}
+\input{chapter/main}
+\end{document}

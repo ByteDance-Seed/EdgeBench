@@ -1,0 +1,4 @@
+invoke==1.7.1
+plasTeX @ git+https://github.com/plastex/plastex.git
+leanblueprint @ git+https://github.com/PatrickMassot/leanblueprint.git
+watchfiles==0.16.1

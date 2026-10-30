@@ -1,0 +1,29 @@
+{
+  "outputs": [
+    {
+      "path": "portfolio_optimizer.py",
+      "format": "Python source file"
+    },
+    {
+      "path": "requirements.txt",
+      "format": "plain text"
+    },
+    {
+      "path": "backtest_results.json",
+      "format": "JSON"
+    }
+  ],
+  "submit_paths": [
+    "portfolio_optimizer.py",
+    "requirements.txt",
+    "backtest_results.json"
+  ],
+  "attachments_dir": "attachments",
+  "source_fields_preserved": [
+    "task_name",
+    "task_description"
+  ],
+  "title_exact": true,
+  "description_exact": true,
+  "renderer": "codex_with_preservation_validator"
+}

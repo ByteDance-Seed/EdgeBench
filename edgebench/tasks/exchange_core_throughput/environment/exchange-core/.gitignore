@@ -1,0 +1,12 @@
+target/
+delombok/
+.mvn/
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+# dumps #
+dumps/*.ec*

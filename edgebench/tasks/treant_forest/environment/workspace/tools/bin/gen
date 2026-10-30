@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""Input generator for Treant's Forest (AHC054).
+Usage: ./gen <seed>
+Outputs test input to stdout.
+
+Output format:
+  Line 1: N ti tj
+  Lines 2..N+1: grid rows (N characters each, '.' = empty, 'T' = tree)
+  Lines N+2..N+1+N^2-1: destination candidate list (one "qi qj" per line)
+
+The destination candidate list is used to deterministically resolve the
+adventurer's random destination choices during replay.
+"""
+import sys
+import random
+from collections import deque
+
+def bfs_reachable(grid, start):
+    """Find all reachable cells from start."""
+    n = len(grid)
+    visited = [[False]*n for _ in range(n)]
+    queue = deque([start])
+    visited[start[0]][start[1]] = True
+    reachable = [start]
+    while queue:
+        r, c = queue.popleft()
+        for dr, dc in [(-1,0), (1,0), (0,-1), (0,1)]:
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < n and 0 <= nc < n and not visited[nr][nc] and grid[nr][nc] == '.':
+                visited[nr][nc] = True
+                queue.append((nr, nc))
+                reachable.append((nr, nc))
+    return reachable, visited
+
+def generate(seed):
+    rng = random.Random(seed)
+    N = rng.randint(20, 40)
+
+    # Start with all empty
+    grid = [['.' for _ in range(N)] for _ in range(N)]
+    start = (0, N // 2)
+
+    # Add some trees
+    K = max(1, rng.randint(0, N*N // 6))
+    cells = [(i, j) for i in range(N) for j in range(N) if (i, j) != start]
+    rng.shuffle(cells)
+
+    trees = 0
+    for i, j in cells:
+        if trees >= K:
+            break
+        grid[i][j] = 'T'
+        # Check connectivity
+        _, visited = bfs_reachable(grid, start)
+        all_reachable = all(visited[r][c] for r in range(N) for c in range(N) if grid[r][c] == '.')
+        if not all_reachable:
+            grid[i][j] = '.'
+        else:
+            trees += 1
+
+    # Choose goal
+    reachable, _ = bfs_reachable(grid, start)
+    valid_goals = [c for c in reachable if c != start and abs(c[0]-start[0]) + abs(c[1]-start[1]) >= 5]
+    if valid_goals:
+        goal = rng.choice(valid_goals)
+    else:
+        goal = rng.choice([c for c in reachable if c != start])
+
+    # Generate destination candidate list (shuffled non-entrance cells)
+    non_entrance = [(i, j) for i in range(N) for j in range(N) if (i, j) != start]
+    rng.shuffle(non_entrance)
+
+    lines = [f"{N} {goal[0]} {goal[1]}"]
+    for row in grid:
+        lines.append(''.join(row))
+    for qi, qj in non_entrance:
+        lines.append(f"{qi} {qj}")
+
+    return '\n'.join(lines) + '\n'
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: ./gen <seed>", file=sys.stderr)
+        sys.exit(1)
+    print(generate(int(sys.argv[1])), end='')

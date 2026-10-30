@@ -1,0 +1,43 @@
+name: Task finding
+description: A grader, prompt or environment problem in an EdgeBench task
+labels: ["task-finding"]
+body:
+  - type: input
+    id: task
+    attributes:
+      label: Task
+      description: The task id, the name of its directory under edgebench/tasks/
+      placeholder: grid_turing_robot
+    validations:
+      required: true
+  - type: textarea
+    id: claim
+    attributes:
+      label: Claim
+      description: One or two sentences on what is wrong.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Who is scored wrongly or non-repeatably, and by how much. Say which numbers are measured and which are computed.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Evidence and how to reproduce
+      description: Test submissions, commands and their output on the current judge image. Describe exploits by their mechanism; do not post a ready-made one.
+    validations:
+      required: true
+  - type: textarea
+    id: fix
+    attributes:
+      label: Proposed fix
+      description: What would change, and how scores of correct work would change. Leave empty if unsure.
+  - type: textarea
+    id: limits
+    attributes:
+      label: Limits
+      description: What you did not check.

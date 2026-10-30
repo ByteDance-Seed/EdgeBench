@@ -1,0 +1,56 @@
+﻿task_name: "gnc_heterophily_squirrel_01"
+input_mode: "batch"
+data_path:
+  dataset_dir: "data/squirrel"
+  graph: "data/squirrel/graph.csv"
+  nodes: "data/squirrel/nodes_all.jsonl"
+  meta: "data/squirrel/meta.json"
+  split_pattern:
+    train: "data/squirrel/train_split_{split_id:02d}.jsonl"
+    valid: "data/squirrel/valid_split_{split_id:02d}.jsonl"
+    test: "data/squirrel/test_split_{split_id:02d}.jsonl"
+
+scoring:
+  weights:
+    macro_f1: 0.4
+    micro_f1: 0.3
+    balanced_accuracy: 0.2
+    one_minus_ece: 0.1
+
+penalties:
+  time_penalty_coef: 0.01
+  resource_penalty_spec:
+    type: "peak_memory_linear"
+    coef: 0.001
+    baseline_mb: 4096
+
+quick_test_ratio: 0.2
+quick_test_max_splits: 2
+full_eval_num_splits: 10
+parallel_eval_workers: 4
+
+security:
+  deny_data_read: true
+  deny_network: true
+
+research_match:
+  required: true
+  min_score: 4
+  evidence_refs:
+    - "Geom-GCN: Geometric Graph Convolutional Networks"
+    - "A Critical Look at the Evaluation of GNNs under Heterophily: Are We Really Making Progress?"
+    - "Large Scale Learning on Non-Homophilous Graphs: New Benchmarks and Strong Simple Methods"
+
+dataset:
+  name: "Squirrel"
+  source_type: "WikipediaNetwork"
+  feature_dim: 2089
+  num_classes: 5
+  num_nodes: 5201
+  num_edges: 217073
+  geom_gcn_preprocess: true
+  split_suffix: "0.6_0.2"
+  source_urls:
+    raw_base: "https://raw.githubusercontent.com/graphdml-uiuc-jlu/geom-gcn/f1fc0d14b3b019c562737240d06ec83b07d16a8f/new_data/squirrel"
+    split_base: "https://raw.githubusercontent.com/graphdml-uiuc-jlu/geom-gcn/f1fc0d14b3b019c562737240d06ec83b07d16a8f/splits"
+  license: "See original WikipediaNetwork / Geom-GCN sources; redistribute only derived evaluation format and downloaded cache metadata in this package."

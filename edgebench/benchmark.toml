@@ -1,0 +1,5 @@
+# EdgeBench as SForge reads it: tasks/<id>/ and bases/<name>/ next to this file.
+
+name = "edgebench"           # images are edgebench.{base,work,judge}.<name>:<hash>
+registry = "docker.io/seededge"
+blob_url = "https://github.com/ByteDance-Seed/EdgeBench/releases/download/task-blobs"

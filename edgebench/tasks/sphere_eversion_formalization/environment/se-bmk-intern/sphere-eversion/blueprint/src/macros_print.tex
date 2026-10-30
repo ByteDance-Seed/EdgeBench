@@ -1,0 +1,41 @@
+% Déclaration de théorème avec thmtools
+\declaretheorem[numberwithin=chapter]{theorem}
+\declaretheorem[sibling=theorem]{proposition}
+\declaretheorem[sibling=theorem]{corollary}
+\declaretheorem[sibling=theorem]{remark}
+\declaretheorem[sibling=theorem]{lemma}
+\declaretheorem[sibling=theorem]{definition}
+\declaretheorem[sibling=theorem]{example}
+
+\declaretheorem[numbered=no, name=Theorem]{theorem-intro}
+\declaretheorem[numbered=no, name=Proposition]{proposition-intro}
+\declaretheorem[numbered=no, name=Corollary]{corollary-intro}
+\declaretheorem[numbered=no, name=Lemma]{lemma-intro}
+\declaretheorem[numbered=no, name=Definition]{definition-intro}
+
+% Cache les commandes plastex
+\newcommand{\uses}[1]{}
+\newcommand{\proves}[1]{}
+\newcommand{\lean}[1]{}
+\newcommand{\leanok}{}
+
+%\newcommand{\D}[1]{\gls{D}[#1]}
+\newcommand{\D}[1]{\mathrm{Diff}(#1)}
+
+\newenvironment{diagram}[1][]{\[\begin{tikzcd}[#1]}{\end{tikzcd}\]}
+\newenvironment{dessin}[1][]{\[\begin{tikzpicture}[#1]}{\end{tikzpicture}\]}
+
+% Bugfix :
+% http://tex.stackexchange.com/questions/262617/issue-with-xrightarrow
+\makeatletter
+  \patchcmd{\arrowfill@}{-7mu}{-14mu}{}{}
+  \patchcmd{\arrowfill@}{-7mu}{-14mu}{}{}
+  \patchcmd{\arrowfill@}{-2mu}{-4mu}{}{}
+  \patchcmd{\arrowfill@}{-2mu}{-4mu}{}{}
+\makeatother
+
+\newcommand{\oiint}{\iint}
+
+\definecolor{fond}{RGB}{255,255,255}
+
+\newcommand{\N}[1]{\mathcal{N}_{\!\!#1}} % neighborhood

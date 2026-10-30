@@ -1,0 +1,107 @@
+In this chapter, we establish the model theory that is used to derive the consistency of \( \NF \) from that of \( \TTT \).
+This requires much of mathlib's model theory library to be completely rewritten for the many-sorted case, which is (so far) not an objective of this project.
+Some potential design decisions are considered in the following sections.
+On the whole, this chapter should be considered just a sketch of the main argument: sufficient for a human reader, but insufficient for a detailed blueprint.
+
+\section{Many-sorted model theory}
+This is loosely based off the perspective on categorical logic offered by Johnstone in Volume 2 of \emph{Sketches of an Elephant}, and takes heavy inspiration from the \emph{Flypitch project}.
+\begin{definition}
+  A \emph{\( \Sigma \)-language} consists of a map \( \newoperator{Functions} : \prod_{n : \mathbb N} (\Fin n \to \Sigma) \to \Sigma \to \Type_u \) and a map \( \newoperator{Relations} : \prod_{n : \mathbb N} (\Fin n \to \Sigma) \to \Type_v \).
+\end{definition}
+\begin{definition}
+  Let \( \Phi : \Sigma \to \Sigma' \).
+  Let \( L \) be a \( \Sigma \)-language and let \( L' \) be a \( \Sigma' \)-language.
+  Then a \emph{\( \Phi \)-morphism} of languages \( L \xrightarrow\Phi L' \) consists of a map
+  \[ \newoperator{onFunction} : \prod_{n : \mathbb N} \prod_{A : \Fin n \to \Sigma} \prod_{B : \Sigma} \newoperator{Functions}_L(n, A, B) \to \newoperator{Functions}_{L'}(\Phi \circ A, \Phi(B)) \]
+  and a map
+  \[ \newoperator{onRelation} : \prod_{n : \mathbb N} \prod_{A : \Fin n \to \Sigma} \newoperator{Relations}_L(n, A) \to \newoperator{Functions}_{L'}(\Phi \circ A) \]
+  If \( L, L' \) are \( \Sigma \)-languages, we may simply say that a \emph{morphism} of languages \( L \to L' \) is a \( \id_\Sigma \)-morphism \( L \xrightarrow{\id_\Sigma} L' \).\footnote{It is crucial that \( \id \circ f \equiv f \circ \id \equiv f \) definitionally.}
+\end{definition}
+\begin{definition}
+  Let \( L, L' \) be \( \Sigma \)-languages.
+  We define \( L \oplus L' \) to be the \( \Sigma \)-language with
+  \[ \newoperator{Functions}(n, A, B) = \newoperator{Functions}_L(n, A, B) \oplus \newoperator{Functions}_{L'}(n, A, B) \]
+  and
+  \[ \newoperator{Relations}(n, A) = \newoperator{Relations}_L(n, A) \oplus \newoperator{Relations}_{L'}(n, A) \]
+  There are morphisms of languages \( L, L' \to L \oplus L' \).
+\end{definition}
+\begin{definition}
+  Let \( L \) be a \( \Sigma \)-language, and let \( M : \Sigma \to \Type_w \).
+  An \emph{\( L \)-structure} on \( M \) consists of a map
+  \[ \newoperator{funMap} : \prod_{n : \mathbb N} \prod_{A : \Fin n \to \Sigma} \prod_{B : \Sigma} \newoperator{Functions}(n, A, B) \to \left(\prod_{i : \Fin n} M(A(i)) \right) \to M(B) \]
+  and a map
+  \[ \newoperator{relMap} : \prod_{n : \mathbb N} \prod_{A : \Fin n \to \Sigma} \newoperator{Relations}(n, A) \to \left(\prod_{i : \Fin n} M(A(i)) \right) \to \Prop \]
+  We will write \( f^M \) for \( \newoperator{funMap}(n, A, B, f) \), and similarly \( R^M \) for \( \newoperator{relMap}(n, R) \).
+  If \( M \) is an \( L \)-structure and an \( L' \)-structure, it is also naturally an \( (L \oplus L') \)-structure.
+  If \( M \) is an \( L \)-structure and an \( L' \)-structure, then a morphism of \( \Sigma \)-languages \( \Phi : L \to L' \) is called an \emph{expansion} on \( M \) if it commutes with the interpretations of all symbols on \( M \).
+\end{definition}
+\begin{definition}
+  Let \( L \) be a \( \Sigma \)-language.
+  A \emph{morphism} of \( L \)-structures \( M \to N \) consists of functions \( h_A : M_A \to N_A \) such that for all \( n : \mathbb N \), \( A : \Fin n \to \Sigma \), and \( B : \Sigma \), all function symbols \( f : \newoperator{Functions}(n, A, B) \), and all \( x : \prod_{i : \Fin n} M(A(i)) \),
+  \[ h_B(f^M(x)) = f^N(i \mapsto h_{A(i)}(x(i))) \]
+  and for all relation symbols \( R : \newoperator{Relations}(n, A) \),
+  \[ R^M(x) \to R^N(i \mapsto h_{A(i)}(x(i))) \]
+\end{definition}
+\begin{definition}
+  Let \( L \) be a \( \Sigma \)-language, and let \( \alpha : \Type_{u'} \) be a sort of variables of sort \( S : \alpha \to \Sigma \).
+  An \emph{\( L \)-term on \( \alpha : S \) of sort \( A \)}, the type of which is denoted \( \Term_{\alpha:S} A \), is either
+  \begin{itemize}
+    \item a variable, comprised solely of a name \( n : \alpha \) such that \( S(n) = A \), or
+    \item an application of a function symbol, comprised of some \( n : \mathbb N \), a map \( B : \Fin n \to \Sigma \), a function symbol \( f : \newoperator{Functions}(n, B, A) \), and terms \( t : \prod_{i : \Fin n} \Term_{\alpha:S} B(i) \).
+  \end{itemize}
+\end{definition}
+\begin{definition}
+  Let \( L \) be a \( \Sigma \)-language, and let \( \alpha : \Type_{u'} \) and \( S : \alpha \to \Sigma \).
+  We define the type of \emph{\( L \)-bounded formulae on \( \alpha : S \)} with free variables indexed by \( \alpha \), and \( n \) additional free variables of sorts \( f : \Fin n \to \Sigma \), denoted \( \BForm_{\alpha:S}^f \), by the following constructors.
+  \begin{itemize}
+    \item \( \newoperator{falsum} : \BForm_{\alpha:S}^f \);
+    \item \( \newoperator{equal} : \prod_{A : \Sigma} \Term_{\alpha \oplus \Fin n : S \oplus f} A \to \Term_{\alpha \oplus \Fin n : S \oplus f} A \to \BForm_{\alpha:S}^f \);
+    \item \( \newoperator{rel} : \prod_{m : \mathbb N} \prod_{B : \Fin m \to \Sigma} \prod_{R : \newoperator{Relations}(m, B)} \left( \prod_{i : \Fin m} \Term_{\alpha \oplus \Fin n : S \oplus f} B(i) \right) \to \BForm_{\alpha:S}^f \);
+    \item \( \newoperator{imp} : \BForm_{\alpha:S}^f \to \BForm_{\alpha:S}^f \to \BForm_{\alpha:S}^f \); and
+    \item \( \newoperator{all} : \prod_{A : \Sigma} \BForm_{\alpha:S}^{A :: f} \to \BForm_{\alpha:S}^f \),
+  \end{itemize}
+  where the syntax \( A :: f \) denotes the cons operation on maps from \( \Fin n \).\footnote{This is implemented in mathlib as \texttt{Fin.cons}.}
+  An \emph{\( L \)-formula on \( \alpha : S \)} with free variables indexed by \( \alpha \) is an inhabitant of \( \BForm_{\alpha:S}^{\#[]} \).\footnote{The expression \( \#[] \) is mathlib's syntax for the unique map \( \Fin 0 \to \Sigma \).}
+  An \emph{\( L \)-sentence} is an \( L \)-formula with free variables indexed by \( \newoperator{Empty} : f \), where \( f \) is the unique function \( \newoperator{Empty} \to \Sigma \).
+  An \emph{\( L \)-theory} is a set of \( L \)-sentences.
+\end{definition}
+
+\section{Term models}
+% <https://github.com/flypitch/flypitch/blob/aea5800db1f4cce53fc4a113711454b27388ecf8/src/henkin.lean>
+\begin{definition}
+  Let \( L \) be a \( \Sigma \)-language.
+  A \emph{1-\( L \)-formula} of sort \( A \) is an \( L \)-bounded formula on \( \newoperator{Empty} \) with one additional free variable of sort \( f : \Fin 1 \to \Sigma \) given by \( f(x) = A \).
+\end{definition}
+\begin{definition}
+  Let \( L \) be a \( \Sigma \)-language.
+  The \emph{witness symbols} for \( L \) is the language \( L_W \) consisting of a single constant of sort \( A \) for every 1-\( L \)-formula of sort \( A \).
+\end{definition}
+\begin{proposition}
+  Let \( M \) be a nonempty \( L \)-structure.
+  Then \( M \) has an \( L_W \)-structure such that for each 1-\( L \)-formula \( \phi \) of sort \( A \), there is a constant symbol \( c : \newoperator{Functions}(0, \#[], A) \) such that
+  \[ \forall x : M_A,\, \phi(x) \to \phi(c) \]
+\end{proposition}
+\begin{proof}
+  We define the interpretation of the constant for \( \phi \) to be some \( x : M \) such that \( M \vDash \phi(x) \) if one exists, or an arbitrary \( y : M \) otherwise.\footnote{Use mathlib's \texttt{Classical.epsilon}.}
+  This defines an \( L_W \)-structure for \( M \), and clearly \( M \) satisfies the required property.
+\end{proof}
+\begin{definition}
+  For each \( n : \mathbb N \), we define
+  \[ L^{(0)} = L;\quad L^{(n+1)} = L^{(n)} \oplus (L^{(n)})_W \]
+  This forms a directed diagram of languages, which has a colimit \( L^{(\omega)} \).
+  There are natural morphisms \( L \to L^{(\omega)} \) and \( L^{(n)} \to L^{(\omega)} \) which are expansions on \( M \).
+\end{definition}
+\begin{proposition}
+  Let \( M \) be a nonempty \( L \)-structure.
+  Then \( M \) has an \( L^{(\omega)} \)-structure such that for each 1-\( L^{(\omega)} \)-formula \( \phi \) of sort \( A \), there is a constant symbol \( c : \newoperator{Functions}(0, \#[], A) \) such that
+  \[ \forall x : M_A,\, \phi(x) \to \phi(c) \]
+  Then, by the Tarski--Vaught test (which must be proven in the many-sorted case), the set \( N \subseteq M \) comprised of all of the interpretations of \( L^{(\omega)} \)-terms, is the domain of an \( L^{(\omega)} \)-elementary substructure of \( M \).
+\end{proposition}
+This will take substantial work.
+
+\section{Ambiguity}
+\begin{definition}
+  Let \( L \) be an \( \mathbb N \)-language.
+  A \emph{type raising morphism} is a map of languages \( L \xrightarrow{\newoperator{succ}} L \), where \( \newoperator{succ} : \mathbb N \to \mathbb N \) is the successor function.
+\end{definition}
+The remainder of this chapter is left unfinished until we finish the main part of the project.

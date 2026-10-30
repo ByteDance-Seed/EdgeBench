@@ -1,0 +1,33 @@
+schema_version = 0
+id = "schemathesis_datagen_pipeline"
+name = "Schemathesis Datagen Pipeline"
+category = "Systems & Software Engineering"
+language = "Python"
+description = "Implement eight feature targets in the Schemathesis Python API testing framework, including structured HTTP header generation strategies, coverage-phase hooks, discriminator-aware validation and data generation, and schema-driven code generation fixes."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python"            # bases/python (python:3.11 + git curl jq build-essential)
+platform = "linux/amd64"
+cwd = "/app"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["."]
+exclude = [".git", "__pycache__", "*.pyc", "*.egg-info", ".eggs", "*.so", "TODO.md"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 1800
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[score]
+direction = "maximize"
+# raw score = test.sh TOTAL_SCORE = weighted mean of per-phase check pass ratios, weights 2,1,2,2,2,1,1,2 (0..1).
+rescale = { kind = "linear", lower = 0.0, upper = 1.0 }

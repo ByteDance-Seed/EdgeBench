@@ -1,0 +1,35 @@
+# Build artifacts
+/target/
+/dist/
+.cas.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Local data
+/.mem/
+.cas/
+/temp/
+/index/
+
+# Environment files (contain secrets)
+.env
+.env.local
+.env.worktree
+
+# Node modules
+node_modules/
+
+# Build toolchains
+.zig-cache/
+.context/
+
+# Process sockets
+.overmind.sock
+# Worktree-specific files (generated per worktree)

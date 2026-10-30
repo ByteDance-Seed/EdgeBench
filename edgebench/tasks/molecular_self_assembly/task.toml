@@ -1,0 +1,35 @@
+schema_version = 0
+id = "molecular_self_assembly"
+name = "Molecular Self Assembly"
+category = "Combinatorial Optimization"
+language = "Python"
+description = "Schedule bonding operations over discrete time steps to assemble atoms into a specified number of connected molecules, respecting spatial proximity and temporal ordering constraints."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python310"
+platform = "linux/amd64"
+cwd = "/home/workspace/molecules"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["solution.py"]
+exclude = []
+
+[judge]
+cmd = "python3 /judge/grade.py"
+timeout_sec = 600
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# eval_molecules.py runs the 50 cases 8 at a time (SEBENCH_MOLECULES_WORKERS, default 8), each
+# `python3 solution.py` under a 30 s wall-clock timeout. Scores of time-limited (anytime)
+# solutions depend on host CPU speed and load; see NOTES.md.
+
+[score]
+direction = "maximize"
+rescale = { kind = "piecewise_max", baseline = 69170000.0, rank30 = 235032102.6667, rank1 = 300187365.6667, super_anchor = 322991707.7167 }

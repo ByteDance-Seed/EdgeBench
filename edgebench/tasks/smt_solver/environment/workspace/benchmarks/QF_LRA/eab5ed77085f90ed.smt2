@@ -1,0 +1,7 @@
+(set-logic QF_LRA)
+(declare-fun skoZ () Real)
+(declare-fun skoY () Real)
+(declare-fun skoX () Real)
+(assert (and (not (<= (+ (+ (/ (- 32) 5) (* skoX (- 1))) (* skoY (- 1))) skoZ)) (and (not (<= skoZ (/ 1 20))) (and (not (<= skoY (/ 1 20))) (and (not (<= skoX (/ 1 20))) (and (not (<= 15 skoZ)) (and (not (<= 15 skoY)) (not (<= 15 skoX)))))))))
+(check-sat)
+(exit)

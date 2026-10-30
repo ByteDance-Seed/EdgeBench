@@ -1,0 +1,131 @@
+\chapter{Local sphere eversion}
+\label{chap:local_eversion}
+
+The local theory of \Cref{chap:local} is already enough to deduce
+Smale's sphere eversion theorem, although it is less natural than going through
+the general results of \Cref{chap:global}. The goal of this appendix is to
+explain how to do so. In this section $E$ denote a finite dimensional real
+vector space equipped with an inner product. Later we will assume it is
+3-dimensional. We denote by $𝕊$ the unit sphere in $E$.
+
+Although we want to study immersions of $𝕊$ into $E$, we want to work only with
+functions defined on the whole $E$. So we introduce a slightly artificial relation.
+We denote by $B$ the open ball with radius $9/10$ around the origin in $E$ and set:
+
+\[
+  \Rel := \{(x, y, φ) ∈ J^1(E, E) \;|\; x ∉ B ⇒ \rst{φ}{x^⊥} \text{ is injective}\}.
+\]
+
+Of course solutions of this relation restrict to immersions of $𝕊$.
+
+\begin{lemma}
+  \label{lem:loc_immersion_rel_open}
+  \lean{loc_immersion_rel_open}
+  \leanok
+  The relation $\Rel$ above is open.
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  The main task is to fix $x_0 \notin B$
+  and $\varphi_0 \in L(E, E)$ which is injective on $x_0^\perp$ and prove that,
+  for every $x$ close to $x_0$ and $\varphi$ close to $\varphi_0$, $\varphi$ is
+  injective on $x^\perp$. This is a typical situation where geometric intuition
+  makes it feel like there is nothing to prove.
+
+  One difficulty is that the subspace $x^\perp$ moves with $x$. We reduce to a fixed
+  subspace by considering the restriction to $x_0^\perp$ of the orthogonal
+  projection onto $x^\perp$. One can check this is an isomorphism as long as $x$
+  is not perpendicular to $x_0$.
+  More precisely, we consider $f \co J^1(E, E) \to ℝ \times L(x_0^\perp, E)$ which sends
+  $(x, y, \varphi)$ to $(\langle x_0, x\rangle, \varphi \circ \pr_{x^\perp} \circ j_0)$
+  where $j_0$ is the inclusion of $x_0^\perp$ into $E$. The set $U$ of injective
+  linear maps is open in $L(x_0^\perp, E)$ and the map $f$ is continuous
+  hence the preimage of $\{0\}^c \times U$ is open. This is good enough for us because
+  injectivity of $\varphi \circ \pr_{x^\perp} \circ j_0$ implies injectivity of
+  $\varphi$ on the image of $\pr_{x^\perp} \circ j_0$ which is $x^\perp$ whenever
+  $\langle  x_0, x\rangle \neq 0$.
+\end{proof}
+
+\begin{lemma}
+  \label{lem:loc_immersion_rel_ample}
+  \lean{loc_immersion_rel_ample}
+  \uses{lem:ample_codim_two}
+  \leanok
+  The relation $\Rel$ above is ample.
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  The core fact here is that if one fixes vector spaces $F$ and $F'$, a dual
+  pair $(\pi, v)$ on $F$ and an injective linear map $\varphi \co F \to F'$
+  then the updated map $\Upd{p}{\varphi}{w}$ is injective if and only if $w$
+  is not in $\varphi(\ker\pi)$. First we assume $\Upd{p}{\varphi}{\varphi(u)}$
+  is injective for some $u$ in $\varphi(\ker\pi)$ and derive a contradiction.
+  We have $\Upd{p}{\varphi}{\varphi(u)}v = \varphi(u)$ by the general
+  definition of updating and also $\Upd{p}{\varphi}{\varphi(u)}u = \varphi(u)$
+  since $u$ is in $\ker \pi$. Hence injectivity of $\varphi$ ensure $u = v$,
+  which is absurd since $\pi(u) = 0$ and $\pi(v) = 1$. Conversely assume $w$
+  is not in $\varphi(\ker\pi)$ and let us prove $\Upd{p}{\varphi}{w}$ is
+  injective. Assume $x$ is in the kernel of $\Upd{p}{\varphi}{w}$. Decompose
+  $x = u + tv$ with $u \in \ker\pi$ and $t$ a real number. We have
+  $\Upd{p}{\varphi}{w}(x) = \varphi(u) + tw$. Hence our assumption on $x$
+  implies $t$ vanishes otherwise we would have $w = -t⁻¹\varphi(u)$
+  contradicting that $w$ isn't in $\varphi(\ker\pi)$. This vanishing and the
+  assumption on $x$ then imply $\varphi(u) = 0$. Since $\varphi$ is injective
+  we conclude that $u = 0$ and finally $x = 0$.
+
+  We now turn to $\Rel$. It suffices to prove that for every $\sigma = (x, y,
+  \varphi) \in \Rel$ and every dual pair $p = (\pi, v)$ on $E$, the slice
+  $\Rel(\sigma, p)$ is ample. If $x$ is in $B$ then $\Rel(\sigma, p)$ is the
+  whole $E$ which is obviously ample. So we assume $x$ is not in $B$. Since
+  $\sigma$ is in $\Rel$, $\varphi$ is injective on $x^\perp$. The slice is the
+  set of $w$ such that $\Upd{p}{\varphi}{w}$ is injective on $x^\perp$. Assume
+  first $\ker\pi = x^\perp$. Then $\Upd{p}{\varphi}{w}$ coincides with
+  $\varphi$ on $x^\perp$ hence the slice is the whole $E$. Assume now that
+  $\ker\pi \neq x^\perp$. The slice is not very easy to picture in this case.
+  But one should remember that, up to affine isomorphism, the slice depends
+  only on $\ker \pi$. More specifically, if we keep $\pi$ but change $v$ then
+  the slice is simply translated in $E$. Here we replace $v$ by the projection
+  on $x^\perp$ of the vector dual to $\pi$ rescaled to keep the property
+  $\pi(v) = 1$. What has been gained is that we now have $v \in x^\perp$ and
+  $x^\perp = (x^\perp \cap \ker \pi) \oplus ℝ v$. Since $\varphi$ is
+  injective on $x^\perp$, $\varphi(x^\perp \cap \ker \pi)$ is a hyperplane
+  in $x^\perp$ and $\Upd{p}{\varphi}{w}$ is injective on $x^\perp$ if and only
+  if $w$ is in the complement of $\varphi(x^\perp \cap \ker \pi)$ according to
+  the core fact above. Since it is an hyperplane in $x^\perp$, it has
+  codimension at least $2$ in $E$ hence its complement is ample.
+\end{proof}
+
+\begin{theorem}[Smale 1958]
+  \lean{sphere_eversion_of_loc}
+  \label{sphere_eversion_of_loc}
+  \leanok
+  There is a homotopy of immersion of $𝕊^2$ into $ℝ^3$ from the inclusion map to
+	the antipodal map $a \co q ↦ -q$.
+\end{theorem}
+
+\begin{proof}
+  \leanok
+  \uses{lem:loc_immersion_rel_open, lem:loc_immersion_rel_ample, lem:h_principle_open_ample_loc, lem:param_trick}
+	We denote by $ι$ the inclusion of $𝕊^2$ into $ℝ^3$.
+	We set $j_t = (1-t)ι	+ ta$.
+  This is a homotopy from $ι$ to $a$ (but not an immersion for $t=1/2$).
+  Using the canonical trivialization of the tangent
+	bundle of $ℝ^3$, we can set, for $(q, v) ∈ T𝕊^2$,
+	$G_t(q, v) = \mathrm{Rot}_{Oq}^{πt}(v)$, the rotation around axis $Oq$ with
+	angle $πt$.
+  The family $σ : t ↦ (j_t, G_t)$ is a homotopy of formal immersions
+  relating $j^1ι$ to $j^1a$. Those formal solutions are holonomic when $t$ is
+  zero or one, so we can reparametrize the family to make such it is holonomic
+  when $t$ is close to zero or one. Then we can extend it to a homotopy of
+  formal solutions of $\Rel$ using a suitable cut-off ensuring smoothness
+  near the origin. The relation $\Rel$ is ample according to
+  \Cref{lem:loc_immersion_rel_ample} and then \Cref{lem:param_trick} ensures
+  its 1-parameter version $\Rel^ℝ$ is also ample. The relation $\Rel$ is open according to
+  \Cref{lem:loc_immersion_rel_open} hence $\Rel^ℝ$ is also ample.
+  So we can use \Cref{lem:h_principle_open_ample_loc} to deform our family of
+  formal solutions into a holonomic one.
+\end{proof}
+
+% vim: set expandtab sw=2 tabstop=2:
