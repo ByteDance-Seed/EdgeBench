@@ -181,6 +181,9 @@ class GameSessionState:
     steps: list = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
     last_active: float = field(default_factory=time.time)
+    operation_lock: threading.Lock = field(
+        default_factory=threading.Lock, repr=False,
+    )
 
 
 # --- Server state ---
@@ -193,6 +196,7 @@ class JudgeState:
         self.tasks: dict[str, TaskSpec] = {}
         self.submissions: dict[str, dict] = {}  # submission_id -> {status, report, ...}
         self.game_sessions: dict[str, GameSessionState] = {}
+        self.game_counters: dict[str, int] = {}
         self.run_history: dict[str, list[dict]] = {}  # run_id -> [entries]
         self.tokens: dict[str, dict] = {}  # token -> {task_id, run_id, next_agent, next_auto, judge_cpu_limit, judge_mem_limit}
         self.run_resource_limits: dict[str, dict] = {}  # run/task -> limits
@@ -226,17 +230,22 @@ class JudgeState:
     def _destroy_game_session(self, session_id: str) -> None:
         with self._game_lock:
             sess = self.game_sessions.pop(session_id, None)
+            if sess is not None:
+                sess.operation_lock.acquire()
         if sess is None:
             return
         try:
-            backend = self._get_backend(sess.run_id, sess.task_id)
-            backend.cleanup_container(sess.container, logger)
-        except Exception:
-            logger.exception("Error cleaning up game container for session %s", session_id)
-            with self._game_lock:
-                self.game_sessions.setdefault(session_id, sess)
-            return
-        self._archive_game_session(sess)
+            try:
+                backend = self._get_backend(sess.run_id, sess.task_id)
+                backend.cleanup_container(sess.container, logger)
+            except Exception:
+                logger.exception("Error cleaning up game container for session %s", session_id)
+                with self._game_lock:
+                    self.game_sessions.setdefault(session_id, sess)
+                return
+            self._archive_game_session(sess)
+        finally:
+            sess.operation_lock.release()
 
     def _game_log_dir(self, sess: GameSessionState) -> Path:
         return (
@@ -275,6 +284,15 @@ class JudgeState:
         step = sess.steps[-1]
         with open(log_dir / "steps.jsonl", "a") as f:
             f.write(json.dumps(step, ensure_ascii=False) + "\n")
+
+    def _commit_game_session(self, sess: GameSessionState) -> None:
+        """Publish a ready session with a unique, monotonic round identity."""
+        with self._game_lock:
+            history_key = f"{sess.run_id}/{sess.task_id}"
+            game_num = self.game_counters.get(history_key, 0) + 1
+            self.game_counters[history_key] = game_num
+            sess.game_num = game_num
+            self.game_sessions[sess.session_id] = sess
 
     # --- Token-based session registration ---
 
@@ -660,23 +678,11 @@ class JudgeState:
                         ) from exc
                     time.sleep(GAME_GATEWAY_BACKOFF * attempt)
 
-            with self._history_lock:
-                history_key = f"{run_id}/{task_id}"
-                archived = sum(
-                    1 for e in self.run_history.get(history_key, [])
-                    if e.get("type") == "game"
-                )
-            with self._game_lock:
-                active = sum(
-                    1 for s in self.game_sessions.values() if s.run_id == run_id
-                )
-            game_num = archived + active + 1
-
             sess = GameSessionState(
                 session_id=session_id,
                 run_id=run_id,
                 task_id=task_id,
-                game_num=game_num,
+                game_num=0,
                 container=handle,
                 container_url=container_url,
                 headers=game_headers,
@@ -686,8 +692,7 @@ class JudgeState:
                 moves=data.get("moves", 0),
                 done=data.get("done", False),
             )
-            with self._game_lock:
-                self.game_sessions[session_id] = sess
+            self._commit_game_session(sess)
             committed = True
             return sess, data
         except Exception as original_error:
@@ -704,172 +709,191 @@ class JudgeState:
     def game_step(self, session_id: str, action: str) -> dict:
         with self._game_lock:
             sess = self.game_sessions.get(session_id)
+            if sess is not None:
+                sess.operation_lock.acquire()
         if sess is None:
             raise KeyError(f"Game session not found: {session_id}")
+        try:
+            resp = requests.post(
+                f"{sess.container_url}/step",
+                json={"action": action},
+                headers=sess.headers,
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
 
-        resp = requests.post(
-            f"{sess.container_url}/step",
-            json={"action": action},
-            headers=sess.headers,
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+            sess.current_score = data.get("score", sess.current_score)
+            sess.max_score = data.get("max_score", sess.max_score)
+            sess.peak_score = data.get("peak_score", sess.peak_score)
+            sess.moves = data.get("moves", sess.moves)
+            sess.done = data.get("done", sess.done)
+            sess.last_active = time.time()
+            sess.steps.append({
+                "move": sess.moves,
+                "action": action,
+                "observation": data.get("observation", ""),
+                "score": data.get("score", 0),
+                "peak_score": data.get("peak_score", 0),
+                "max_score": data.get("max_score", 0),
+                "done": data.get("done", False),
+            })
 
-        sess.current_score = data.get("score", sess.current_score)
-        sess.max_score = data.get("max_score", sess.max_score)
-        sess.peak_score = data.get("peak_score", sess.peak_score)
-        sess.moves = data.get("moves", sess.moves)
-        sess.done = data.get("done", sess.done)
-        sess.last_active = time.time()
-        sess.steps.append({
-            "move": sess.moves,
-            "action": action,
-            "observation": data.get("observation", ""),
-            "score": data.get("score", 0),
-            "peak_score": data.get("peak_score", 0),
-            "max_score": data.get("max_score", 0),
-            "done": data.get("done", False),
-        })
+            self._flush_game_step(sess)
 
-        self._flush_game_step(sess)
+            if sess.done:
+                threading.Thread(
+                    target=self._auto_close_session,
+                    args=(session_id,),
+                    daemon=True,
+                ).start()
 
-        if sess.done:
-            threading.Thread(
-                target=self._auto_close_session,
-                args=(session_id,),
-                daemon=True,
-            ).start()
-
-        return data
+            return data
+        finally:
+            sess.operation_lock.release()
 
     def _auto_close_session(self, session_id: str) -> None:
         with self._game_lock:
             sess = self.game_sessions.pop(session_id, None)
+            if sess is not None:
+                sess.operation_lock.acquire()
         if sess is None:
             return
-        backend = self._get_backend(sess.run_id, sess.task_id)
-        if backend.backend_name != "e2b":
-            self._archive_game_session(sess)
+        try:
+            backend = self._get_backend(sess.run_id, sess.task_id)
+            if backend.backend_name != "e2b":
+                self._archive_game_session(sess)
+                try:
+                    backend.cleanup_container(sess.container, logger)
+                except Exception:
+                    logger.exception(
+                        "Error auto-closing game session %s", session_id,
+                    )
+                return
             try:
                 backend.cleanup_container(sess.container, logger)
             except Exception:
-                logger.exception(
-                    "Error auto-closing game session %s", session_id,
-                )
-            return
-        try:
-            backend.cleanup_container(sess.container, logger)
-        except Exception:
-            logger.exception("Error auto-closing game session %s", session_id)
-            with self._game_lock:
-                self.game_sessions.setdefault(session_id, sess)
-            return
-        self._archive_game_session(sess)
-        logger.info("Auto-closed done game session %s (max_score=%d)", session_id, sess.max_score)
+                logger.exception("Error auto-closing game session %s", session_id)
+                with self._game_lock:
+                    self.game_sessions.setdefault(session_id, sess)
+                return
+            self._archive_game_session(sess)
+            logger.info("Auto-closed done game session %s (max_score=%d)", session_id, sess.max_score)
+        finally:
+            sess.operation_lock.release()
 
     def game_status(self, session_id: str) -> dict:
         with self._game_lock:
             sess = self.game_sessions.get(session_id)
+            if sess is not None:
+                sess.operation_lock.acquire()
         if sess is None:
             raise KeyError(f"Game session not found: {session_id}")
+        try:
+            resp = requests.get(f"{sess.container_url}/status", headers=sess.headers, timeout=5)
+            resp.raise_for_status()
+            data = resp.json()
 
-        resp = requests.get(f"{sess.container_url}/status", headers=sess.headers, timeout=5)
-        resp.raise_for_status()
-        data = resp.json()
+            sess.current_score = data.get("score", sess.current_score)
+            sess.max_score = data.get("max_score", sess.max_score)
+            sess.peak_score = data.get("peak_score", sess.peak_score)
+            sess.moves = data.get("moves", sess.moves)
+            sess.done = data.get("done", sess.done)
+            sess.last_active = time.time()
 
-        sess.current_score = data.get("score", sess.current_score)
-        sess.max_score = data.get("max_score", sess.max_score)
-        sess.peak_score = data.get("peak_score", sess.peak_score)
-        sess.moves = data.get("moves", sess.moves)
-        sess.done = data.get("done", sess.done)
-        sess.last_active = time.time()
-
-        return data
+            return data
+        finally:
+            sess.operation_lock.release()
 
     def close_game_session(self, session_id: str) -> dict:
         with self._game_lock:
             sess = self.game_sessions.pop(session_id, None)
+            if sess is not None:
+                sess.operation_lock.acquire()
         if sess is None:
             raise KeyError(f"Game session not found: {session_id}")
-
         try:
-            resp = requests.post(f"{sess.container_url}/close", headers=sess.headers, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
-        except Exception:
-            data = {
-                "final_score": sess.current_score,
-                "peak_score": sess.peak_score,
-                "max_score": sess.max_score,
-                "moves": sess.moves,
-            }
-        backend = self._get_backend(sess.run_id, sess.task_id)
-        if backend.backend_name != "e2b":
-            self._archive_game_session(sess)
+            try:
+                resp = requests.post(f"{sess.container_url}/close", headers=sess.headers, timeout=10)
+                resp.raise_for_status()
+                data = resp.json()
+            except Exception:
+                data = {
+                    "final_score": sess.current_score,
+                    "peak_score": sess.peak_score,
+                    "max_score": sess.max_score,
+                    "moves": sess.moves,
+                }
+            backend = self._get_backend(sess.run_id, sess.task_id)
+            if backend.backend_name != "e2b":
+                self._archive_game_session(sess)
+                try:
+                    backend.cleanup_container(sess.container, logger)
+                except Exception:
+                    logger.exception(
+                        "Error cleaning up game container for session %s",
+                        session_id,
+                    )
+                return data
             try:
                 backend.cleanup_container(sess.container, logger)
             except Exception:
-                logger.exception(
-                    "Error cleaning up game container for session %s",
-                    session_id,
-                )
+                with self._game_lock:
+                    self.game_sessions.setdefault(session_id, sess)
+                raise
+            self._archive_game_session(sess)
             return data
-        try:
-            backend.cleanup_container(sess.container, logger)
-        except Exception:
-            with self._game_lock:
-                self.game_sessions.setdefault(session_id, sess)
-            raise
-        self._archive_game_session(sess)
-
-        return data
+        finally:
+            sess.operation_lock.release()
 
     def close_all_game_sessions(self, run_id: str, task_id: str) -> int:
+        backend = self._get_backend(run_id, task_id)
         with self._game_lock:
             sessions = [
                 (sid, sess) for sid, sess in self.game_sessions.items()
                 if sess.run_id == run_id and sess.task_id == task_id
             ]
-        backend = self._get_backend(run_id, task_id)
-        if backend.backend_name == "e2b":
-            with self._game_lock:
-                for sid, _ in sessions:
-                    self.game_sessions.pop(sid, None)
-            failures = []
             for sid, sess in sessions:
-                try:
-                    backend.cleanup_container(sess.container, logger)
-                except Exception as exc:
-                    logger.exception(
-                        "Error cleaning up game container for session %s", sid,
-                    )
-                    failures.append((sid, exc))
-                    with self._game_lock:
-                        self.game_sessions.setdefault(sid, sess)
-                    continue
-                self._archive_game_session(sess)
-            if failures:
-                detail = ", ".join(f"{sid}: {exc}" for sid, exc in failures)
-                raise RuntimeError(f"Failed to clean up game containers: {detail}")
-            return len(sessions)
-
-        # Preserve the existing non-blocking Docker/K8s cleanup behavior.
-        containers_to_cleanup = []
-        for sid, sess in sessions:
-            with self._game_lock:
                 self.game_sessions.pop(sid, None)
-            self._archive_game_session(sess)
-            containers_to_cleanup.append((sid, sess.container))
+                sess.operation_lock.acquire()
+        try:
+            if backend.backend_name == "e2b":
+                failures = []
+                for sid, sess in sessions:
+                    try:
+                        backend.cleanup_container(sess.container, logger)
+                    except Exception as exc:
+                        logger.exception(
+                            "Error cleaning up game container for session %s", sid,
+                        )
+                        failures.append((sid, exc))
+                        with self._game_lock:
+                            self.game_sessions.setdefault(sid, sess)
+                        continue
+                    self._archive_game_session(sess)
+                if failures:
+                    detail = ", ".join(f"{sid}: {exc}" for sid, exc in failures)
+                    raise RuntimeError(f"Failed to clean up game containers: {detail}")
+                return len(sessions)
 
-        def _bg_cleanup():
-            for sid, container in containers_to_cleanup:
-                try:
-                    backend.cleanup_container(container, logger)
-                except Exception:
-                    logger.exception("Error cleaning up game container for session %s", sid)
-        threading.Thread(target=_bg_cleanup, daemon=True).start()
-        return len(sessions)
+            # Preserve the existing non-blocking Docker/K8s cleanup behavior.
+            containers_to_cleanup = []
+            for sid, sess in sessions:
+                self._archive_game_session(sess)
+                containers_to_cleanup.append((sid, sess.container))
+
+            def _bg_cleanup():
+                for sid, container in containers_to_cleanup:
+                    try:
+                        backend.cleanup_container(container, logger)
+                    except Exception:
+                        logger.exception("Error cleaning up game container for session %s", sid)
+            threading.Thread(target=_bg_cleanup, daemon=True).start()
+            return len(sessions)
+        finally:
+            for _, sess in sessions:
+                if sess.operation_lock.locked():
+                    sess.operation_lock.release()
 
 
 
