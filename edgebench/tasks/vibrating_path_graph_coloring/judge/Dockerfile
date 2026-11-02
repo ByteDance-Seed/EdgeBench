@@ -14,7 +14,7 @@
 #   8 heredoc > <cwd>/solution.py (baseline)                    -> COPY environment/workspace/solution.py (byte-identical;
 #                                                                  v1 grades it when the submission has no solution.py)
 #   9 rm -rf .git && git init && ... commit -m 'init'           -> same, v1's commit dates pinned (the judge never reads it)
-#  10 heredoc > /tmp/eval_vibrating_path.py; chmod +x           -> COPY judge/eval_vibrating_path.py /judge/ (byte-identical)
+#  10 heredoc > /tmp/eval_vibrating_path.py; chmod +x           -> COPY judge/eval_vibrating_path.py /judge/ (v1's, except the pool size)
 #   v1 eval_cmd + parser score_sum                              -> judge/grade.py (task.toml [judge].cmd)
 
 # Base = bases/python310 (sforge build passes it as BASE_IMAGE).

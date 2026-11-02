@@ -1,7 +1,7 @@
 # vibrating_path_graph_coloring
 
 CodeChef VBR "Vibrating Path", in ALE-Bench style. The agent writes `solution.py`. The judge runs
-`python3 solution.py` on 50 fixed cases (8 at a time, 30 s wall clock each), scores each output
+`python3 solution.py` on 50 fixed cases (`min(8, SFORGE_CPUS)` at a time, 30 s wall clock each), scores each output
 with `tools/bin/tester` (the sum of the costs of the hit vertices) and sums the per-case scores.
 Any case that is not `OK` makes the total `inf`. Raw score = that sum (minimize). The rescale is
 the v1 one (`piecewise_log_min`).
@@ -42,9 +42,22 @@ Deterministic submissions match exactly and equal the historical v1 scores. The 
 searches differ by less than the old judge's own run-to-run spread; historical 2 is very
 load-sensitive, but old and new run side by side agree within 6%.
 
+## Changes
+
+### 1.1.0
+
+The judge ran 8 cases at once within the official 4 CPUs, so a case got about 15 s of CPU within its
+30 s wall-clock limit. The pool is now `min(8, SFORGE_CPUS, cases)`, defaulting to 4. Fewer
+submissions time out and become `inf`. Deadline variants of one solver timed out less often, but too
+few old grades were valid to establish score stability. Grading takes longer: a valid solver using
+28 s of CPU per case took 525-624 s, so `timeout_sec` goes from 600 to 1200 (at 4 workers, nominal
+solver and tester budgets total 13 rounds x 90 s = 1170 s, excluding overhead). Score anchors are
+unchanged; regrade before comparing with v1 leaderboard entries.
+Source, Deviations and Regression summary describe 1.0.0.
+
 ## Known issues
 
-Kept as in v1, so scores stay comparable. Fixing any of them changes scores and bumps `version`.
+Not fixed. Fixing any of them changes scores and bumps `version`.
 
 1. **The scored cases are reproducible.** They come from the public generator with a fixed seed
    range; the instruction says to use seeds 0..10000 only, but nothing enforces it, so an agent
