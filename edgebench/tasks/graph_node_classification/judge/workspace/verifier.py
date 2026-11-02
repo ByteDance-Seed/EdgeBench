@@ -86,6 +86,15 @@ def evaluate(
     ground_truth: Dict[str, int | str],
     confidences: Dict[str, float] | None = None,
 ) -> Dict[str, float]:
+    # problem.md allows keys "convertible to strings"; ground_truth keys are strings. Convert only a
+    # complete answer in which no key matches as given, so every other submission scores as before.
+    if isinstance(predictions, dict) and set(predictions).isdisjoint(ground_truth):
+        as_str = {str(k): v for k, v in predictions.items()}
+        if set(as_str) == set(ground_truth) and len(_to_int_labels(as_str.values())) == len(as_str):
+            predictions = as_str
+            if isinstance(confidences, dict):
+                confidences = {str(k): v for k, v in confidences.items()}
+
     ordered_ids = [nid for nid in ground_truth.keys() if nid in predictions]
     y_true = _to_int_labels(ground_truth[nid] for nid in ordered_ids)
     y_pred = _to_int_labels(predictions[nid] for nid in ordered_ids)

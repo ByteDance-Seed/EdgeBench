@@ -9,11 +9,21 @@ writes `solution/solution.py` (class `Solution` with `solve(input_data)`, CPU on
 (maximize). A static check rejects GPU use (`valid=false`). The rescale is the v1 one (`linear`
 0..1 -> 0..100).
 
+## Changes
+
+### 1.1.0
+
+`problem.md` allows prediction keys "convertible to strings", but the verifier looked up only string
+node IDs, so a run keyed by integers matched no node and scored about 0 while marked valid. When no
+key matches as given, the converted keys are exactly the test nodes and every value converts with
+`int()`, the verifier now converts prediction and confidence keys with `str()`. Those submissions
+score like the same answer keyed by strings; others keep the same metric calculation.
+
 ## Source
 
 - Starter solution and template, and the judge's `runner.py`, `verifier.py`, `config.yaml`,
   `judge_eval.py`: the task authors' repository (not public), identical by sha256 to the
-  published v1 images.
+  published v1 images, except `verifier.py`, changed in 1.1.0.
 - `environment/workspace/README.md`, `solution/problem.md`: the English versions shipped in the
   published v1 images (the repository has Chinese versions).
 - Blob `judge/blobs/squirrel_data.tar.gz` (5 MB packed, 626 MB unpacked; sha256 in `task.toml`): the
@@ -32,6 +42,7 @@ writes `solution/solution.py` (class `Solution` with `solve(input_data)`, CPU on
 2. A judge timeout leaves no result (invalid); v1 recorded an unrankable score. Same ranking
    effect. The grader's own failure cases are `valid=false, 0` in both.
 3. The workspace git commit is identical to v1's (same hash).
+4. `verifier.py` converts integer keys (see Changes, 1.1.0).
 
 ## Regression summary
 

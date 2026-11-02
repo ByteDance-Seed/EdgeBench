@@ -4,7 +4,7 @@ name = "Graph Node Classification"
 category = "Scientific Problems & ML"
 language = "Python"
 description = "Implement graph neural networks from scratch using only base PyTorch for semi-supervised node classification on an unseen graph under CPU-only constraints."
-version = "1.0.0"
+version = "1.1.0"
 status = "migrated"
 
 [environment]
