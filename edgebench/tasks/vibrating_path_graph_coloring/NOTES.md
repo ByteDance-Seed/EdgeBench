@@ -53,7 +53,7 @@ few old grades were valid to establish score stability. Grading takes longer: a 
 28 s of CPU per case took 525-624 s, so `timeout_sec` goes from 600 to 1200 (at 4 workers, nominal
 solver and tester budgets total 13 rounds x 90 s = 1170 s, excluding overhead). Score anchors are
 unchanged; regrade before comparing with v1 leaderboard entries.
-Source, Deviations and Regression summary describe 1.0.0.
+Source, Deviations and Regression summary describe 1.0.0. Issue: https://github.com/ByteDance-Seed/EdgeBench/issues/40
 
 ## Known issues
 
