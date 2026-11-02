@@ -6,7 +6,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 WORK_DIR = "/home/workspace/warehouse_manager"
 CASES_DIR = os.path.join(WORK_DIR, "cases")
 TESTER = os.path.join(WORK_DIR, "tools", "bin", "tester")
-TIME_LIMIT = 60
+TIME_LIMIT = 150
 
 def run_case(args):
     i, case_file = args

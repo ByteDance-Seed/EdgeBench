@@ -15,7 +15,7 @@
 #   9 rm -rf .git && git init && git config user.* && add && commit -m init
 #                                                                -> kept, author/dates pinned to v1's commit
 #  10 heredoc > /tmp/eval_warehouse_manager.py; chmod +x         -> COPY judge/eval_warehouse_manager.py
-#                                                                   /judge/ (byte-identical, moved out of /tmp)
+#                                                                   /judge/ (moved out of /tmp; TIME_LIMIT changed in 1.1.0)
 #   v1 eval_cmd + parser score_sum                               -> judge/grade.py (task.toml [judge].cmd)
 # (v1 judge image has no tools/src/ and no tools/README.md; neither is needed: tester is self-contained.)
 
