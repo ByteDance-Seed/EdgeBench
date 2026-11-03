@@ -60,16 +60,22 @@ near the 60 s limit; the old-new difference of means is smaller than either side
 `validate_sat_witness` walks the formula recursively with a recursion limit of 20000, more than the
 default 8 MiB stack can hold. On deep files a correct `sat` model segfaulted the evaluator's worker,
 the pool broke, no score file was written, and the outer judge reported a valid 0 for the whole
-submission (`correct=0/0`). Validation now runs in a thread with a 2 GiB reserved stack and a
-recursion limit of 1,000,000. A file deeper than that gives a clean rejection of that case. And if
-the evaluator exits with anything but 0 or 2 and no score file, the result is now invalid rather than
-a valid 0. A build failure, a missing `solve` and a preflight rejection stay a valid 0 (the missing
-`solve` exit changes from 1 to 2 to keep that).
+submission (`correct=0/0`). Validation now runs in a thread with a 2 GiB stack (address space; pages
+are committed as the recursion reaches them) and a recursion limit of 1,000,000. A formula deeper
+than that was rejected cleanly for the one shape tested. If the validator cannot start its thread or
+runs out of memory, the evaluation now ends instead of rejecting the model. And if the evaluator
+exits with anything but 0 or 2 and no score file, the result is now invalid rather than a valid 0. A
+build failure, a missing `solve` and a preflight rejection stay a valid 0 (the missing `solve` exit
+changes from 1 to 2 to keep that). A pool worker killed for memory still ends the evaluation, which
+is now invalid.
 
 The score formula and scale are unchanged. Regrade crashed evaluations (a valid 0 with `correct=0/0`
-from a submission that built and ran) and models rejected because of the old recursion limit. Other
-validation verdicts are unchanged, while timed reruns can vary. A real solver goes from 0.00 to 47.36-48.14 (n=2 per judge) at 8 CPUs and 7 GiB; failure-path controls and a low-scoring
-solver are unchanged. Source, Deviations and Regression summary describe 1.0.0. Issue: https://github.com/ByteDance-Seed/EdgeBench/issues/42
+from a submission that built and ran) and models rejected because of the old recursion limit or
+because the validator ran out of memory. Other validation verdicts are unchanged, while timed reruns
+can vary. With a 1 GiB or unlimited stack the old judge does not crash and rejects these models
+instead. On the same worker at 8 CPUs and 7 GiB, a real solver goes from 0.00 to 46.58; failure-path
+controls and a replay fixture with correct models on 42 files are unchanged. Source, Deviations and
+Regression summary describe 1.0.0. Issue: https://github.com/ByteDance-Seed/EdgeBench/issues/42
 
 ## Known issues
 
