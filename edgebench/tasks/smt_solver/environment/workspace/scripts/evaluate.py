@@ -26,11 +26,14 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 sys.setrecursionlimit(max(sys.getrecursionlimit(), 20000))
+VALIDATOR_RECURSION_LIMIT = 1_000_000
+VALIDATOR_STACK_BYTES = 2 * 1024**3  # reserved, not used, until a file nests this deep
 
 LOGICS = ["QF_UF", "QF_LRA", "QF_LIA", "QF_UFLRA"]
 DIFFICULTIES = ["easy", "medium", "hard"]
@@ -644,7 +647,26 @@ class WitnessChecker:
 
 
 def validate_sat_witness(benchmark_path, witness):
-    WitnessChecker(benchmark_path, witness).validate()
+    # Hard files nest deeply enough to overflow the default stack, which kills the pool worker and ends the
+    # whole evaluation, and to pass 20000 recursions. Too deep even for this is a rejected model, not a crash.
+    box = {}
+
+    def run():
+        limit = sys.getrecursionlimit()
+        sys.setrecursionlimit(VALIDATOR_RECURSION_LIMIT)
+        try:
+            WitnessChecker(benchmark_path, witness).validate()
+        except BaseException as exc:
+            box["exc"] = exc
+        finally:
+            sys.setrecursionlimit(limit)
+
+    threading.stack_size(VALIDATOR_STACK_BYTES)
+    thread = threading.Thread(target=run)
+    thread.start()
+    thread.join()
+    if "exc" in box:
+        raise box["exc"]
 
 
 def parse_solver_output(stdout):
@@ -898,7 +920,7 @@ def main():
     solver = os.path.abspath(args.solver)
     if not os.path.isfile(solver) or not os.access(solver, os.X_OK):
         print(f"Error: solver is not executable: {args.solver}", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(2)
     if not os.path.isdir(args.benchmarks):
         print(f"Error: benchmark directory does not exist: {args.benchmarks}", file=sys.stderr)
         sys.exit(1)
