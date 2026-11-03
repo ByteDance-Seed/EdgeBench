@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Grader for apple_incremental_game (Verified judge contract, see SCHEMA.md).
 
-Reproduces v1 exactly:
+Keeps v1's command, parser and score:
   v1 eval_cmd : cd /home/workspace/apple_incremental_game && python3 /tmp/eval_apple_incremental_game.py
   v1 parser   : score_sum  (sforge/harness/log_parsers/score_sum.py)
   v1 score    : first `TOTAL_SCORE <n>` in the eval output (sforge/harness/grading.py:extract_score)
-/judge/eval_apple_incremental_game.py is byte-identical to the v1 /tmp/eval_apple_incremental_game.py.
+/judge/eval_apple_incremental_game.py is the v1 /tmp/eval_apple_incremental_game.py except for its pool size (1.1.0).
 This wrapper only runs it and translates its stdout into /opt/sforge/result.json.
 stdout = logs only.
 """

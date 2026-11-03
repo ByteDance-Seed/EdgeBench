@@ -42,7 +42,7 @@ if __name__ == "__main__":
     os.chdir(WORK_DIR)
     case_files = sorted(f for f in glob.glob(os.path.join(CASES_DIR, "*")) if os.path.isfile(f))
     results = {}
-    with ProcessPoolExecutor(max_workers=min(8, len(case_files))) as pool:
+    with ProcessPoolExecutor(max_workers=min(8, int(os.environ.get("SFORGE_CPUS", 4)), len(case_files))) as pool:
         futures = {pool.submit(run_case, (i, cf)): i for i, cf in enumerate(case_files)}
         for fut in as_completed(futures):
             cid, status, score = fut.result()

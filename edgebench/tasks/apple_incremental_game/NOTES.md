@@ -2,7 +2,7 @@
 
 AtCoder Heuristic Contest 058 "Apple Incremental Game", in ALE-Bench style. The agent writes
 `solution.py` (stdin -> stdout): 500 turns, each either strengthening one of the 4×10 machines or
-doing nothing. The judge runs it on 50 fixed cases (8 at a time, 30 s wall clock each), scores each
+doing nothing. The judge runs it on 50 fixed cases (`min(8, SFORGE_CPUS)` at a time, 30 s wall clock each), scores each
 output with `tools/bin/tester` (`round(1e5 · log2(S))`, S = apples after T turns), and sums the
 per-case scores of the `OK` cases (failed cases count 0). Raw score = that sum (maximize). The
 rescale is the v1 one (`piecewise_max`, baseline 45000000).
@@ -13,7 +13,8 @@ rescale is the v1 one (`piecewise_max`, baseline 45000000).
   authors' repository (not public), identical by sha256 and mode to the published v1 images. The
   tools are Python scripts.
 - `environment/workspace/solution.py` (starter) and `judge/eval_apple_incremental_game.py`:
-  byte-identical to v1's inline scripts and to the published v1 images. `judge/grade.py` is new and
+  byte-identical to v1's inline scripts and to the published v1 images (the eval script until 1.1.0).
+  `judge/grade.py` is new and
   writes `result.json` with v1's scoring.
 - `instruction.md`: v1's prompt, verbatim. Base: `bases/python310`.
 
@@ -46,6 +47,21 @@ Deterministic rows match exactly. Historical 1 has no time check and loses whole
 timeouts depending on host load, on both images. Historical 3 uses unseeded randomness; after
 extra pairs of runs, both images give overlapping ranges with means 0.05 M apart. The other
 time-limited searches differ by under 1 point on 0..100.
+
+## Changes
+
+### 1.1.0
+
+The judge ran 8 cases at once on the official 4 CPUs, against SCHEMA's rule that a parallel grader
+sizes its pool with `SFORGE_CPUS`, so a case that searches until its own deadline got about half
+the CPU that 4 cases at once give it. The pool is now `min(8, SFORGE_CPUS, cases)`; `SFORGE_CPUS`
+must be a positive integer, and 4 applies only when it is absent. Deterministic solutions that
+produce the same output and finish on both judges keep their scores. The two deadline-based files
+measured gained 3.32-5.48 of 100 across eight matched pairs with 4 vCPUs online and one judge at a
+time; other resource conditions gave other gains, and there is no mapping from old scores. The
+longest measured grade at 4 CPUs is 390.8 s (every solver timing out), so `timeout_sec` stays 600
+for 4 CPUs; a smaller `sforge eval --judge-cpu-limit` needs a larger timeout. Known issue 3 stays: limits are
+still wall clock. Regression summary describes 1.0.0.
 
 ## Known issues
 
