@@ -15,7 +15,7 @@
 #   9 rm -rf .git && git init && git config user.* && add && commit -m init
 #                                                                -> kept, author/dates pinned to v1's commit
 #  10 heredoc > /tmp/eval_apple_incremental_game.py; chmod +x    -> COPY judge/eval_apple_incremental_game.py /judge/
-#                                                                   (byte-identical, moved out of /tmp)
+#                                                                   (v1's, except the pool size, moved out of /tmp)
 #   v1 eval_cmd + parser score_sum                               -> judge/grade.py (task.toml [judge].cmd)
 
 # Base = bases/python310 (sforge build passes it as BASE_IMAGE).
