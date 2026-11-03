@@ -66,7 +66,7 @@ still wall clock. Source, Deviations and Regression summary describe 1.0.0.
 
 ## Known issues
 
-Kept as in v1, so scores stay comparable. Fixing any of them changes scores and bumps `version`.
+Kept as in v1. Fixing any of them changes scores and bumps `version`.
 
 1. **The submission can forge its score through the tester's error message.** The eval script
    takes a score from any tester output line that looks like `Score = …` and ignores the tester's
