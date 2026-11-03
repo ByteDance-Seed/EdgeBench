@@ -71,15 +71,15 @@ is now invalid.
 
 The score formula and scale are unchanged. Regrade crashed evaluations (a valid 0 with `correct=0/0`
 from a submission that built and ran) and models rejected because of the old recursion limit or
-because the validator ran out of memory. Other validation verdicts are unchanged, while timed reruns
-can vary. With a 1 GiB or unlimited stack the old judge does not crash and rejects these models
-instead. On the same worker at 8 CPUs and 7 GiB, a real solver goes from 0.00 to 46.58; failure-path
+because the validator ran out of memory. Other validation verdicts are unchanged, provided the host can reserve 2 GiB of address space per
+validation, while timed reruns can vary. With a 1 GiB or unlimited stack the old judge did not crash
+on the one model tested and rejected it instead. On the same worker at 8 CPUs and 7 GiB, a real solver goes from 0.00 to 46.58; failure-path
 controls and a replay fixture with correct models on 42 files are unchanged. Source, Deviations and
 Regression summary describe 1.0.0. Issue: https://github.com/ByteDance-Seed/EdgeBench/issues/42
 
 ## Known issues
 
-Kept as in v1, so scores stay comparable. Fixing any of them changes scores and bumps `version`.
+Kept as in v1. Fixing any of them changes scores and bumps `version`.
 
 1. **The submission can forge its score file.** The score is read from a file the submitted
    `build.sh` (running as root) can write before the evaluator does, and an early evaluator exit is
