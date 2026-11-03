@@ -33,7 +33,7 @@ from pathlib import Path
 
 sys.setrecursionlimit(max(sys.getrecursionlimit(), 20000))
 VALIDATOR_RECURSION_LIMIT = 1_000_000
-VALIDATOR_STACK_BYTES = 2 * 1024**3  # reserved, not used, until a file nests this deep
+VALIDATOR_STACK_BYTES = 2 * 1024**3  # address space; pages are committed as the recursion reaches them
 
 LOGICS = ["QF_UF", "QF_LRA", "QF_LIA", "QF_UFLRA"]
 DIFFICULTIES = ["easy", "medium", "hard"]
@@ -646,6 +646,11 @@ class WitnessChecker:
             seen[key] = result
 
 
+class ValidatorFailure(BaseException):
+    """The validator could not run, which says nothing about the model. Not an Exception, so that
+    run_solver_case does not record it as an invalid model: it ends the evaluation without a score."""
+
+
 def validate_sat_witness(benchmark_path, witness):
     # Hard files nest deeply enough to overflow the default stack, which kills the pool worker and ends the
     # whole evaluation, and to pass 20000 recursions. Too deep even for this is a rejected model, not a crash.
@@ -661,10 +666,15 @@ def validate_sat_witness(benchmark_path, witness):
         finally:
             sys.setrecursionlimit(limit)
 
-    threading.stack_size(VALIDATOR_STACK_BYTES)
-    thread = threading.Thread(target=run)
-    thread.start()
+    try:
+        threading.stack_size(VALIDATOR_STACK_BYTES)
+        thread = threading.Thread(target=run)
+        thread.start()
+    except (RuntimeError, ValueError, MemoryError) as exc:
+        raise ValidatorFailure(f"cannot start the validator thread: {exc}") from exc
     thread.join()
+    if isinstance(box.get("exc"), MemoryError):
+        raise ValidatorFailure("the validator ran out of memory")
     if "exc" in box:
         raise box["exc"]
 
