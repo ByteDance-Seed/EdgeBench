@@ -73,7 +73,7 @@ The score formula and scale are unchanged. Regrade crashed evaluations (a valid 
 from a submission that built and ran) and models rejected because of the old recursion limit or
 because the validator ran out of memory. Other validation verdicts are unchanged, provided the host can reserve 2 GiB of address space per
 validation, while timed reruns can vary. With a 1 GiB or unlimited stack the old judge did not crash
-on the one model tested and rejected it instead. On the same worker at 8 CPUs and 7 GiB, a real solver goes from 0.00 to 46.58; failure-path
+on the one model tested and rejected it instead. On one worker at a time, at 8 CPUs and 7 GiB, a real solver goes from 0.00 to 46.58 and from 0.00 to 46.45; failure-path
 controls and a replay fixture with correct models on 42 files are unchanged. Source, Deviations and
 Regression summary describe 1.0.0. Issue: https://github.com/ByteDance-Seed/EdgeBench/issues/42
 
