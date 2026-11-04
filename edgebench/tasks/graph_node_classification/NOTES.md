@@ -14,7 +14,8 @@ writes `solution/solution.py` (class `Solution` with `solve(input_data)`, CPU on
 ### 1.1.0
 
 `problem.md` allows prediction keys "convertible to strings", but the verifier looked up only string
-node IDs, so a run keyed by integers matched no node and scored about 0 while marked valid. When no
+node IDs, so a run keyed by integers matched no node: overall quality 0, about 2 of 100 through the
+solve-time term, and marked valid. When no
 key matches as given, the converted keys are exactly the test nodes and every value converts with
 `int()`, the verifier now converts prediction and confidence keys with `str()`. Those submissions
 score like the same answer keyed by strings; others keep the same metric calculation.
@@ -42,7 +43,6 @@ score like the same answer keyed by strings; others keep the same metric calcula
 2. A judge timeout leaves no result (invalid); v1 recorded an unrankable score. Same ranking
    effect. The grader's own failure cases are `valid=false, 0` in both.
 3. The workspace git commit is identical to v1's (same hash).
-4. `verifier.py` converts integer keys (see Changes, 1.1.0).
 
 ## Regression summary
 
