@@ -53,16 +53,13 @@ time-limited searches differ by under 1 point on 0..100.
 ### 1.1.0
 
 The judge ran 8 cases at once on the official 4 CPUs, against SCHEMA's rule that a parallel grader
-sizes its pool with `SFORGE_CPUS`, so a case that searches until its own deadline got about half
-the CPU that 4 cases at once give it. The pool is now `min(8, SFORGE_CPUS, cases)`; `SFORGE_CPUS`
-must be a positive integer, and 4 applies only when it is absent. Deterministic solutions that
-produce the same output and finish on both judges keep their scores. The seven deadline-based files
-measured gained 3.65-10.86 of 100 across fourteen pairs with 4 vCPUs online and one judge at a
-time, and no case was lost on either judge; other resource conditions gave other gains, and there is no mapping from old scores, so
-regrade before comparing with v1 leaderboard entries. `timeout_sec`
-goes from 600 to 1800, because a smaller pool takes longer: 50 cases of 30 s run one at a time take
-1500 s, and at 4 CPUs the longest measured grade is 390.8 s. Known issue 3 stays: limits are still
-wall clock. Source, Deviations and Regression summary describe 1.0.0.
+sizes its pool with `SFORGE_CPUS`, so a deadline search got about half the CPU of 4 at once. The pool
+is now `min(8, SFORGE_CPUS, cases)`; `SFORGE_CPUS` must be a positive integer, and 4 applies only when
+it is absent. Deterministic solutions that finish on both judges keep their scores. Seven deadline-based
+files gained 3.65-10.86 of 100 across fourteen pairs at true 4 CPUs, with no case lost on either judge.
+There is no mapping from old scores, so regrade before comparing with v1 entries. `timeout_sec` goes
+from 600 to 1800 for a smaller `--judge-cpu-limit`: one file took 1443 s at limit 1, and at 4 CPUs the
+longest grade took about 391 s. Known issue 3 stays. Source, Deviations and Regression summary describe 1.0.0.
 
 ## Known issues
 

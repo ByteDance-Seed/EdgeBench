@@ -29,7 +29,6 @@ memory = "8g"
 # eval_apple_incremental_game.py runs the 50 cases min(8, SFORGE_CPUS) at a time,
 # each `python3 solution.py` under a 30 s wall-clock timeout. Scores of
 # time-limited (anytime) solutions depend on host CPU speed and load; see NOTES.md.
-# timeout_sec covers 50 x 30 s one at a time, for a smaller --judge-cpu-limit.
 
 [score]
 direction = "maximize"
