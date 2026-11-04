@@ -539,6 +539,8 @@ class WitnessChecker:
             try:
                 if self.logic != "QF_UF":
                     return ("num", parse_numeric_literal(term))
+            except MemoryError:
+                raise
             except Exception:
                 pass
             if term in self.decls:
