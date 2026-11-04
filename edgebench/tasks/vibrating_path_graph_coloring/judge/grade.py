@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Grader for vibrating_path_graph_coloring (Verified judge contract, see SCHEMA.md).
 
-Reproduces v1 exactly:
+Reproduces v1, except the case pool size (1.1.0):
   v1 eval_cmd : cd /home/workspace/vibrating_path && python3 /tmp/eval_vibrating_path.py
   v1 parser   : score_sum  (sforge/harness/log_parsers/score_sum.py)
   v1 score    : first `TOTAL_SCORE <n>` in the eval output (sforge/harness/grading.py:extract_score)
-/judge/eval_vibrating_path.py is byte-identical to the v1 /tmp/eval_vibrating_path.py.
+/judge/eval_vibrating_path.py is the v1 /tmp/eval_vibrating_path.py, except the pool size.
 This wrapper only runs it and translates its stdout into /opt/sforge/result.json.
 stdout = logs only.
 """

@@ -15,8 +15,8 @@ The rescale is the v1 one (`piecewise_log_min`).
 solver taking 60 to 150 s on any input scored `inf`; it now scores. The formula and pool are
 unchanged; tested valid submissions moved at most 0.15 raw between judge means. Nominal grading time
 is at most 7 rounds of (150 s + 30 s tester) = 1260 s, excluding overhead, inside `timeout_sec`. It
-can outlast the 900 s final wait in `sforge run`, so a grade still running when the run ends may be
-lost; `sforge run` was not tested.
+can outlast the 900 s final wait in `sforge run`: there, a 140 s deadline grade was still running at
+that wait and was lost, though an earlier valid score survives.
 
 ## Source
 
