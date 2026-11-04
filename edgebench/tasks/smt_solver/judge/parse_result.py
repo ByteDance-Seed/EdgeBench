@@ -1,7 +1,14 @@
-# v1's /tmp/sebench_parse_result.py (heredoc in judge.eval_cmd), verbatim except that the
-# score file path comes from argv[1] instead of the fixed /tmp/smt_hidden_score.json.
+# v1's /tmp/sebench_parse_result.py (heredoc in judge.eval_cmd), except that the score file path comes
+# from argv[1] instead of the fixed /tmp/smt_hidden_score.json, and that an evaluator crash is invalid.
+# argv[2] = evaluate.py's exit status, empty if it did not run. 2 = it rejected the submission.
 import json, pathlib, sys
 p = pathlib.Path(sys.argv[1])
+status = sys.argv[2] if len(sys.argv) > 2 else ''
+if not p.exists() and status not in ('', '0', '2'):
+    print('>>>>> Start Structured Result')
+    print(json.dumps({'valid': False, 'score': None, 'summary': 'evaluator exited with status {} before writing a score file'.format(status), 'details': [], 'metrics': {}}))
+    print('>>>>> End Structured Result')
+    sys.exit(0)
 raw = json.loads(p.read_text()) if p.exists() else {'final_score': 0.0, 'logic_summary': {}}
 raw_score = float(raw.get('final_score', 0.0) or 0.0)
 score = raw_score / 100.0 if raw_score > 1.0 else raw_score

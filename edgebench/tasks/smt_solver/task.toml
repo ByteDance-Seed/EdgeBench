@@ -4,7 +4,7 @@ name = "Smt Solver"
 category = "Combinatorial Optimization"
 language = "Python"
 description = "Build an SMT solver from scratch for four quantifier-free theories (uninterpreted functions, linear real and integer arithmetic, and their combination). External SMT solvers are forbidden; model witnesses are independently validated."
-version = "1.0.0"
+version = "1.1.0"
 status = "migrated"
 
 [environment]
