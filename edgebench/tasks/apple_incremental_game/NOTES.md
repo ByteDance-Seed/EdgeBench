@@ -59,10 +59,10 @@ must be a positive integer, and 4 applies only when it is absent. Deterministic 
 produce the same output and finish on both judges keep their scores. The seven deadline-based files
 measured gained 3.65-10.86 of 100 across ten pairs with 4 vCPUs online and one judge at a
 time, and no case was lost on either judge; other resource conditions gave other gains, and there is no mapping from old scores, so
-regrade before comparing with v1 leaderboard entries. The
-longest measured grade at 4 CPUs is 390.8 s (every solver timing out), so `timeout_sec` stays 600
-for 4 CPUs; a smaller `sforge eval --judge-cpu-limit` needs a larger timeout. Known issue 3 stays: limits are
-still wall clock. Source, Deviations and Regression summary describe 1.0.0.
+regrade before comparing with v1 leaderboard entries. `timeout_sec`
+goes from 600 to 1800, because a smaller pool takes longer: 50 cases of 30 s run one at a time take
+1500 s, and at 4 CPUs the longest measured grade is 390.8 s. Known issue 3 stays: limits are still
+wall clock. Source, Deviations and Regression summary describe 1.0.0.
 
 ## Known issues
 
