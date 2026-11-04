@@ -57,32 +57,24 @@ near the 60 s limit; the old-new difference of means is smaller than either side
 
 ### 1.1.0
 
-`validate_sat_witness` walks the formula recursively with a recursion limit of 20000, more than the
-default 8 MiB stack can hold. On deep files a correct `sat` model segfaulted the evaluator's worker,
-the pool broke, no score file was written, and the outer judge reported a valid 0 for the whole
-submission (`correct=0/0`). Validation now runs in a thread with a 2 GiB stack (address space; pages
-are committed as the recursion reaches them) and a recursion limit of 1,000,000. A correct model that
-goes deeper than that is scored as an invalid model, which is wrong for that file but no longer ends
-the evaluation. By a heuristic estimate five `sat` files could go deeper if a model visits all their
-definitions; three real models on them passed. If the validator cannot start its thread or
-runs out of memory, the evaluation now ends instead of rejecting the model. And if the evaluator
-exits with anything but 0 or 2 and no score file, the result is now invalid rather than a valid 0. A
-build failure, a missing `solve` and a preflight rejection stay a valid 0 (the missing `solve` exit
-changes from 1 to 2 to keep that). A pool worker killed for memory still ends the evaluation, which
-is now invalid.
+`validate_sat_witness` recursed with a limit of 20000, more than the default 8 MiB stack holds. On deep
+files a correct `sat` model segfaulted the pool worker and ended the evaluation with no score file,
+which the judge reported as a valid 0 (`correct=0/0`). Validation now runs in a thread with a 2 GiB
+stack (address space; pages are committed as the recursion reaches them) and a recursion limit of
+1,000,000. A correct model deeper than that scores as an invalid model, but the evaluation continues.
+If the thread cannot start or the validator runs out of memory, the evaluation ends as it did on a
+crash, rather than rejecting the model.
 
-The score formula and scale are unchanged. Regrade crashed evaluations (a valid 0 with `correct=0/0`
-from a submission that built and ran) and models rejected because of the old recursion limit or
-because the validator ran out of memory. Other validation verdicts are unchanged, provided the host can reserve 2 GiB of address space per
-validation, while timed reruns can vary. With a 1 GiB or unlimited stack the old judge did not crash
-on the one model tested and rejected it instead. On one worker at a time, at 8 CPUs and 7 GiB, a real solver goes from 0.00 to 47.34; failure-path
-controls and a replay fixture with correct models on 42 files are unchanged. Of that solver's 354
-models, 350 get the same verdict from both validators and the other 4 are the crashes. Source, Deviations and
-Regression summary describe 1.0.0. Issue: https://github.com/ByteDance-Seed/EdgeBench/issues/42
+The formula and scale are unchanged. Regrade crashed evaluations (a valid 0 with `correct=0/0` from a
+submission that built and ran), and models rejected at the old recursion limit or because the validator
+ran out of memory. Other verdicts stay, on a host that can reserve 2 GiB of address space per validation. At 8 CPUs and 7 GiB a real solver goes from 0.00 to 46.15; of its 354
+models, 350 get the same verdict from both validators and the other 4 are the crashes. Failure-path
+controls are unchanged. Source, Deviations and Regression summary describe 1.0.0. Issue:
+https://github.com/ByteDance-Seed/EdgeBench/issues/42
 
 ## Known issues
 
-Kept as in v1. Fixing any of them changes scores and bumps `version`.
+Kept as in v1, so scores stay comparable. Fixing any of them changes scores and bumps `version`.
 
 1. **The submission can forge its score file.** The score is read from a file the submitted
    `build.sh` (running as root) can write before the evaluator does, and an early evaluator exit is
