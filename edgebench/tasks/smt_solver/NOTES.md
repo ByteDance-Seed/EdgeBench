@@ -62,7 +62,8 @@ default 8 MiB stack can hold. On deep files a correct `sat` model segfaulted the
 the pool broke, no score file was written, and the outer judge reported a valid 0 for the whole
 submission (`correct=0/0`). Validation now runs in a thread with a 2 GiB stack (address space; pages
 are committed as the recursion reaches them) and a recursion limit of 1,000,000. A formula deeper
-than that was rejected cleanly for the one shape tested. If the validator cannot start its thread or
+than that is rejected as an invalid model, in every shape tested; five `sat` files could need more if a
+model visits all their definitions, though three real models on them passed. If the validator cannot start its thread or
 runs out of memory, the evaluation now ends instead of rejecting the model. And if the evaluator
 exits with anything but 0 or 2 and no score file, the result is now invalid rather than a valid 0. A
 build failure, a missing `solve` and a preflight rejection stay a valid 0 (the missing `solve` exit
@@ -74,7 +75,9 @@ from a submission that built and ran) and models rejected because of the old rec
 because the validator ran out of memory. Other validation verdicts are unchanged, provided the host can reserve 2 GiB of address space per
 validation, while timed reruns can vary. With a 1 GiB or unlimited stack the old judge did not crash
 on the one model tested and rejected it instead. On one worker at a time, at 8 CPUs and 7 GiB, a real solver goes from 0.00 to 46.58 and from 0.00 to 46.45; failure-path
-controls and a replay fixture with correct models on 42 files are unchanged. Source, Deviations and
+controls and a replay fixture with correct models on 42 files are unchanged. The same solver with the
+crashing files answered `unknown` counts 325/774 correct on both judges (45.84 and 45.58), and of its 367
+models, 362 get identical verdicts and the other 5 are the crashes. Source, Deviations and
 Regression summary describe 1.0.0. Issue: https://github.com/ByteDance-Seed/EdgeBench/issues/42
 
 ## Known issues
