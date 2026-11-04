@@ -56,9 +56,9 @@ The judge ran 8 cases at once on the official 4 CPUs, against SCHEMA's rule that
 sizes its pool with `SFORGE_CPUS`, so a case that searches until its own deadline got about half
 the CPU that 4 cases at once give it. The pool is now `min(8, SFORGE_CPUS, cases)`; `SFORGE_CPUS`
 must be a positive integer, and 4 applies only when it is absent. Deterministic solutions that
-produce the same output and finish on both judges keep their scores. The two deadline-based files
-measured gained 3.32-5.48 of 100 across nine matched pairs with 4 vCPUs online and one judge at a
-time; other resource conditions gave other gains, and there is no mapping from old scores, so
+produce the same output and finish on both judges keep their scores. The seven deadline-based files
+measured gained 3.65-10.86 of 100 across ten pairs with 4 vCPUs online and one judge at a
+time, and no case was lost on either judge; other resource conditions gave other gains, and there is no mapping from old scores, so
 regrade before comparing with v1 leaderboard entries. The
 longest measured grade at 4 CPUs is 390.8 s (every solver timing out), so `timeout_sec` stays 600
 for 4 CPUs; a smaller `sforge eval --judge-cpu-limit` needs a larger timeout. Known issue 3 stays: limits are
