@@ -24,7 +24,7 @@ Sibling of `schemathesis_config_modernization` (same task authors, same recipe).
   (hatchling 1.30.1). The editable install comes out byte-identical to v1's. Base: `bases/python`.
 - `judge/structured_result.py`, `judge/write_result.py`, `judge/run.sh`: v1's eval program and
   parser, shared with the sibling task.
-- `instruction.md`: v1's prompt, verbatim.
+- `instruction.md`: v1's prompt, verbatim in 1.0.0; 1.0.1 adds the Target 1 interface.
 
 ## Deviations from v1
 
@@ -51,6 +51,16 @@ range only from 0.3235 to 0.6718; the submissions below cover that range.
 | historical 1–5 | 0.400427, 0.461111, 0.55, 0.614103, 0.671795 | same |
 
 Every row is valid, matches exactly with zero spread, and has identical per-phase summaries.
+
+## Changes
+
+### 1.0.1
+
+`TODO.md` does not give the module path, names or format keys that hidden Phase 1 imports, or the
+literal Range forms it checks, so a module that follows the requirements with other names scores 0
+of 15 on Phase 1 (15.38 of 100 points). `instruction.md` now states them. The judge
+and work images are unchanged (same tags), so grading is unchanged. `TODO.md` stays as in v1
+because the work image pins v1's commit.
 
 ## Known issues
 

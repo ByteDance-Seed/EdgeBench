@@ -4,7 +4,7 @@ name = "Schemathesis Datagen Pipeline"
 category = "Systems & Software Engineering"
 language = "Python"
 description = "Implement eight feature targets in the Schemathesis Python API testing framework, including structured HTTP header generation strategies, coverage-phase hooks, discriminator-aware validation and data generation, and schema-driven code generation fixes."
-version = "1.0.0"
+version = "1.0.1"
 status = "migrated"
 
 [environment]
