@@ -4,7 +4,7 @@ const base = '/EdgeBench/'
 
 export default defineConfig({
   title: 'SForge',
-  description: 'Code Agent Evaluation Framework',
+  description: 'Evaluation harness for long-horizon agent tasks',
   base,
 
   locales: {
@@ -19,7 +19,7 @@ export default defineConfig({
           { text: 'Examples', link: '/en/examples/single-task-docker' },
           { text: 'Configuration', link: '/en/configuration/environment-variables' },
           { text: 'Features', link: '/en/features/iterative-evaluation' },
-          { text: 'Developer', link: '/en/tasks/integration-guide' },
+          { text: 'Developer', link: '/en/tasks/task-format' },
           { text: 'Reference', link: '/en/reference/cli' },
         ],
         sidebar: {
@@ -55,15 +55,14 @@ export default defineConfig({
                 { text: 'Iterative Evaluation Framework', link: '/en/features/iterative-evaluation' },
                 { text: 'Network Isolation', link: '/en/features/network-isolation' },
                 { text: 'Game Mode', link: '/en/features/game-mode' },
-                { text: 'Visualizer', link: '/en/features/visualizer' },
+                { text: 'Viewer and Replay', link: '/en/features/viewer' },
               ],
             },
             {
               text: 'Developer',
               items: [
-                { text: 'Benchmark & Task Integration', link: '/en/tasks/integration-guide' },
-                { text: 'Test Output Parsers', link: '/en/tasks/parsers' },
-                { text: 'Container Registry', link: '/en/features/docker-registry' },
+                { text: 'Task Format', link: '/en/tasks/task-format' },
+                { text: 'Pre-built Images', link: '/en/features/prebuilt-images' },
                 { text: 'Judge HTTP API', link: '/en/reference/judge-api' },
               ],
             },
@@ -89,7 +88,7 @@ export default defineConfig({
           { text: '示例', link: '/zh/examples/single-task-docker' },
           { text: '配置', link: '/zh/configuration/environment-variables' },
           { text: '功能', link: '/zh/features/iterative-evaluation' },
-          { text: '开发者', link: '/zh/tasks/integration-guide' },
+          { text: '开发者', link: '/zh/tasks/task-format' },
           { text: '参考', link: '/zh/reference/cli' },
         ],
         sidebar: {
@@ -125,15 +124,14 @@ export default defineConfig({
                 { text: '迭代评测框架', link: '/zh/features/iterative-evaluation' },
                 { text: '网络隔离', link: '/zh/features/network-isolation' },
                 { text: '游戏模式', link: '/zh/features/game-mode' },
-                { text: '可视化工具', link: '/zh/features/visualizer' },
+                { text: '结果查看与回放', link: '/zh/features/viewer' },
               ],
             },
             {
               text: '开发者',
               items: [
-                { text: 'Benchmark 与任务接入', link: '/zh/tasks/integration-guide' },
-                { text: '测试输出解析器', link: '/zh/tasks/parsers' },
-                { text: '容器镜像仓库', link: '/zh/features/docker-registry' },
+                { text: '任务格式', link: '/zh/tasks/task-format' },
+                { text: '预构建镜像', link: '/zh/features/prebuilt-images' },
                 { text: 'Judge HTTP API', link: '/zh/reference/judge-api' },
               ],
             },

@@ -1,0 +1,10 @@
+---
+source: cas-cli/src/ui/components/snapshot_tests.rs
+expression: tf.output()
+---
++-------+-------+
+| Name  | Value |
++-------+-------+
+| alpha | 1     |
+| beta  | 2     |
++-------+-------+

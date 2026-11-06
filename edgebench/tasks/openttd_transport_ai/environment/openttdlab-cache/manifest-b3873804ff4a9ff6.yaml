@@ -1,0 +1,17 @@
+name: stable
+category: opengfx
+version: 7.1
+date: 2021-09-25T14:43:00-00:00
+base: opengfx-7.1-
+files:
+- id: opengfx-7.1-all.zip
+  size: 3547160
+  md5sum: f3cd9de89db7caf37a2e5c4c70fb1304
+  sha1sum: 47b1fec43c5e188ae62cab66b104782a96861ffe
+  sha256sum: 928fcf34efd0719a3560cbab6821d71ce686b6315e8825360fba87a7a94d7846
+dev_files:
+- id: opengfx-7.1-source.tar.xz
+  size: 9828168
+  md5sum: 32494e13eb9fc59c35da75c8843e4e33
+  sha1sum: da8168ecb76cce30c6ce57082e4fbe9cf78c09a9
+  sha256sum: 5322524ffd854cb65d1a4f156d84a3573c4156d08c3757aafd1b8fa3cda41f5a

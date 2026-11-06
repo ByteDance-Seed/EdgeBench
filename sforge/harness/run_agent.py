@@ -31,6 +31,7 @@ from __future__ import annotations
 import io
 import json
 import shlex
+import shutil
 import signal
 import tarfile as _tarfile
 import threading
@@ -45,18 +46,25 @@ import requests
 
 from sforge.harness.agent import Agent
 from sforge.harness.backend import ContainerBackend, ContainerHandle
-from sforge.harness.config import SForgeConfig, sanitize_e2b_proxy_env
-from sforge.harness.constants import get_admin_secret
+from sforge.harness.config import SForgeConfig, resource_env, sanitize_e2b_proxy_env
+from sforge.harness.constants import CONTAINER_DIR, get_admin_secret
 from sforge.harness.docker_build import (
     close_logger,
     setup_logger,
 )
+from sforge.harness.llm_gateway import PLACEHOLDER_KEY as GATEWAY_PLACEHOLDER_KEY
+from sforge.harness.llm_gateway import ROUTE_PREFIX as GATEWAY_ROUTE
+from sforge.harness.network_isolation import is_ip_address, resolve_hostname
 from sforge.harness.evolve_scripts import (
     generate_evolve_prompt,
     generate_game_prompt,
     generate_submit_script,
 )
+from sforge.harness.tarutil import safe_extractall
 from sforge.harness.task_spec import TaskSpec
+
+# How often native agent session files are mirrored into the run log dir.
+SESSION_SYNC_INTERVAL = 60
 
 
 @dataclass
@@ -64,7 +72,7 @@ class RunResult:
     """Result of running an agent on a task."""
 
     archive: bytes = b""
-    best_pass_rate: float = 0.0
+    best_score_0_100: float | None = None
     best_score: float | None = None
     best_round: str = ""
     total_rounds: int = 0
@@ -74,10 +82,11 @@ class RunResult:
     timed_out: bool = False
     runtime_seconds: float = 0.0
     resume_count: int = 0
+    usage: dict | None = None  # LLM gateway totals (tokens, requests, by model)
 
     def to_dict(self) -> dict:
         d = {
-            "best_pass_rate": self.best_pass_rate,
+            "best_score_0_100": self.best_score_0_100,
             "best_round": self.best_round,
             "total_rounds": self.total_rounds,
             "agent_submissions": self.agent_submissions,
@@ -89,6 +98,8 @@ class RunResult:
         }
         if self.best_score is not None:
             d["best_score"] = self.best_score
+        if self.usage is not None:
+            d["usage"] = self.usage
         return d
 
 
@@ -125,30 +136,11 @@ def _build_agent_env(
     if effective_model and agent.model_env:
         env[agent.model_env] = effective_model
 
-    if config.nodejs_mirror_url:
-        env["SFORGE_NODEJS_MIRROR_URL"] = config.nodejs_mirror_url
-    if config.npm_registry_url:
-        env["npm_config_registry"] = config.npm_registry_url
-
     env.update(config.agent_extra_env)
 
     agent.augment_env(env, model)
 
     return env
-
-
-def _e2b_install_env(env: dict[str, str], agent: Agent) -> dict[str, str]:
-    """Keep only non-secret values required while installing the agent."""
-    allowed = {
-        "http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY",
-        "no_proxy", "NO_PROXY", "SFORGE_NODEJS_MIRROR_URL",
-        "npm_config_registry",
-    }
-    if agent.api_base_env:
-        allowed.add(agent.api_base_env)
-    if agent.model_env:
-        allowed.add(agent.model_env)
-    return {key: value for key, value in env.items() if key in allowed}
 
 
 # ---------------------------------------------------------------------------
@@ -168,13 +160,15 @@ def _install_tools(
     """Install sforge-submit and agent stop hooks."""
 
     # 1. Install sforge-submit script
-    submit_script = generate_submit_script()
+    submit_script = generate_submit_script(
+        task_spec.cwd, task_spec.submit_paths, task_spec.submit_exclude,
+    )
     local_submit = log_dir / "_sforge-submit.sh"
     local_submit.write_text(submit_script)
     backend.copy_to_container(
         handle, local_submit, PurePosixPath("/usr/local/bin/sforge-submit")
     )
-    backend.exec_run(handle, "chmod a+x /usr/local/bin/sforge-submit", user="root")
+    backend.exec_run(handle, "chmod a+x /usr/local/bin/sforge-submit")
     logger.info("Installed sforge-submit script")
 
     # 2. Install agent-specific stop hook (unless disabled)
@@ -192,9 +186,7 @@ def _extract_archive_from_container(
     shutdown_event: threading.Event | None = None,
 ) -> bytes:
     """Extract the current submission archive from a running work container."""
-    remote_archive = PurePosixPath(
-        f"/tmp/.sforge-submission-{uuid.uuid4().hex}.tar.gz"
-    )
+    remote_archive = CONTAINER_DIR / f"submission-{uuid.uuid4().hex}.tar.gz"
     path_checks = "\n".join(
         "if [[ -e {path} || -L {path} ]]; then "
         "submit_paths+=({path}); fi".format(path=shlex.quote(path))
@@ -214,41 +206,129 @@ else
     tar czf {shlex.quote(str(remote_archive))} --files-from /dev/null
 fi
 """
+    return _tar_out_of_container(
+        backend, handle, tar_cmd, remote_archive, "submission archive",
+        shutdown_event=shutdown_event,
+    )
+
+
+def _tar_out_of_container(
+    backend: ContainerBackend,
+    handle: ContainerHandle,
+    tar_cmd: str,
+    remote: PurePosixPath,
+    what: str,
+    *,
+    shutdown_event: threading.Event | None = None,
+) -> bytes:
+    """Run *tar_cmd* (which writes *remote*) in the container, copy the file
+    out and return its bytes. The remote file is removed afterwards."""
     try:
         result = backend.exec_run_with_exit_code(
             handle, ["/bin/bash", "-c", tar_cmd], timeout=300,
         )
         if result.timed_out:
-            raise RuntimeError("Timed out while creating the submission archive")
+            raise RuntimeError(f"Timed out while creating the {what}")
         if result.exit_code != 0:
-            raise RuntimeError(
-                "Could not create the submission archive: "
-                + result.output[-4000:]
-            )
+            raise RuntimeError(f"Could not create the {what}: " + result.output[-4000:])
         if backend.backend_name == "e2b":
             raw = backend.copy_from_container(
-                handle, remote_archive, shutdown_event=shutdown_event,
+                handle, remote, shutdown_event=shutdown_event,
             )
         else:
-            raw = backend.copy_from_container(handle, remote_archive)
+            raw = backend.copy_from_container(handle, remote)
     finally:
         try:
-            backend.exec_run(
-                handle, ["rm", "-f", str(remote_archive)], user="root",
-            )
+            backend.exec_run(handle, ["rm", "-f", str(remote)])
         except Exception:
             pass
     with _tarfile.open(fileobj=io.BytesIO(raw)) as outer:
         members = [member for member in outer.getmembers() if member.isfile()]
         if len(members) != 1:
             raise RuntimeError(
-                f"Unexpected archive wrapper: expected 1 file, got {len(members)}"
+                f"Unexpected {what} wrapper: expected 1 file, got {len(members)}"
             )
         source = outer.extractfile(members[0])
         if source is None:
-            raise RuntimeError("Could not read the submission archive wrapper")
-        archive = source.read()
-    return archive
+            raise RuntimeError(f"Could not read the {what} wrapper")
+        return source.read()
+
+
+def _sync_agent_sessions(
+    backend: ContainerBackend,
+    handle: ContainerHandle,
+    agent: Agent,
+    log_dir: Path,
+    shutdown_event: threading.Event | None = None,
+) -> None:
+    """Mirror the agent's native session files into ``log_dir/sessions``
+    (container paths kept, e.g. ``sessions/root/.claude/projects/...``).
+
+    These JSONL transcripts are the source of truth for trajectories and
+    token usage; ``agent_output.txt`` (stdout) is only a log.
+    """
+    if not agent.session_dirs:
+        return
+    rel = " ".join(shlex.quote(d.lstrip("/")) for d in agent.session_dirs)
+    probe = f'cd / && for d in {rel}; do [ -e "$d" ] && exit 0; done; exit 1'
+    if backend.exec_run(handle, ["/bin/sh", "-c", probe]).exit_code != 0:
+        return  # agent has not written a session yet
+    remote = CONTAINER_DIR / f"sessions-{uuid.uuid4().hex}.tar.gz"
+    tar_cmd = (
+        f"cd / && tar czf {remote} --ignore-failed-read "
+        f"$(ls -d {rel} 2>/dev/null) 2>/dev/null; test -f {remote}"
+    )
+    data = _tar_out_of_container(
+        backend, handle, tar_cmd, remote, "session archive",
+        shutdown_event=shutdown_event,
+    )
+    dest = log_dir / "sessions"
+    staging = log_dir / ".sessions.partial"
+    shutil.rmtree(staging, ignore_errors=True)
+    staging.mkdir()
+    with _tarfile.open(fileobj=io.BytesIO(data)) as tar:
+        safe_extractall(tar, staging)
+    old = log_dir / ".sessions.old"
+    shutil.rmtree(old, ignore_errors=True)
+    if dest.exists():
+        dest.rename(old)
+    staging.rename(dest)
+    shutil.rmtree(old, ignore_errors=True)
+
+
+def _session_sync_loop(
+    backend: ContainerBackend,
+    handle: ContainerHandle,
+    agent: Agent,
+    log_dir: Path,
+    stop_event: threading.Event,
+    logger,
+) -> None:
+    while not stop_event.wait(SESSION_SYNC_INTERVAL):
+        try:
+            _sync_agent_sessions(backend, handle, agent, log_dir, stop_event)
+        except Exception as e:
+            logger.warning("Session sync failed: %s", e)
+
+
+def _route_through_gateway(
+    env: dict[str, str],
+    agent: Agent,
+    upstream: str | None,
+    api_key: str | None,
+    gateway: str,
+) -> None:
+    """Point the agent at the LLM gateway: every occurrence of the upstream
+    URL becomes the gateway URL and the real key becomes a placeholder the
+    gateway swaps back, so the key never enters the sandbox."""
+    for name, value in list(env.items()):
+        if api_key and api_key in value:
+            value = value.replace(api_key, GATEWAY_PLACEHOLDER_KEY)
+        if upstream and upstream.rstrip("/") in value:
+            value = value.replace(upstream.rstrip("/"), gateway)
+        env[name] = value
+    if agent.api_base_env:
+        env[agent.api_base_env] = gateway
 
 
 def _auto_eval_loop(
@@ -318,6 +398,7 @@ def run_agent(
     model: str | None = None,
     timeout: int | None = None,
     judge_url: str = "http://host.docker.internal:8080",
+    host_judge_url: str | None = None,
     eval_interval: int = 300,
     disable_stop_hook: bool = False,
     disable_auto_eval: bool = False,
@@ -330,7 +411,8 @@ def run_agent(
 ) -> RunResult:
     """Run an agent on a task with iterative evaluation.
 
-    Requires a running judge server (started via `sforge serve`).
+    ``judge_url`` is how containers reach the judge server; ``host_judge_url``
+    is how this process does (derived from ``judge_url`` when not given).
 
     1. Build work + judge images
     2. Create work container (with judge URL in env)
@@ -350,7 +432,9 @@ def run_agent(
 
     # judge_url is for container use; derive a host-local URL for registration/polling
     parsed_judge = urlparse(judge_url)
-    if parsed_judge.hostname == "host.docker.internal":
+    if host_judge_url:
+        pass
+    elif parsed_judge.hostname == "host.docker.internal":
         host_judge_url = judge_url.replace("host.docker.internal", "127.0.0.1")
     elif backend.backend_name == "k8s":
         # judge_url points to VPC IP (for pods); host talks to judge server locally
@@ -360,7 +444,8 @@ def run_agent(
 
     handle = None
     net_isolation = None
-    install_parts: list[str] = []
+    auto_eval_stop = None
+    session_stop = threading.Event()
     admin_secret = ""
 
     try:
@@ -375,10 +460,9 @@ def run_agent(
             if not backend.image_exists(image_key):
                 if backend.backend_name == "e2b":
                     raise RuntimeError(
-                        f"E2B Template for {image_key!r} was not found. Make sure "
-                        "the task uses a published image version with an official "
-                        "Template and SFORGE_E2B_TEMPLATE_NAMESPACE is set, or "
-                        "point SFORGE_E2B_TEMPLATE_MAP at a self-built Template."
+                        f"E2B Template for {image_key!r} was not found. Build it from "
+                        "the task's pre-built image and set SFORGE_E2B_TEMPLATE_NAMESPACE "
+                        "or SFORGE_E2B_TEMPLATE_MAP (see the E2B backend docs)."
                     )
                 raise RuntimeError(
                     f"Image '{image_key}' not found. Run `sforge pull --task {task_spec.task_id}` to fetch from registry, or `sforge build --task {task_spec.task_id}` to build locally."
@@ -386,7 +470,11 @@ def run_agent(
         logger.info("Images ready")
 
         # 1b. Register session with judge server
-        reg_body: dict = {"task_id": task_spec.task_id, "run_id": run_id, "admin_secret": admin_secret}
+        upstream_api_url = config.agent_api_base_url or agent.default_api_base_url
+        reg_body: dict = {
+            "task_id": task_spec.task_id, "run_id": run_id, "admin_secret": admin_secret,
+            "llm_base_url": upstream_api_url, "llm_api_key": config.agent_api_key,
+        }
         if config.judge_cpu_limit is not None:
             reg_body["judge_cpu_limit"] = config.judge_cpu_limit
         if config.judge_mem_limit is not None:
@@ -407,7 +495,6 @@ def run_agent(
             reg_body["backend"] = "e2b"
             reg_body["e2b_template_map"] = config.e2b_template_map
             reg_body["e2b_template_namespace"] = config.e2b_template_namespace
-            reg_body["e2b_sandbox_ttl"] = config.e2b_sandbox_ttl
         for _reg_attempt in range(1, 6):
             try:
                 reg_resp = requests.post(
@@ -425,22 +512,25 @@ def run_agent(
                 time.sleep(wait)
         session_token = reg_resp.json()["token"]
         logger.info("Registered session with judge server")
+        # The agent reaches the model through the judge server's LLM gateway.
+        api_url = f"{judge_url.rstrip('/')}{GATEWAY_ROUTE}/{session_token}"
 
         # 2. Create container
         container_name = f"sforge.run.{task_spec.task_id}.{run_id}"
 
-        backend.remove_container_by_name(container_name)
+        backend.remove_container_by_name(container_name, task_spec.work_image_key)
 
         env = _build_agent_env(agent, model)
-        if backend.backend_name == "e2b":
-            sanitize_e2b_proxy_env(env, internet=internet)
+        _route_through_gateway(env, agent, upstream_api_url, config.agent_api_key, api_url)
+        if not internet:
+            # Isolated sandboxes only talk to the judge (which forwards model
+            # traffic itself), so host proxies have no business in there.
+            for name in ("http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY"):
+                env.pop(name, None)
+        elif backend.backend_name == "e2b":
+            sanitize_e2b_proxy_env(env)
         env["SFORGE_JUDGE_URL"] = judge_url
         env["SFORGE_TOKEN"] = session_token
-        env["SFORGE_PATCH_DIR"] = task_spec.cwd
-        env["SFORGE_SUBMIT_PATHS"] = " ".join(task_spec.submit_paths)
-        env["SFORGE_SUBMIT_EXCLUDE_FLAGS"] = " ".join(
-            f"--exclude={e}" for e in task_spec.submit_exclude
-        )
 
         if task_spec.game_mode:
             game_api_base = (
@@ -461,91 +551,75 @@ def run_agent(
         container_cap_drop: list[str] = []
 
         if not internet and backend.backend_name == "docker":
-            # Docker-only preflight: isolation runs as host iptables rules, so
-            # it needs sudo and conflicts with host proxy env leaking into the
-            # container. Remote backends (k8s, e2b) isolate inside the cluster/
-            # provider and are unaffected by either.
+            # Docker-only preflight: isolation runs as host iptables rules.
             from sforge.harness.network_isolation import (
                 check_iptables_permission,
             )
 
-            if config.http_proxy or config.https_proxy:
-                raise RuntimeError(
-                    "Network isolation (internet=false) is not compatible with "
-                    "direct proxy configuration. Start a local API proxy first:\n"
-                    "  python -m sforge proxy --target <YOUR_API_URL>\n"
-                    "Then set SFORGE_AGENT_API_BASE_URL="
-                    "http://host.docker.internal:9090 "
-                    "and unset HTTP_PROXY/HTTPS_PROXY before running."
-                )
             if not check_iptables_permission():
                 raise RuntimeError(
                     "Network isolation requires sudo iptables access. "
                     "Ensure passwordless sudo is configured for iptables."
                 )
 
+        # Pin the API host for every task, not just isolated ones: sandbox DNS
+        # may resolve it to an unreachable address, and a host-side /etc/hosts
+        # override (e.g. a tunnel endpoint) can only reach the sandbox this way.
+        api_host = urlparse(api_url).hostname or ""
+        if (
+            not backend.uses_hostname_egress
+            and api_host
+            and api_host != "host.docker.internal"
+            and not is_ip_address(api_host)
+        ):
+            try:
+                resolved_ips = resolve_hostname(api_host, logger)
+            except RuntimeError:
+                if not internet:
+                    raise
+                resolved_ips = []
+                logger.warning(f"Could not pre-resolve {api_host}; sandbox DNS will be used")
+            if resolved_ips:
+                container_extra_hosts[api_host] = resolved_ips[0]
+
         if not internet:
-            from sforge.harness.network_isolation import (
-                is_ip_address,
-                resolve_hostname,
-            )
-
-            api_url = config.agent_api_base_url or agent.default_api_base_url
-            if api_url:
-                api_host = urlparse(api_url).hostname or ""
-                if (
-                    backend.backend_name != "e2b"
-                    and api_host
-                    and api_host != "host.docker.internal"
-                    and not is_ip_address(api_host)
-                ):
-                    resolved_ips = resolve_hostname(api_host, logger)
-                    if resolved_ips:
-                        container_extra_hosts[api_host] = resolved_ips[0]
-
             container_cap_drop = ["NET_RAW"]
             logger.info("Network isolation enabled: preflight passed")
 
         cpu = config.work_cpu_limit if config.work_cpu_limit is not None else task_spec.work.cpu_limit
         mem = config.work_mem_limit if config.work_mem_limit is not None else task_spec.work.mem_limit
+        env.update(resource_env(cpu, mem))
 
         handle = backend.create_container(
             task_spec.work_image_key,
             container_name,
-            environment=(
-                _e2b_install_env(env, agent)
-                if backend.backend_name == "e2b" else env
-            ),
+            environment=env,
             extra_hosts=container_extra_hosts,
             cap_drop=container_cap_drop or None,
             cpu_limit=cpu,
             mem_limit=mem,
-            # E2B execs default to the SDK's "user" account rather than the
-            # image USER. Docker and Kubernetes retain the image default.
-            user="agent" if backend.backend_name == "e2b" else None,
         )
         backend.start_container(handle)
         logger.info(f"Container started: {container_name} (judge_url={judge_url})")
 
-        # 3. Install agent runtime
-        for i, cmd in enumerate(agent.install_cmds):
-            logger.info(
-                f"Install step {i + 1}/{len(agent.install_cmds)}: {cmd}"
+        # Some provider DNS returns poisoned answers for public domains (see
+        # Backend.public_dns); internet-enabled tasks then use public
+        # resolvers. Isolated tasks keep provider DNS (their whitelist pins
+        # hostnames via /etc/hosts).
+        public_dns = backend.public_dns
+        if internet and public_dns:
+            resolv = "".join(f"nameserver {ns}\n" for ns in public_dns)
+            # Public resolvers return AAAA records but sandboxes may have no
+            # IPv6 route; prefer IPv4 so v6-first clients don't burn timeouts.
+            fix = (
+                f"printf %s {shlex.quote(resolv)} > /etc/resolv.conf && "
+                "echo 'precedence ::ffff:0:0/96 100' >> /etc/gai.conf"
             )
-            result = backend.exec_run_with_exit_code(
-                handle, f"/bin/bash -c {shlex.quote(cmd)}", timeout=600
-            )
-            install_parts.append(result.output)
-            if result.timed_out:
-                raise RuntimeError(f"Install command timed out: {cmd}")
-            if result.exit_code != 0:
-                raise RuntimeError(
-                    f"Install command failed (exit {result.exit_code}): {cmd}\n{result.output}"
-                )
-            logger.info(f"Install step {i + 1} done ({result.elapsed_seconds:.1f}s)")
+            backend.exec_run(handle, ["/bin/bash", "-c", fix])
+            logger.info(f"Sandbox DNS switched to public resolvers: {', '.join(public_dns)}")
 
-        (log_dir / "install_output.txt").write_text("\n".join(install_parts))
-        logger.info("Agent installation complete")
+        # 3. Install agent runtime
+        agent.install(backend, handle, logger)
 
         # 4. Install tools.
         #    Game-mode tasks skip sforge-submit (scoring is built into the
@@ -595,26 +669,25 @@ def run_agent(
                     "Cannot determine gateway IP for network isolation"
                 )
 
-            effective_api_url = config.agent_api_base_url or agent.default_api_base_url
             endpoints = build_allowed_endpoints(
-                judge_url, effective_api_url, gateway_ip, logger,
-                resolve_hostnames=backend.backend_name != "e2b",
+                judge_url, api_url, gateway_ip, logger,
+                resolve_hostnames=not backend.uses_hostname_egress,
             )
             net_isolation = backend.create_network_isolation(handle, endpoints, logger)
             net_isolation.apply()
 
         # 5. Write prompt
         if task_spec.game_mode:
-            prompt = generate_game_prompt(task_spec.work.agent_query, internet=internet)
+            prompt = generate_game_prompt(task_spec.work.instruction, internet=internet)
         else:
             prompt = generate_evolve_prompt(
-                task_spec.work.agent_query,
+                task_spec.work.instruction,
                 submit_paths=task_spec.submit_paths,
                 internet=internet,
                 max_submissions=max_submissions,
                 submission_cooldown=submission_cooldown,
             )
-        prompt_path = "/tmp/agent_prompt.md"
+        prompt_path = f"{CONTAINER_DIR}/prompt.md"
         local_prompt = log_dir / "agent_prompt.md"
         local_prompt.write_text(prompt)
         backend.copy_to_container(handle, local_prompt, PurePosixPath(prompt_path))
@@ -631,6 +704,12 @@ def run_agent(
         agent_live_log = log_dir / "agent_output.txt"
         MIN_RUNTIME_FOR_RESUME = 1
         MAX_RESUMES = 100
+
+        threading.Thread(
+            target=_session_sync_loop,
+            args=(backend, handle, agent, log_dir, session_stop, logger),
+            daemon=True,
+        ).start()
 
         started_at = time.time()
         from datetime import datetime
@@ -695,10 +774,15 @@ def run_agent(
             f"resumes={resume_count}"
         )
 
-        # 7. Stop auto-eval thread before extracting final archive
+        # 7. Stop background threads before extracting final state
         if auto_eval_stop is not None:
             auto_eval_stop.set()
             logger.info("Auto-eval thread stopped")
+        session_stop.set()
+        try:
+            _sync_agent_sessions(backend, handle, agent, log_dir)
+        except Exception as e:
+            logger.warning(f"Final session sync failed: {e}")
 
         # 8. Extract final archive (tar of submit_paths)
         try:
@@ -743,14 +827,13 @@ def run_agent(
             best_score = (
                 float(best_score_raw) if best_score_raw is not None else None
             )
-            best_pass_rate_raw = history.get("best_pass_rate", 0.0)
-            best_pass_rate = float(best_pass_rate_raw) if best_pass_rate_raw else 0.0
+            best_score_0_100 = history.get("best_score_0_100")
             best_round = history.get("best_round", "")
             total_rounds = len(game_entries)
 
             result = RunResult(
                 archive=final_archive,
-                best_pass_rate=best_pass_rate,
+                best_score_0_100=best_score_0_100,
                 best_score=best_score,
                 best_round=best_round,
                 total_rounds=total_rounds,
@@ -766,27 +849,9 @@ def run_agent(
                 f"sessions={total_rounds}, resumes={resume_count}, runtime={runtime:.1f}s"
             )
         else:
-            # Save debug artifacts from container (non-authoritative, best-effort)
-            try:
-                state_result = backend.exec_run_with_timeout(
-                    handle,
-                    [
-                        "/bin/bash",
-                        "-c",
-                        "cat /tmp/sforge_state.json 2>/dev/null || echo '{}'",
-                    ],
-                    timeout=10,
-                )
-                state = json.loads(state_result.output.strip())
-                (log_dir / "evolve_state.json").write_text(
-                    json.dumps(state, indent=2, ensure_ascii=False)
-                )
-            except Exception:
-                logger.warning("Failed to read state file from container")
-
             # Stop work container processes
             try:
-                backend.exec_run(handle, "kill 1 2>/dev/null || true", user="root")
+                backend.exec_run(handle, "kill 1 2>/dev/null || true")
                 logger.info("Work container processes stopped")
             except Exception:
                 pass
@@ -823,7 +888,7 @@ def run_agent(
                 logger.warning("Failed to fetch run history from judge server")
                 history = {
                     "run_id": run_id, "best_score": None,
-                    "best_pass_rate": 0.0, "best_round": "",
+                    "best_round": "",
                     "agent_submissions": 0, "auto_submissions": 0,
                     "entries": [],
                 }
@@ -832,7 +897,7 @@ def run_agent(
                 json.dumps(history, indent=2, ensure_ascii=False)
             )
 
-            best_pass_rate = history.get("best_pass_rate", 0.0)
+            best_score_0_100 = history.get("best_score_0_100")
             best_score_raw = history.get("best_score")
             best_score = (
                 float(best_score_raw) if best_score_raw is not None else None
@@ -844,7 +909,7 @@ def run_agent(
 
             result = RunResult(
                 archive=final_archive,
-                best_pass_rate=best_pass_rate,
+                best_score_0_100=best_score_0_100,
                 best_score=best_score,
                 best_round=best_round,
                 total_rounds=total_rounds,
@@ -857,11 +922,22 @@ def run_agent(
             )
 
             logger.info(
-                f"Done: best={result.best_pass_rate:.2%} "
+                f"Done: best={result.best_score_0_100} "
                 f"(round {result.best_round!r}), "
                 f"agent_subs={agent_subs}, auto_subs={auto_subs}, "
                 f"resumes={resume_count}, runtime={runtime:.1f}s"
             )
+        try:
+            usage_resp = requests.get(
+                f"{host_judge_url}/api/v1/usage",
+                params={"token": session_token, "admin_secret": admin_secret},
+                timeout=30,
+            )
+            usage_resp.raise_for_status()
+            result.usage = usage_resp.json()
+            logger.info(f"LLM usage: {json.dumps({k: v for k, v in result.usage.items() if k != 'by_model'})}")
+        except Exception as e:
+            logger.warning(f"Could not fetch LLM usage: {e}")
         return result
 
     except KeyboardInterrupt:
@@ -870,11 +946,16 @@ def run_agent(
         # Stop auto-eval thread
         if auto_eval_stop is not None:
             auto_eval_stop.set()
+        session_stop.set()
 
         # Try to extract archive from the container before it's destroyed
         interrupted_archive = b""
         try:
             if handle is not None:
+                try:
+                    _sync_agent_sessions(backend, handle, agent, log_dir)
+                except Exception:
+                    pass
                 interrupted_archive = _extract_archive_from_container(
                     backend, handle, task_spec,
                 )
@@ -895,7 +976,7 @@ def run_agent(
         except Exception:
             history = {
                 "run_id": run_id, "best_score": None,
-                "best_pass_rate": 0.0, "best_round": "",
+                "best_round": "",
                 "agent_submissions": 0, "auto_submissions": 0,
                 "entries": [],
             }
@@ -904,7 +985,7 @@ def run_agent(
             json.dumps(history, indent=2, ensure_ascii=False)
         )
 
-        best_pass_rate = history.get("best_pass_rate", 0.0)
+        best_score_0_100 = history.get("best_score_0_100")
         best_score_raw = history.get("best_score")
         best_score = float(best_score_raw) if best_score_raw is not None else None
         best_round = history.get("best_round", "")
@@ -913,14 +994,14 @@ def run_agent(
         total_rounds = agent_subs + auto_subs
 
         logger.info(
-            f"Interrupted results: best={best_pass_rate:.2%} "
+            f"Interrupted results: best={best_score_0_100} "
             f"(round {best_round!r}), "
             f"agent_subs={agent_subs}, auto_subs={auto_subs}"
         )
 
         return RunResult(
             archive=interrupted_archive,
-            best_pass_rate=best_pass_rate,
+            best_score_0_100=best_score_0_100,
             best_score=best_score,
             best_round=best_round,
             total_rounds=total_rounds,
@@ -945,21 +1026,21 @@ def run_agent(
             )
             history_resp.raise_for_status()
             history = history_resp.json()
-            best_pass_rate = history.get("best_pass_rate", 0.0)
+            best_score_0_100 = history.get("best_score_0_100")
             best_score_raw = history.get("best_score")
             best_score = float(best_score_raw) if best_score_raw is not None else None
             best_round = history.get("best_round", "")
             agent_subs = history.get("agent_submissions", 0)
             auto_subs = history.get("auto_submissions", 0)
         except Exception:
-            best_pass_rate = 0.0
+            best_score_0_100 = None
             best_score = None
             best_round = ""
             agent_subs = 0
             auto_subs = 0
 
         return RunResult(
-            best_pass_rate=best_pass_rate,
+            best_score_0_100=best_score_0_100,
             best_score=best_score,
             best_round=best_round,
             total_rounds=agent_subs + auto_subs,
@@ -970,6 +1051,7 @@ def run_agent(
             resume_count=locals().get("resume_count", 0),
         )
     finally:
+        session_stop.set()
         if auto_eval_stop is not None:
             auto_eval_stop.set()
         if net_isolation is not None:

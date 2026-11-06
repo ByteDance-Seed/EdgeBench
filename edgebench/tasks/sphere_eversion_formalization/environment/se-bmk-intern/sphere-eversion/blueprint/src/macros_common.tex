@@ -1,0 +1,81 @@
+\newcommand{\co}{\!:}
+\newcommand{\define}[1]{\index{#1}\emph{#1}} % définition du mot #1
+\newcommand{\subdefine}[2]{\index{#1!#2}\emph{#2}} % définition du mot #2 comme sous-entrée de #1
+\newcommand{\definex}[2]{\index{#2}\emph{#1}} % affiche #1 index #2
+\newcommand{\subdefinex}[3]{\index{#2!#3}\emph{#1}} % affiche #1 index #3 comme sous-entrée de #2
+
+\newcommand{\image}[1]{{\centering\includegraphics{images/#1}\par}}
+
+\newcommand{\A}{\mathcal{A}} % un atlas
+\newcommand{\E}{\mathcal{E}} % un espace affine
+\newcommand{\Cinf}{C^\infty}
+\newcommand{\Rel}{\mathcal{R}} % une relation différentielle
+
+\newcommand{\rst}[2]{#1|_{#2}}
+\newcommand{\bigO}[1]{O\left(#1\right)}
+
+\DeclareMathOperator{\Diff}{Diff}
+\DeclareMathOperator{\Loop}{\mathcal{L}}
+\DeclareMathOperator{\Bij}{Bij}
+\DeclareMathOperator{\Aut}{Aut}
+\DeclareMathOperator{\Id}{Id}
+\DeclareMathOperator{\rk}{rk}
+\DeclareMathOperator{\GL}{GL}
+\DeclareMathOperator{\SO}{SO}
+\DeclareMathOperator{\SU}{SU}
+\DeclareMathOperator{\Lin}{L}
+\DeclareMathOperator{\Hom}{Hom}
+\DeclareMathOperator{\Bsym}{B_\mathrm{s}}
+\DeclareMathOperator{\Hess}{Hess}
+\DeclareMathOperator{\im}{im}
+\DeclareMathOperator{\coker}{coker}
+\DeclareMathOperator{\supp}{supp} % support
+\DeclareMathOperator{\ind}{ind} % indice d'un point critique
+\DeclareMathOperator{\sgn}{ε} % signature d'une permutation
+\DeclareMathOperator{\Alt}{Alt} % antisymétrisation
+\DeclareMathOperator{\Div}{div} % divergence
+\DeclareMathOperator{\tr}{tr} % trace
+\DeclareMathOperator{\pr}{pr} % une projection
+\DeclareMathOperator{\Int}{Int} % intérieur
+\DeclareMathOperator{\Conv}{Conv} % enveloppe convexe
+\DeclareMathOperator{\IntConv}{IntConv} % intérieur enveloppe convexe
+\DeclareMathOperator{\Conn}{Conn} % connected component
+\DeclareMathOperator{\Span}{Span} % sev engendré
+\DeclareMathOperator{\Gr}{Gr} % Grassmanienne
+\DeclareMathOperator{\CP}{CP} % Corrugation process
+\DeclareMathOperator{\Sec}{Sec} % Sections
+\DeclareMathOperator{\Hol}{Hol} % Holonomic sections
+\DeclareMathOperator{\codim}{codim} % codimension
+\DeclareMathOperator{\set}{\mathcal{P}} % powerset
+
+% Cohomologie de de Rham, version avec indice dR ou non
+%\newcommand{\HdR}[1][*]{H^{#1}_{\!\scriptscriptstyle d\!R}}
+%\newcommand{\HdRc}[1][*]{H^{#1}_{\!\scriptscriptstyle d\!R, c}}
+\newcommand{\HdR}[1][*]{H^{#1}}
+\newcommand{\HdRc}[1][*]{H^{#1}_c}
+
+\newcommand{\transp}[1]{#1^T}
+
+\newcommand{\eE}{\mathcal{E}}
+\newcommand{\fF}{\mathcal{F}}
+\newcommand{\tT}{\mathcal{T}}
+
+\newcommand{\X}{\mathfrak{X}} % champs de vecteurs
+
+\newcommand{\C}{C} % cube
+\newcommand{\F}{\mathcal{F}} % non-holonomic section
+\newcommand{\HH}{\mathcal{H}} % homotopy of non-holonomic section
+\newcommand{\G}{\mathcal{G}} % non-holonomic section
+
+\newcommand{\pt}{\mathrm{pt}} % point
+
+\DeclareMathOperator{\Op}{Op} % non-specified open neighborhood
+\DeclareMathOperator{\dCzero}{d_{C^0}} % C^0 distance
+\DeclareMathOperator{\dCone}{d_{C^1}} % C^1 distance
+\DeclareMathOperator{\bs}{bs} % base map of a jet bundle section
+
+% Linear maps between vector spaces
+\renewcommand{\L}[2]{L(#1, #2)}
+% Update a linear map #2 using dual pair #1 and vector #3
+\newcommand{\Upd}[3]{\Upsilon_{#1}\left(#2, #3\right)}
+\newcommand{\IT}[1]{\mathcal{I}_{#1}}

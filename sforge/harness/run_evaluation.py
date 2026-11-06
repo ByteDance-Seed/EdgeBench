@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Evaluation orchestration: extract archive in judge container, run tests, grade."""
+"""Evaluation: extract the submission in a fresh judge container, run the grader, read result.json."""
 
 from __future__ import annotations
 
@@ -22,24 +22,23 @@ import logging
 import time
 import traceback
 import uuid
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from sforge.harness.backend import ContainerBackend
 from sforge.harness.config import (
     SForgeConfig,
-    get_container_env,
-    sanitize_e2b_proxy_env,
+    resource_env,
 )
-from sforge.harness.constants import DOCKER_USER
 from sforge.harness.docker_build import (
     BuildImageError,
     build_judge_image,
     close_logger,
     setup_logger,
 )
-from sforge.harness.grading import EvalReport, grade_output
+from sforge.harness.grading import EvalReport, parse_result
 from sforge.harness.score_rescale import rescale_score
-from sforge.harness.task_spec import TaskSpec
+from sforge.harness.constants import CONTAINER_DIR
+from sforge.harness.task_spec import RESULT_PATH, TaskSpec
 
 
 class EvaluationError(Exception):
@@ -116,11 +115,10 @@ def judge_submission(
 
     1. Ensure judge image exists
     2. Create ephemeral container from judge image
-    3. Extract archive (tar.gz) into patch_dir
-    4. Inject eval.sh into container
-    5. Run eval script
-    6. Parse output, compute score
-    7. Cleanup container
+    3. Extract archive (tar.gz) into the task cwd
+    4. Run the grader (task.toml judge.cmd)
+    5. Read result.json, rescale the score
+    6. Cleanup container
 
     Args:
         archive: Raw bytes of a tar.gz containing submitted files.
@@ -131,7 +129,7 @@ def judge_submission(
         submission_id = uuid.uuid4().hex[:12]
 
     submitted_at = time.time()
-    timeout = timeout or task_spec.judge.eval_timeout
+    timeout = timeout or task_spec.judge.timeout
 
     # Set up logging
     if log_dir is None:
@@ -147,33 +145,35 @@ def judge_submission(
     )
 
     handle = None
+    isolation = None
     try:
         # 1. Ensure judge image exists (Docker builds locally; K8s requires pre-built images in CR)
         if backend.backend_name == "docker":
-            from sforge.harness.backend.docker_backend import DockerBackend
-            assert isinstance(backend, DockerBackend)
-            build_judge_image(task_spec, config, backend.client, force_rebuild=False)
+            build_judge_image(task_spec, config)
 
         # 2. Create + start ephemeral container
-        container_name = f"{task_spec.benchmark_name}.judge.{task_spec.task_id}.{submission_id}"
-        env = get_container_env(config, include_judge_extra=True)
-        if backend.backend_name == "e2b":
-            sanitize_e2b_proxy_env(env)
-        env.setdefault("SFORGE_JUDGE_URL", "http://host.docker.internal:8080")
+        container_name = f"sforge.judge.{task_spec.task_id}.{submission_id}"
+        # Graders run untrusted code: no model key, no proxies, nothing but
+        # what the operator explicitly passes via SFORGE_JUDGE_EXTRA_ENV.
+        env = dict(config.judge_extra_env)
         # Resolve resource limits: config > task defaults
         cpu = config.judge_cpu_limit if config.judge_cpu_limit is not None else task_spec.judge.cpu_limit
         mem = config.judge_mem_limit if config.judge_mem_limit is not None else task_spec.judge.mem_limit
+        env.update(resource_env(cpu, mem))
+        offline = not task_spec.judge.internet
         handle = backend.create_container(
             task_spec.judge_image_key,
             container_name,
             environment=env,
-            extra_hosts={"host.docker.internal": "host-gateway"},
             cpu_limit=cpu,
             mem_limit=mem,
-            user=DOCKER_USER,
+            network=not offline,
         )
         backend.start_container(handle)
-        logger.info(f"Judge container started: {handle.id}")
+        if offline and backend.backend_name != "docker":
+            isolation = backend.create_network_isolation(handle, [], logger)
+            isolation.apply()
+        logger.info(f"Judge container started: {handle.id} (network: {'off' if offline else 'on'})")
 
         # 3. Extract archive into patch_dir (filtered by submit_paths/submit_exclude)
         if archive:
@@ -181,7 +181,7 @@ def judge_submission(
             local_tar.write_bytes(archive)
             logger.info(f"Archive saved ({len(archive)} bytes)")
 
-            tar_path = PurePosixPath("/tmp/submission.tar.gz")
+            tar_path = CONTAINER_DIR / "submission.tar.gz"
             backend.copy_to_container(handle, local_tar, tar_path)
 
             # List archive contents
@@ -192,7 +192,6 @@ def judge_submission(
                 # submit_paths match for CJK filenames
                 f"tar --quoting-style=literal -tzf {tar_path}",
                 workdir=task_spec.cwd,
-                user=DOCKER_USER,
             )
             if list_result.exit_code != 0:
                 err_msg = list_result.output
@@ -217,13 +216,13 @@ def judge_submission(
                 file_list_content = "\n".join(allowed_files) + "\n"
                 local_file_list = log_dir / "allowed_files.txt"
                 local_file_list.write_text(file_list_content)
-                backend.copy_to_container(handle, local_file_list, PurePosixPath("/tmp/allowed_files.txt"))
+                list_path = CONTAINER_DIR / "allowed_files.txt"
+                backend.copy_to_container(handle, local_file_list, list_path)
 
                 val = backend.exec_run(
                     handle,
-                    f"tar xzf {tar_path} -T /tmp/allowed_files.txt",
+                    f"tar xzf {tar_path} -T {list_path}",
                     workdir=task_spec.cwd,
-                    user=DOCKER_USER,
                 )
                 if val.exit_code != 0:
                     err_msg = val.output
@@ -239,37 +238,41 @@ def judge_submission(
         else:
             logger.info("Empty archive — running eval on unmodified skeleton")
 
-        # 4. Inject eval.sh dynamically (not baked into the image)
-        eval_script_local = log_dir / "eval.sh"
-        eval_script_local.write_text(task_spec.eval_script)
-        backend.copy_to_container(handle, eval_script_local, PurePosixPath("/tmp/eval.sh"))
-
-        # 5. Run eval script. workdir matters for eval_cmds that use relative
-        # paths: docker defaults to the image WORKDIR but envd execs land in
-        # the user's home, so pin the task cwd explicitly.
-        logger.info("Running eval script...")
+        # 4. Run the grader. workdir matters for relative paths: docker
+        # defaults to the image WORKDIR but envd execs land in $HOME.
+        logger.info("Running grader...")
         result = backend.exec_run_with_timeout(
-            handle, "/bin/bash /tmp/eval.sh", timeout, workdir=task_spec.cwd
+            handle,
+            ["/bin/bash", "-c", f"mkdir -p {CONTAINER_DIR} && {task_spec.judge.cmd}"],
+            timeout,
+            workdir=task_spec.cwd,
         )
-        test_output, timed_out, runtime = result.output, result.timed_out, result.elapsed_seconds
+        (log_dir / "judge_output.txt").write_text(result.output)
+        logger.info(f"Grader runtime: {result.elapsed_seconds:.2f}s, timed_out: {result.timed_out}")
 
-        # Save test output
-        (log_dir / "test_output.txt").write_text(test_output)
-        logger.info(f"Test runtime: {runtime:.2f}s, timed_out: {timed_out}")
-
-        # 6. Grade
-        report = grade_output(
-            task_spec, test_output, submission_id, timed_out, runtime
+        # 5. Read the grader's result
+        raw = backend.exec_run(handle, ["cat", RESULT_PATH])
+        score, valid, data = parse_result(raw.output) if raw.exit_code == 0 else (None, False, {})
+        if raw.exit_code == 0:
+            (log_dir / "result.json").write_text(raw.output)
+        report = EvalReport(
+            task_id=task_spec.task_id,
+            submission_id=submission_id,
+            score=score,
+            score_0_100=rescale_score(task_spec.judge.rescale, score) if valid else None,
+            valid=valid and not result.timed_out,
+            summary=data.get("summary"),
+            details=data.get("details") or [],
+            metrics=data.get("metrics") or {},
+            timed_out=result.timed_out,
+            runtime_seconds=result.elapsed_seconds,
+            submitted_at=submitted_at,
+            error=None if raw.exit_code == 0 else f"grader wrote no {RESULT_PATH}",
         )
-        report.submitted_at = submitted_at
-        report.score_0_100 = rescale_score(task_spec.judge.rescale, report.score)
         (log_dir / "report.json").write_text(
             json.dumps(report.to_dict(), indent=2, ensure_ascii=False)
         )
-        logger.info(
-            f"Result: {report.passed}/{report.total_tests} passed "
-            f"(pass_rate={report.pass_rate:.2%})"
-        )
+        logger.info(f"Result: score={report.score} valid={report.valid}")
         return report
 
     except (EvaluationError, BuildImageError) as e:
@@ -278,7 +281,7 @@ def judge_submission(
             task_id=task_spec.task_id,
             submission_id=submission_id,
             submitted_at=submitted_at,
-            raw_output=str(e),
+            error=str(e),
         )
     except Exception as e:
         logger.error(f"Unexpected error: {e}\n{traceback.format_exc()}")
@@ -286,10 +289,12 @@ def judge_submission(
             task_id=task_spec.task_id,
             submission_id=submission_id,
             submitted_at=submitted_at,
-            raw_output=str(e),
+            error=str(e),
         )
     finally:
         try:
+            if isolation is not None:
+                isolation.cleanup()
             backend.cleanup_container(handle, logger)
         finally:
             close_logger(logger)

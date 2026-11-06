@@ -1,0 +1,38 @@
+schema_version = 0
+id = "dabic_gravity_inversion"
+name = "Dabic Gravity Inversion"
+category = "Scientific Problems & ML"
+language = "Python"
+description = "Implement the D-ABIC regularization method for 3D gravity inversion within the SimPEG framework, run on both synthetic and real Vinton salt dome data under L0 and L1 sparse norms, and compare against a Hamiltonian Monte Carlo baseline."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python"
+platform = "linux/amd64"
+cwd = "/home/workspace/dabic_gravity_vinton"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["outputs/"]
+exclude = ["tests/", "__pycache__/", "*.pyc", "*.npy", ".ipynb_checkpoints/"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 21600
+cpus = 4
+memory = "8g"
+# v1 eval_timeout (21600 s) kept. Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# In practice a run takes 0.2-25 s (239 historical evaluations): the grader imports the
+# submitted directive and runs 12 small hidden SimPEG inversions in forked workers with
+# their own wall-clock limits (35/45/90/180 s) plus two runtime bonuses (C2, C4), so
+# scores can depend on host speed and load; see NOTES.md.
+
+[score]
+direction = "maximize"
+# raw score = v1 structured_json score = eval_dabic_v2.py `total` (0..100 by construction:
+# raw_total of six components x structural penalty 0.334 / 0.5 / 1.0).
+# v1 defined no rescale (score_0_100 was null in every v1 report), so none is set here either.

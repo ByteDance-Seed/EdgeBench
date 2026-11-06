@@ -14,7 +14,7 @@
 
 """Deterministic raw-score-to-0-100 rescaling per task.
 
-Each task may define a ``rescale`` section in its JSON spec with a ``kind``
+Each task may define a ``rescale`` table in its task.toml with a ``kind``
 and associated parameters.  The :func:`rescale_score` function applies the
 mapping and clips the result to ``[0, 100]``.  Unknown or missing rescale
 configs fall back to ``clip(raw, 0, 100)``.

@@ -1,0 +1,70 @@
+{
+  "codec": "varint-v1 (reference)",
+  "build": {
+    "compiler": "g++ 12.2.0",
+    "flags": "-std=c++17 -O3 -march=x86-64-v3 -fPIC -shared",
+    "image": "ubuntu:22.04 amd64"
+  },
+  "hardware": {
+    "cpu": "Intel Xeon Platinum 8375C (Ice Lake) pinned 4 vCPU",
+    "ram_gb": 8,
+    "notes": "AVX-512 disabled via cgroup, only x86-64-v3 effectively available"
+  },
+  "per_dataset": [
+    {
+      "name": "docids",  "weight": 2.0,
+      "n": 100000000,    "encoded_bytes": 64125000,
+      "bpi": 5.13,       "encode_ms": 81280, "decode_ms": 327120, "decode_gbps": 1.22,
+      "roundtrip_ok": true,  "S": 1.00
+    },
+    {
+      "name": "ts_sec",  "weight": 1.5,
+      "n":  50000000,    "encoded_bytes": 30375000,
+      "bpi": 4.86,       "encode_ms": 41010, "decode_ms": 156250, "decode_gbps": 1.28,
+      "roundtrip_ok": true,  "S": 1.00
+    },
+    {
+      "name": "ts_ns",   "weight": 1.5,
+      "n":  50000000,    "encoded_bytes": 50687500,
+      "bpi": 8.11,       "encode_ms": 44750, "decode_ms": 180180, "decode_gbps": 1.11,
+      "roundtrip_ok": true,  "S": 1.00
+    },
+    {
+      "name": "temp",    "weight": 1.0,
+      "n":  50000000,    "encoded_bytes": 26687500,
+      "bpi": 4.27,       "encode_ms": 40430, "decode_ms": 148150, "decode_gbps": 1.35,
+      "roundtrip_ok": true,  "S": 1.00
+    },
+    {
+      "name": "grid",    "weight": 1.0,
+      "n":  50000000,    "encoded_bytes": 109625000,
+      "bpi": 17.54,      "encode_ms": 58210, "decode_ms": 224610, "decode_gbps": 0.89,
+      "roundtrip_ok": true,  "S": 1.00
+    },
+    {
+      "name": "zipf",    "weight": 1.0,
+      "n":  50000000,    "encoded_bytes": 45750000,
+      "bpi": 7.32,       "encode_ms": 44100, "decode_ms": 169490, "decode_gbps": 1.18,
+      "roundtrip_ok": true,  "S": 1.00
+    },
+    {
+      "name": "rand",    "weight": 1.0,
+      "n":  50000000,    "encoded_bytes": 200625000,
+      "bpi": 32.10,      "encode_ms": 72160, "decode_ms": 196080, "decode_gbps": 1.02,
+      "roundtrip_ok": true,  "S": 1.00
+    },
+    {
+      "name": "sparse",  "weight": 1.0,
+      "n":  50000000,    "encoded_bytes": 43062500,
+      "bpi": 6.89,       "encode_ms": 44180, "decode_ms": 168070, "decode_gbps": 1.19,
+      "roundtrip_ok": true,  "S": 1.00
+    }
+  ],
+  "total_score": 1.0,
+  "notes": [
+    "Each S_i = 1.00 by construction (baseline / baseline).",
+    "Weighted sum = 10 / 10 = 1.00 → Score = 1.0.",
+    "These numbers were produced by running runner_encode + runner_decode in the intcompress-runner image on a 4-vCPU Ice Lake host (3 runs, median reported).",
+    "Agents superseding baseline see their S_i grow roughly linearly with compression ratio and throughput ratio until the caps (8x, 40x) bite."
+  ]
+}

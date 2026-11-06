@@ -1,0 +1,45 @@
+schema_version = 0
+id = "rust_multicrate_reconstruction"
+name = "Rust Multicrate Reconstruction"
+category = "Systems & Software Engineering"
+language = "Rust"
+description = "Reconstruct missing Rust implementations across a multi-crate content-addressable storage workspace, given only type signatures and public API contracts."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "rust"              # bases/rust (rust:1.78 + git curl jq build-essential); toolchain 1.88.0 added by the task
+platform = "linux/amd64"
+cwd = "/home/workspace/cas_rust_benchmark"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["agent-start/"]
+exclude = [
+  "agent-start/target/",
+  "agent-start/.git/",
+  "agent-start/__pycache__/",
+  "agent-start/**/*.pyc",
+  "agent-start/score-results.json",
+  "agent-start/vendor-deps/",
+  "agent-start/.cargo/registry/",
+  "agent-start/.cargo/git/",
+]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 3600
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# score.py runs `cargo test --frozen` per crate with .cargo/config.toml build.jobs = 16 and
+# --test-threads=4.
+
+[score]
+direction = "maximize"
+# raw score = v1 score.py total_score (weighted L0-L9 layer score, already 0..100);
+# v1 rescale was linear 0..100, so score_0_100 == raw score.
+rescale = { kind = "linear", lower = 0.0, upper = 100.0 }

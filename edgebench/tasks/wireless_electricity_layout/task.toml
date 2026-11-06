@@ -1,0 +1,35 @@
+schema_version = 0
+id = "wireless_electricity_layout"
+name = "Wireless Electricity Layout"
+category = "Combinatorial Optimization"
+language = "C++"
+description = "Translate 2,500 wire segments on a 10,000-city plane so that positive and negative wire networks reach their plates without short circuits, minimizing the squared distances from every city to the nearest positive and negative wire endpoints plus the squared movement cost."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "cpp"
+platform = "linux/amd64"
+cwd = "/home/workspace/wirel"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["solution.cpp"]
+exclude = []
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 600
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# eval_wirel.sh runs the 50 cases two at a time, each under `timeout 5` (wall clock) plus `timeout
+# 10` for the tester. Scores of time-limited solutions depend on host CPU speed and load; see
+# NOTES.md.
+
+[score]
+direction = "minimize"
+rescale = { kind = "piecewise_log_min", baseline = 2.6059066264593484e+16, rank30 = 2444746514528109.0, rank1 = 362439546835871.0, super_anchor = 181219773417935.5 }

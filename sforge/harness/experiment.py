@@ -15,13 +15,12 @@
 """Experiment configuration: YAML-based per-task overrides with a single model.
 
 An experiment config decouples "how to run" (model, per-task overrides)
-from "what to test" (task JSON definitions).
+from "what to test" (the task directories).
 
 YAML format:
 
     env:
-      SFORGE_MAVEN_MIRROR_URL: "https://maven.aliyun.com/repository/public"
-      SFORGE_AGENT_API_KEY: "sk-..."
+      SFORGE_K8S_NAMESPACE: "sforge-runs"
 
     model:
       api_key: ${OPUS_KEY}
@@ -34,11 +33,10 @@ YAML format:
       eval_interval: 300
 
     tasks:
-      minitorch:
+      ad_placement_optimization:
         eval_interval: 1800
-      tinykv:
-        extra_env:
-          GOPROXY: "https://goproxy.cn"
+      smt_solver:
+        work_cpu_limit: 16
 """
 
 from __future__ import annotations

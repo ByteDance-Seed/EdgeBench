@@ -1,0 +1,36 @@
+schema_version = 0
+id = "ffmpeg_swscale_reimplementation"
+name = "Ffmpeg Swscale Reimplementation"
+category = "Systems & Software Engineering"
+language = "C++"           # as in v1 tasks.jsonl; the deliverable is Rust (or Zig), see NOTES.md
+description = "Reimplement FFmpeg's libswscale pixel-format conversion and scaling library in Rust, handling multiple pixel formats and scaling algorithms. A correctness-passing scaffold is provided; the agent must optimize for speed via SIMD."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "cpp"               # bases/cpp; apt extras, Zig 0.14.0, Rust stable 1.96.0 + nightly 2026-06-09 and FFmpeg n7.1 added by the task
+platform = "linux/amd64"
+cwd = "/home/workspace/swscale-impl"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["."]
+exclude = [".git", "zig-cache", "zig-out", "target"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 5400
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# The score is a wall-clock speed ratio against the baseline library measured in the same
+# container (median of 100 runs per workload), so it moves with host CPU and load; see NOTES.md.
+
+[score]
+direction = "maximize"
+# raw score = geometric-mean speedup vs the FFmpeg C (--disable-asm) baseline, 0 if any
+# correctness/anti-cheat gate fails (v1 compute_reward.py, first TOTAL_SCORE in the output).
+rescale = { kind = "log_anchor", anchor_raw = 14.155, anchor_score = 43.0 }

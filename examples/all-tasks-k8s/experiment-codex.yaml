@@ -1,25 +1,24 @@
 # OFFICIAL EDGEBENCH LEADERBOARD SETTING (Codex + GPT)
 # The experiment YAMLs in this directory are the official settings
 # behind the leaderboard numbers. For comparable results, change only
-# `env`, `model`, and registry values.
+# `env` and `model`.
 #
 # Run ALL EdgeBench tasks on a Kubernetes cluster with Codex.
 # See README.md in this directory for full instructions.
 
 # ── Environment variables ─────────────────────────────────────────────
-# Injected into the host process before the run starts.
+# Set in the sforge run process before the rest of this file is read.
 env:
-  # REQUIRED for k8s backend — pods pull images from this registry.
-  SFORGE_K8S_IMAGE_REGISTRY: "<registry-ip>:5000"
+  # Optional: pods pull images from docker.io/seededge by
+  # default. To use a registry near the cluster instead, mirror the images
+  # there (README.md, step 2) and point the pods at it:
+  # SFORGE_K8S_IMAGE_REGISTRY: "<registry-ip>:5000"
 
-  # Mirrors (optional) — speed up npm/node installs inside work containers.
-  # Only needed in environments with slow/blocked access to upstream registries.
+  # Optional: Node.js mirror for building the agent bundle on this host.
   # SFORGE_NODEJS_MIRROR_URL: "https://mirrors.aliyun.com/nodejs-release"
-  # SFORGE_NPM_REGISTRY_URL: "https://registry.npmmirror.com"
-
 
 # ── Stagger ───────────────────────────────────────────────────────────
-# Delay (seconds) between launching consecutive tasks.
+# Task launches are spread evenly over this many seconds.
 # With 50+ tasks starting at once, this prevents API rate-limit storms
 # and K8s scheduling pressure. Set to 0 to launch all simultaneously.
 stagger: 600
@@ -36,18 +35,7 @@ defaults:
   timeout: 43200                          # 12 hours per task
   eval_interval: 1800                     # auto-eval every 30 min
   submission_cooldown: 120                # min seconds between agent submissions
-  work_cpu_limit: 4
-  work_mem_limit: "16g"
-  judge_cpu_limit: 4
-  judge_mem_limit: "8g"
-
-# ── YAML anchors for common overrides ─────────────────────────────────
-# Lean/Coq theorem-proving tasks need more CPU and memory for the prover.
-x-lean-task: &lean_task
-  work_cpu_limit: 8
-  work_mem_limit: "16g"
-  judge_cpu_limit: 8
-  judge_mem_limit: "16g"
+  # Work and judge CPU/memory come from each task's task.toml.
 
 # ── Tasks ─────────────────────────────────────────────────────────────
 # Each key is a task_id (matching a JSON in tasks/).
@@ -58,8 +46,7 @@ tasks:
   borden_source_inversion: {}
   dabic_gravity_inversion:
     submission_cooldown: 2160             # long eval — throttle submissions
-  graph_node_classification:
-    judge_mem_limit: "16g"
+  graph_node_classification: {}
 
   # ─── Code / Systems ────────────────────────────────────────────────
   ann_vector_search_qps: {}
@@ -86,11 +73,7 @@ tasks:
   jagua_nesting_optimization: {}
   molecular_self_assembly: {}
   order_addition_permutation_optimization: {}
-  smt_solver:
-    work_cpu_limit: 16
-    work_mem_limit: "16g"
-    judge_cpu_limit: 16
-    judge_mem_limit: "16g"
+  smt_solver: {}
   treant_forest: {}
   tree_block_partitioning: {}
   triangulation_coloring_optimization: {}
@@ -106,14 +89,14 @@ tasks:
   portfolio_risk_calibration: {}
 
   # ─── Formal Math (Lean/Coq) ────────────────────────────────────────
-  carleson_formalization: *lean_task
-  combinatorial_games_formalization: *lean_task
-  flt_regular_formalization: *lean_task
-  lean_analysis_proofs: *lean_task
-  new_foundations_consistency: *lean_task
+  carleson_formalization: {}
+  combinatorial_games_formalization: {}
+  flt_regular_formalization: {}
+  lean_analysis_proofs: {}
+  new_foundations_consistency: {}
   ordinal_notation_well_foundedness: {}
-  pfr_formalization: *lean_task
-  sphere_eversion_formalization: *lean_task
+  pfr_formalization: {}
+  sphere_eversion_formalization: {}
 
   # ─── Interactive Games ──────────────────────────────────────────────
   anchorhead_text_adventure:

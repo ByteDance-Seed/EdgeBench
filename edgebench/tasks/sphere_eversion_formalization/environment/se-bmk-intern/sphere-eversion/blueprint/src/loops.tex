@@ -1,0 +1,727 @@
+\chapter{Loops}
+\label{chap:loops}
+
+\section{Introduction}
+\label{sec:loops_introduction}
+
+In this chapter, we explain how to construct families of loops to feed into the
+corrugation process explained at the end of the introduction.
+
+Throughout this document, $E$ and $F$ will denote finite-dimensional
+real vector spaces.
+
+\begin{definition}
+  \label{def:loop}
+  \lean{Loop, Loop.average, Loop.support}
+  \leanok
+  A loop is a map defined on the circle $𝕊^1 = ℝ/ℤ$ with values in a
+  finite-dimensional vector space.
+  It can also freely be seen as $1$-periodic maps defined on $ℝ$.
+
+  The average of a loop $γ$ is $\bar γ := \int_{𝕊^1} γ(s)\, ds$.
+
+  The \emph{support} of a family $γ$ of loops in $F$ parametrized by $E$ is
+  the closure of the set of $x$ in $E$ such that $γ_x$ is not a constant loop.
+\end{definition}
+
+All of this chapter is devoted to proving the following proposition.
+
+\begin{proposition}
+  \label{prop:∃_loops}
+  \lean{exist_loops}
+  \uses{def:loop}
+  \leanok
+  Let $K$ a compact set in $E$. Let $Ω$ be an open set in $E × F$.
+
+  Let $β$ and $g$ be smooth maps from $E$ to $F$.
+  Write $Ω_x := \{ y ∈ F \mid (x, y) ∈ Ω\}$, assume that $β(x) ∈ Ω_x$ for all $x$,
+  and that $g(x) = β(x)$ near $K$.
+
+  If, for every $x$, $g(x)$ is in
+  the convex hull of the connected component of $Ω_x$ containing $β(x)$,
+  then there exists a smooth family of loops
+  \[
+    γ \co E × [0, 1] × 𝕊^1 → F, (x, t, s) ↦ γ^t_x(s)
+  \]
+  such that, for all $x ∈ E$, all $t ∈ ℝ$ and all  $s ∈ 𝕊^1$,
+  \begin{itemize}
+    \item
+      $γ^t_x(s) ∈ Ω_x$
+    \item
+      $γ^0_x(s) = γ^t_x(1) = β(x)$
+    \item
+      $\bar γ^1_x = g(x)$
+    \item
+      $γ^t_x(s) = β(x)$ if $x$ is near $K$.
+  \end{itemize}
+\end{proposition}
+
+Let us briefly sketch the geometric idea behind the above proposition
+if we pretend there is only one point $x$, and drop it from the
+notation, and also focus only on $γ^1$.
+By assumption, there is a finite collection of points $p_i$ in $Ω$ and $λ_i ∈
+[0, 1]$ such that $g$ is the barycenter $\sum λ_i p_i$. Since $Ω$ is open and
+connected, there is a smooth loop $γ_0$ which goes through each $p_i$. The
+claim is that $g$ is the average value of $γ = γ_0 ∘ h$ for some
+self-diffeomorphism $h$ of $𝕊^1$. The idea is to choose $h$ such that
+$γ$ rushes to $p_1$, stays there during a time roughly $λ_1$, rushes to
+$p_2$, etc. But, in order to achieve average exactly $g$, it seems like $h$
+needs to be a discontinuous piecewise constant map. The assumption that $Ω$ is
+open means that the convex hull is open, which gives enough slack to get away with
+a smooth $h$.
+
+In the previous proof sketch, there is a lot of freedom in constructing $γ$,
+which is problematic when trying to do it consistently when $x$ varies.
+
+\section{Surrounding points}
+\label{sec:preliminaries}
+
+This section collects elementary results about convex sets in finite
+dimensional real vector spaces that will help to construct families of loops.
+In this section, $E$ is a real vector space with (finite) dimension $d$.
+The discussion will center around the following definition which is tailored to
+our ulterior needs.
+
+\begin{definition}
+  \label{def:surrounds_points}
+  \lean{SurroundingPts}
+  \leanok
+  A point $x$ in $E$
+  is surrounded by points $p_0$, \dots, $p_d$ if those points are
+  affinely independent and there exist weights $w_i ∈ (0, 1)$ with sum $1$
+  such that $x = \sum_i w_i p_i$.
+\end{definition}
+
+Note that, in the above definition, the number of points $p_i$ is fixed
+by the dimension $d$ of $E$, and that the weights $w_i$ are the barycentric
+coordinates of $x$ with respect to the affine basis $p_0, \ldots, p_d$.
+
+The first important point in this definition is that surrounding is
+smoothly locally stable: if $x$ is surrounded by a collection of points $p$
+then points that are close to $y$ are surrounded by every collection of points
+$q$ that is closed to $p$, and the relevant barycentric coordinates smoothly
+depend on $y$ and $q$. The precise statement follows.
+
+\begin{lemma}
+  \label{lem:smooth_barycentric_coord}
+  \uses{def:surrounds_points}
+  \lean{smooth_surrounding}
+  \leanok
+  For every $x$ in $E$ and every collection of points $p ∈ E^{d+1}$
+  surrounding $x$, there is a function $w \co E × E^{d+1} → ℝ^{d+1}$ such that,
+  for every $(y, q)$ in a neighborhood of $(x, p)$,
+  \begin{itemize}
+    \item
+      $w$ is smooth at $(y, q)$
+    \item
+      $w(y, q) > 0$
+    \item
+      $\sum_{i=0}^d w_i(y, q) = 1$
+    \item
+      $y = \sum_{i=0}^d w_i(y, q)q_i$.
+  \end{itemize}
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  Let:
+  \begin{align*}
+    A = E \times \{ q \in E^{d+1} ~|~ \mbox{$q$ is an affine basis for $E$} \},
+  \end{align*}
+  and define:
+  \begin{align*}
+    w \co A &\to ℝ^{d+1}\\
+    (y, q) &\mapsto \mbox{barycentric coordinates of $y$ with respect to $q$}.
+  \end{align*}
+
+  If we fix an affine basis $b$ of $E$, we may express $w$ as a
+  ratio of determinants in terms of coordinates relative to $b$. More precisely,
+  by Cramer's rule, if $0 \le i \le d$ and $w_i$ is the $i^{\rm th}$ component of $w$,
+  then:
+  \begin{align*}
+    w_i (y, q) = \det M_i (y, q) / \det N (q)
+  \end{align*}
+  where $N(q)$ is the $(d+1)\times (d+1)$ matrix whose columns are the barycentric
+  coordinates of the components of $q$ relative to $b$, and $M_i (y, q)$ is $N(q)$
+  except with column $i$ replaced by the barycentric coordinates of $y$ relative
+  to $b$.
+
+  Since determinants are smooth functions and $(y, q) \mapsto \det N(q)$ is
+  non-vanishing on $A$, $w$ is smooth on $A$.
+
+  Finally define:
+  \begin{align*}
+    U = w^{-1}((0, \infty)^{d+1}),
+  \end{align*}
+  and note that $U$ is open in $A$, since it is the preimage of an open set under the
+  continuous map $w$. In fact since $A$ is open, $U$ is open as a subset of $E \times E^{d+1}$.
+  Note that $(x, p) \in U$ since $p$ surrounds $x$.
+
+  We may extend $w$ to $E \times E^{d+1}$ by giving it any values at all outside $A$.
+\end{proof}
+
+Then we need a criterion ensuring a point $x$ is surrounded by a collection of points taken
+in a given subset $P$. The first temptation is to hope that $x$ being in the interior of
+the convex hull of $P$ is enough. But this is not true. For instance the center of a square
+in a plane is in the interior of the convex hull of the set $P$ of vertices of the square,
+but it isn't surrounded by any set of vertices. This counter example also shows that
+the stability lemma above is slightly less trivial than it sounds.
+
+The rest of this section is devoted to the following result that proves no such issue arises
+when $P$ is open.
+
+\begin{proposition}
+  \label{prop:surrounded_by_open}
+  \uses{def:surrounds_points}
+  \lean{surrounded_of_convexHull}\leanok
+  If a point $x$ of $E$ lies in the convex hull of an open set $P$,
+  then it is surrounded by some collection of points belonging to $P$.
+\end{proposition}
+
+This proposition will be proven at the end of this section.
+We'll first need the Carathéodory lemma:
+
+\begin{lemma}[Carathéodory's lemma]
+\label{lem:caratheodory}
+\lean{convexHull_eq_union}
+\leanok
+  If a point $x$ of $E$ lies in the convex hull of a set $P$, then $x$
+  belongs to the convex hull of a finite set of affinely independent points
+  of $P$.
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  By assumption, there is a finite set of points $t_i$ in $P$ and
+  weights $f_i$ such that $x = \sum f_i t_i$, each $f_i$ is non-negative
+  and $\sum f_i = 1$.
+  Choose such a set of points of minimum cardinality. We argue by
+  contradiction that such a set must be affinely independent.
+
+  Thus suppose that there is some vanishing combination $\sum g_i t_i$ with
+  $\sum g_i = 0$ and not all $g_i$ vanish.
+  Let $S = \{i | g_i > 0\}$.
+  Let $i_0$ in $S$ be an index minimizing $f_i/g_i$. We shall obtain our
+  contradiction by showing that $x$ belongs to the convex hull of the set
+  $\{t_i| i \ne i_0\}$, which has cardinality strictly smaller than
+  $\{t_i\}$.
+
+  We thus define new weights $k_i = f_i - g_i f_{i_0}/g_{i_0}$.
+  These weights sum to $\sum f_i - (\sum g_i)f_{i_0}/g_{i_0} = 1$
+  and $k_{i_0} = 0$.
+  Each $k_i$ is non-negative, thanks to the choice of $i_0$ if
+  $i$ is in $S$ or using that $f_i$, $-g_i$ and $f_{i_0}/g_{i_0}$
+  are all non-negative when $i$ is not in $S$.
+  It remain to compute
+  \begin{align*}
+    \sum_{i ≠ i_0} k_i t_i &= \sum_i k_i t_i \\
+      &= \sum_i (f_i - g_i f_{i_0}/g_{i_0}) t_i  \\
+      &= \sum_i f_i t_i - \left(\sum_i g_i t_i\right)f_{i_0}/g_{i_0})   \\
+      &= x
+  \end{align*}
+  where we use $k_{i_0} = 0$ in the first equality.
+\end{proof}
+
+
+
+\begin{lemma}
+  \label{lem:interior_chab}
+  \lean{AffineBasis.interior_convexHull}\leanok
+  Given an affine basis $b$ of $E$, the interior of the convex hull of
+  $b$ is the set of points with strictly positive barycentric coordinates.
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  For each $i$, let:
+  \[
+    w_i \co E \to ℝ
+  \]
+  be the $i^{\rm th}$ barycentric coordinate with respect to the basis $b$.
+  Since $E$ is finite-dimensional, each $w_i$ is a continuous open map. For
+  such a map, the operation of taking interior commutes with preimage, and so
+  we have:
+  \begin{align*}
+    \IntConv(b) &= \Int\left(\bigcap_i w_i^{-1}([0, \infty))\right)\\
+                &= \bigcap_i \Int(w_i^{-1}([0, \infty))\\
+                &= \bigcap_i w_i^{-1}(\Int([0, \infty))\\
+                &= \bigcap_i w_i^{-1}((0, \infty))
+  \end{align*}
+  as required.
+\end{proof}
+
+\begin{lemma}
+  \label{lem:int_homothety_cvx}
+  \lean{Convex.subset_interior_image_homothety_of_one_lt}\leanok
+  Given a point $c$ of $E$ and a real number $t$, let:
+  \[
+    h^c_t \co E \to E
+  \]
+  be the homothety which dilates about $c$ by a scale of $t$.
+
+  Suppose $c$ belongs to the interior of a convex subset $C$ of $E$
+  and $t > 1$, then
+  \[
+    C \subseteq \Int(h^c_t(C))
+  \]
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  Since $h^c_t$ is a homeomorphism with inverse $h^c_{t^{-1}}$, taking $s = t^{-1}$,
+  the required result is equivalent to showing:
+  \[
+    h^c_s(C) \subseteq \Int(C)
+  \]
+  where $s \in (0, 1)$.
+
+  Let $x$ be a point of $C$, we must show there exists an open neighborhood $U$
+  of $h^c_s(x)$, contained in $C$. In fact we claim:
+  \[
+    U = h^x_{1-s}(\Int(C))
+  \]
+  is such a set. Indeed $U$ is open since $h^x_{1-s}$ is a homeomorphism and $U$
+  contains $h^c_s(x)$ since:
+  \[
+    h^c_s(x) = h^x_{1-s}(c) \in h^x_{1-s}(\Int(C))
+  \]
+  since $c$ belongs to $\Int(C)$. Finally:
+  \[
+    h^x_{1-s}(\Int(C)) \subseteq h^x_{1-s}(C) \subseteq C
+  \]
+  where the second inclusion follows since $C$ is convex and contains $x$.
+\end{proof}
+
+We are now ready to come back to \Cref{prop:surrounded_by_open}.
+
+\begin{proof}[Proof of \Cref{prop:surrounded_by_open}]\proves{prop:surrounded_by_open}
+  \leanok
+  \uses{lem:caratheodory,lem:interior_chab,lem:int_homothety_cvx}
+  It follows from \Cref{lem:interior_chab} that we need only show that $E$
+  has an affine basis $b$ of points belonging to $P$ such that $x$ lies in
+  the interior of the convex hull of $b$.
+
+  Carathéodory's lemma~\ref{lem:caratheodory} provides affinely independent
+  points $p_0, \dots, p_k$ in $P$ such that $x$ belongs to their convex
+  hull. Since $P$ is open, we may extend $p_i$ to an affine basis
+  \[
+    \hat b = \{p_0, \ldots, p_d\},
+  \]
+  where all points still belong to $P$.
+  Note that $x$ belongs to the convex hull of $\hat b$.
+
+  Now let $c$ be a point in the interior of the convex hull of $\hat b$
+  (e.g., the centroid) and for each $\epsilon > 0$, consider the homothety
+  \[
+    h_{1+\epsilon} \co E \to E,
+  \]
+  which dilates about $c$ by a scale of $1 + \epsilon$.
+
+  Since $\hat b$ is finite and contained in $P$, and $P$ is open, there exists
+  $\epsilon > 0$ such that
+  \[
+    h_{1+\epsilon} (\hat b) \subseteq P.
+  \]
+  We claim the required basis is:
+  \[
+    b = h_{1+\epsilon} (\hat b)
+  \]
+  for any such $\epsilon$. Indeed, applying
+  \Cref{lem:int_homothety_cvx} to $\Conv(\hat b)$ we see:
+  \begin{align*}
+    x \in \Conv(\hat b) &\subseteq \Int (h_{1+\epsilon} (\Conv(\hat b)))\\
+                  &= \Int (\Conv(h_{1+\epsilon} (\hat b)))
+  \end{align*}
+  as required.
+\end{proof}
+
+
+\section{Constructing loops}
+
+\subsection{Surrounding families}
+\label{sub:surrounding_families}
+
+It will be convenient to introduce some more vocabulary.
+
+\begin{definition}
+  \label{def:surrounds}
+  \uses{def:loop, def:surrounds_points}
+  \lean{Loop.Surrounds}
+  \leanok
+  We say a loop $γ$ surrounds a vector $v$ if $v$ is surrounded
+  by a collection of points belonging to the image of $γ$.
+  Also, we fix a base point $0$ in $𝕊^1$ and say a loop is based at some
+  point $b$ if $0$ is sent to $b$.
+\end{definition}
+
+The first main task in proving \Cref{prop:∃_loops} is to construct
+suitable families of loops $γ_x$ surrounding $g(x)$, by assembling local
+families of loops.
+Those will then be reparametrized to get the correct average in the next
+section.
+In this section, we will work only with \emph{continuous} loops.
+This will make constructions easier and we will smooth those loops
+in the end, taking advantage of the fact that $Ω$ and the surrounding
+condition are open.
+
+Thanks to Carathéodory's lemma, constructing \emph{one} such loop
+with values in some open $O$ is easy as soon as $v$ belongs to the
+convex hull of $O$.
+
+\begin{lemma}
+  \label{lem:loop_of_hull}
+  \uses{def:surrounds}
+  \lean{surrounding_loop_of_convexHull}
+  \leanok
+  If a vector $v$ is in the convex hull of a connected open subset $O$
+  then, for every base point $b ∈ O$, there is a continuous
+  family of loops
+  $γ \co [0, 1] × 𝕊^1 → E, (t, s) ↦ γ^t(s)$ such that, for all $t$ and
+  $s$:
+  \begin{itemize}
+    \item
+      $γ^t$ is based at $b$
+    \item
+      $γ^0(s) = b$
+    \item
+      $γ^t(s) ∈ O$
+    \item
+      $γ^1$ surrounds $v$
+  \end{itemize}
+\end{lemma}
+
+\begin{proof}
+  \uses{prop:surrounded_by_open}
+  \leanok
+  Since $O$ is open, \Cref{prop:surrounded_by_open} gives points $p_i$ in $O$
+  surrounding $x$.
+  Since $O$ is open and connected, it is path connected.
+  Let $λ \co [0, 1] → Ω_x$ be a continuous path starting at $b$ and
+  going through the points $p_i$.
+  We can concatenate $λ$ and its opposite to get $γ^1$.
+  This is a round-trip loop: it back-tracks when it reaches $λ(1)$
+  at $s = 1/2$.
+  We then define $γ^t$ as the round-trip that stops at $s = t/2$, stays
+  still until $s = 1-t/2$ and then backtracks.
+\end{proof}
+
+
+\begin{definition}
+  \label{def:family_surrounds}
+  \uses{def:surrounds}
+  \lean{SurroundingFamily}
+  \leanok
+  A continuous family of loops $γ \co E × [0, 1] × 𝕊^1 → F, (x, t, s) ↦ γ^t_x(s)$
+  surrounds a map $g \co E → F$ with base $β \co E → F$
+  on $U ⊂ E$ in $Ω ⊂ E × F$ if, for every $x$ in $U$, every $t ∈ [0, 1]$ and every
+  $s ∈ 𝕊^1$,
+  \begin{itemize}
+    \item
+      $γ^t_x$ is based at $β(x)$
+    \item
+      $γ^0_x(s) = β(x)$
+    \item
+      $γ^1_x$ surrounds $g(x)$
+    \item
+      $(x,γ^t_x(s)) ∈ Ω$.
+  \end{itemize}
+  The space of such families will be denoted by
+  $\Loop(g, β, U, Ω)$.
+\end{definition}
+
+Families of surrounding loops are easy to construct locally.
+
+\begin{lemma}
+  \label{lem:local_loops}
+  \uses{def:family_surrounds}
+  \lean{local_loops}
+  \leanok
+  Assume $Ω$ is open over some neighborhood of $x_0$.
+  If $g(x_0)$ is in the convex hull of the connected component of $Ω_{x_0}$ containing $β(x_0)$,
+  then there is a continuous family of loops defined near $x_0$, based at $β$,
+  taking value in $Ω$ and surrounding $g$.
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  \uses{lem:loop_of_hull, lem:smooth_barycentric_coord}
+  In this proof we don't mention the $t$ parameter since it plays no
+  role, but it is still there.
+  \Cref{lem:loop_of_hull} gives a loop $γ$ based at $β(x_0)$,
+  taking values in $Ω_{x_0}$ and surrounding $g(x_0)$.
+  We set $γ_x(s) = β(x) + (γ(s) - β(x_0))$.
+  Each $γ_x$ takes values in $Ω_x$ because $Ω$ is open over some
+  neighborhood of $x_0$.
+  \Cref{lem:smooth_barycentric_coord} guarantees that this loop surrounds $g(x)$
+  for $x$ close enough to $x_0$.
+\end{proof}
+
+The difficulty in constructing global families of surrounding loops is that
+there are plenty of surrounding loops and we need to choose them
+consistently.
+The key feature of the above definition is that the $t$ parameter not only
+allows us to cut out the corrugation
+process in the next chapter, but also brings a ``satisfied or refund'' guarantee,
+as explained in the next lemma.
+
+\begin{lemma}
+  \label{lem:satisfied_or_refund}
+  \uses{def:family_surrounds}
+  \lean{satisfied_or_refund}
+  \leanok
+  For every set $U ⊂ E$,  $\Loop(g, β, U, Ω)$ is ``path connected'':
+  for every $γ_0$ and $γ_1$ in $\Loop(g, β, U, Ω)$,
+  there is a continuous map
+  $δ \co [0, 1] × E × [0, 1] × 𝕊^1 → F, (τ, x, t, s) ↦ δ^t_{τ, x}(s)$
+  which interpolates between $γ_0$ and $γ_1$ in
+  $\Loop(g, β, U, Ω)$.
+\end{lemma}
+
+The construction below morally proves that each $\Loop(g, β, U, Ω)$ is contractible, but
+we will not even specify a topology on those spaces.
+The definition of ``path connected'' in quotation marks is the above specific statement,
+and only this statement will be used.
+
+\begin{proof}
+  \leanok
+  Let $ρ$ be the piecewise affine map from $ℝ$ to $ℝ$ such that
+  $ρ(τ) = 1$ if $τ ≤ 1/2$, $ρ$ is affine on $[1/2, 1]$,
+  $ρ(τ) = 0$ if $τ ≥ 1$.
+  We set
+  \[
+    δ_{τ, x}^t(s) =
+    \begin{cases}
+      γ_{0,x}^{ρ(τ)t}\left(\frac1{1 - τ} s\right) & \text{if $s ≤ 1 - τ$ and $τ < 1$}\\
+      γ_{1,x}^{ρ(1-τ)t}\left(\frac1τ \big(s - (1- τ)\big)\right) &
+      \text{if $s ≥ 1 - τ$ and $τ > 0$}\\
+    \end{cases}
+  \]
+  It is clear that if $s = 1 - τ$ then both branches agree and are equal to $β(x)$.
+  Therefore it is easy to see that $δ$ is continuous at $(τ, x, t, s)$
+  except when $(τ,s)=(1,0)$ or $(τ,s)=(0,1)$.
+
+  To show the continuity for $(τ,s)=(1,0)$, let $K$ be a compact neighborhood of $x$ in $E$.
+  Then $γ_0$ is uniformly continuous on the compact set $K × [0, 1] × 𝕊^1$, which means that
+  $γ_{0,x'}^t$ tends uniformly to the constant function $s ↦ β(x)$ as $(x', t)$ tends to
+  $(x, 0)$.
+  This means that $γ_{0,x'}^{ρ(τ)t'}$ tends uniformly to the constant function $s ↦ β(x)$
+  as $(τ, x', t')$ tends to $(1, x, t)$. This means that $δ$ is continuous at $(τ,s)=(1,0)$
+  (it is clear that the other branch also tends to $β(x)$). The continuity at $(τ,s)=(0,1)$ is
+  entirely analogous.
+
+  The beautiful observation motivating the above formula is why each
+  $δ_{τ, x}^1$ surrounds $g(x)$.
+  The key is that the image of $δ_{τ, x}^1$ contains the image of
+  $γ_{0,x}^1$ when $τ ≤ 1/2$, and contains  the image of
+  $γ_{1,x}^1$ when $τ ≥ 1/2$.
+  Hence $δ_{τ, x}^1$ always surrounds $g(x)$.
+\end{proof}
+
+\begin{corollary}
+  \label{cor:extend_loops}
+  % \uses{def:family_surrounds} % causes transitive arrow in depgraph
+  \lean{extend_loops}
+  \leanok
+  Let $U_0$ and $U_1$ be open sets in $E$.
+  Let $K_0 ⊂ U_0$ and $K_1 ⊂ U_1$ be compact subsets.
+  For any $γ_0 ∈ \Loop(U_0, g, β, Ω)$ and $γ_1 ∈ \Loop(U_1, g, β, Ω)$,
+  there exists a neighborhood $U$ of $K_0 ∪ K_1$ and
+  there exists $γ ∈ \Loop(U, g, β, Ω)$
+  which coincides with $γ_0$ near $K_0\cup U_1^c$.
+\end{corollary}
+
+\begin{proof}
+  \leanok
+  \uses{lem:satisfied_or_refund}
+  Let $C_0 = K_0\cup U_1^c$ and $C_1 := K_1 ∖ U_0$. Since $C_0$ and $C_1$ are disjoint closed sets,
+  there is some continuous cut-off $ρ \co E → [0, 1]$
+  which vanishes on a neighborhood of $C_0$ and equals one on a neighborhood of $C_1$.
+
+  \Cref{lem:satisfied_or_refund} gives a homotopy of loops
+  $γ_τ$ from $γ_0$ to $γ_1$ on $U_0 ∩ U_1$. Moreover, note that $γ_τ$ is defined on all of $E$.
+  On $U_0' ∪ (U_0 ∩ U_1) ∪ U_1'$, which is a
+  neighborhood of $K_0 ∪ K_1$, we set
+  \[
+      γ_x = γ_{ρ(x), x}
+  \]
+  which has the required properties.
+\end{proof}
+
+\begin{lemma}
+  \label{lem:∃_surrounding_loops}
+  % \uses{def:family_surrounds} % causes transitive arrow in depgraph
+  \lean{exists_surrounding_loops}
+  \leanok
+  In the setup of \Cref{prop:∃_loops}, assume we have a
+  continuous family $γ$ of loops defined near $K$ which is based at $β$,
+  surrounds $g$ and such that each $γ_x^t$ takes values in $Ω_x$.
+  Then there such a family which is defined on all of $E$ and agrees
+  with $γ$ near $K$.
+\end{lemma}
+
+\begin{proof}
+  \uses{lem:local_loops, cor:extend_loops, lem:relative_inductive_construction_of_loc}
+  \leanok
+  \Cref{lem:local_loops} proves the existence of local families of surrounding
+  loops and \Cref{cor:extend_loops} allows to patch such families hence
+  \Cref{lem:relative_inductive_construction_of_loc} proves global existence.
+\end{proof}
+
+\subsection{The reparametrization lemma}
+\label{sub:the_reparametrization_lemma}
+
+The second ingredient needed to prove \Cref{prop:∃_loops} is a
+parametric reparametrization lemma. Gromov's original proof of this lemma makes
+explicit use of a partition of unity. Motivated in particular by formalization
+purposes, we will first state more abstract versions whose statements do not involve
+any partition of unity but directly state a local-to-global property.
+
+\begin{lemma}
+  \label{lem:exists_cont_diff_of_convex}
+  \lean{exists_contDiff_of_convex}
+  \leanok
+  Let $E$ and $F$ be real normed vector spaces. Assume that $E$ is finite
+  dimensional. Let $P$ be a predicate on $E \times F$ such that for all $x$ in
+  $E$, $\{y ~|~ P (x, y) \}$ is convex. Let $n$ be a natural number or $+\infty$.
+  Assume that every $x$ has a neighbourhood $U$ on which there exists a $\C^n$
+  function $f$ such that $\forall x ∈ U, P(x, f(x))$. Then there is a global
+  $\C^n$ function $f$ such that $\forall x, P(x, f(x))$.
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  The assumption give us an open cover $(U_i)_{i ∈ I}$ of $E$ and functions
+  $f_i \co E → F$ that are smooth on $U_i$ and such that $P(x, f_i(x))$ for all $x$ in $U_i$.
+  Let $ρ$ be a smooth partition of unity associated to this cover. The function
+  $f = ∑ ρ_i f_i$ is smooth on $E$ and the convexity assumption on $P$ ensures
+  it satisfies $\forall x, P(x, f(x))$. Indeed each value $f(x)$ is a convex combination
+  of finitely many values $f_i(x)$ where $i$ satisfies that $x$ is in $U_i$.
+\end{proof}
+
+We will also need a version where $F$ is a space of smooth functions. Since
+there is no relevant norm to put on such a space, we cannot deduce this version
+from the above one.
+
+\begin{lemma}
+  \label{lem:exists_cont_diff_of_convex₂}
+  \lean{exists_contDiff_of_convex₂}
+  \leanok
+  Let $E₁$, $E₂$ and $F$ be real vector spaces. Assume $E₁$ and $E₂$ are finite dimensional.
+  Let $n$ be a natural number or $+\infty$. Let $P$ be a property
+  of pairs $(x, f)$ with $x ∈ E₁$ and $f : E₂ → F$. Assume that, for every $x$, the space
+  of functions $f$ such that $P(x, f)$ holds is convex. Assume that for every $x₀$
+  in $E₁$ there is a neighborhood $U$ of $x₀$ and a function $φ : E₁ × E₂ → F$ which is
+  $\C^n$ on $U × E₂$ and such that $P(x, φ(x, \cdot))$ holds for every $x$ in $U$.
+  There there is a global $\C^n$ function $φ \co E₁ × E₂ → F$ such that
+  $P(x, φ(x, \cdot))$ holds for every $x$.
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  This is completely analogous to the previous proof.
+\end{proof}
+
+\begin{lemma}
+\label{lem:reparametrization}
+\uses{def:surrounds}
+\lean{SmoothSurroundingFamily.reparametrize_average}
+\leanok
+Let $γ \co E × 𝕊^1 → F$ be a smooth family of loops surrounding
+a map $g$.
+There is a smooth family $φ \co E × 𝕊^1 → 𝕊^1$ such
+that each $γ_x ∘ φ_x$ has average $g(x)$ and $φ_x(0) = 0$.
+\end{lemma}
+
+\begin{proof}
+  \uses{lem:smooth_barycentric_coord, lem:exists_cont_diff_of_convex₂}
+  \leanok
+  Gromov's main idea in order to prove this result is to translate the problem
+  of constructing a family of circle maps $φ$ into the problem of constructing
+  a family of smooth density functions $f$ on the circle. We introduce some
+  vocabulary in order to describe this reduction.
+  Let $f \co E × ℝ → ℝ$ be a smooth positive function that is $1$-periodic in
+  its second argument.
+  We say that $f$ is a centering density for $(γ, g)$ at $x$ if
+  $f_x \co ℝ → ℝ$ has average value one when seen as a function on $𝕊¹$ and
+  the average value of $f_x γ_x$ is $g(x)$. We claim that, in order to prove
+  the lemma, it is sufficient to build such an $f$ which is centering at every
+  $x$. Indeed, assume we have such an $f$. We then get a smooth family
+  of $ℤ$-equivariant functions $ψ \co E × ℝ → ℝ$ defined by
+  $ψ_x(t) = \int_0^tf_x(s)ds$. Because $ψ$ is smooth and each $ψ_x$ is strictly
+  monotone and $ℤ$-equivariant, one can check there is a smooth map
+  $φ : E × ℝ → ℝ$ which is $ℤ$-equivariant and such that $φ_x ∘ ψ_x = \Id$ for
+  each $x$. Seen as a family of functions from $𝕊¹$ to $𝕊¹$, those functions
+  are suitable since, for every $x$, the change of variable formula gives:
+  \[
+    \int_{𝕊¹} γ_x ∘ φ_x(s)ds = \int_{𝕊¹} ψ_x'(s) γ_x ∘ φ_x(ψ_x(s))ds
+     = \int_{𝕊¹} f_x(s) γ_x(s)ds = g(x).
+  \]
+
+  We now prove the existence of a function which is a centering density at every point of $x$.
+  For any given $x$, this constraint is clearly convex.
+  Hence \Cref{lem:exists_cont_diff_of_convex₂} ensures it is enough to prove existence
+  of functions that are centering densities in a neighborhood of any given point $x$.
+  So we fix some $x$ in $E$.
+
+  Since $γ_x$ strictly surrounds $g(x)$, there are points
+  $s_1, …, s_{n+1}$ in $𝕊^1$ such that $g(x)$ is surrounded
+  by the corresponding points $γ_x(s_j)$.
+
+
+  Let $f_1, …, f_{n+1}$ be smooth positive periodic maps from $ℝ$ to $ℝ$
+  which average value $1$ on a period and such that the corresponding measures
+  on $𝕊¹$ are very
+  close to the Dirac measures on $s_j$, ie. for any function $h$, the average value of
+  $f_jh$ is almost $h(s_j)$. We set $p_j = \int f_jγ_x\, ds$, which
+  is almost $γ_x(s_j)$ so that $g(x) = \sum w_j p_j$ for some weights
+  $w_j$ in the open interval $(0, 1)$ according to
+  \Cref{lem:smooth_barycentric_coord}.
+
+  If $x'$ is in a sufficiently small neighborhood of $x$,
+  \Cref{lem:smooth_barycentric_coord} gives smooth weight functions $w_j$
+  such that $g(x') = \sum w_j(x')p_j(x')$. Hence we can set
+  $f_{x'}(s) = \sum w_j(x')f_j(s)$.
+\end{proof}
+
+\subsection{Proof of the loop construction proposition}
+\label{sub:proof_of_the_loop_construction_proposition}
+
+We finally assemble the ingredients from the previous two sections.
+
+\begin{proof}[Proof of \Cref{prop:∃_loops}]
+  \proves{prop:∃_loops}
+  \uses{lem:∃_surrounding_loops, lem:reparametrization, lem:exists_cont_diff_of_convex}
+  \leanok
+  Let $γ^*$ be a family of loops surrounding the origin in $B_F(0,1)$
+  the open unit ball in $F$, constructed using \Cref{lem:local_loops}.
+  For $x$ in some neighborhood $U^*$ of $K$ where $g = β$, we set
+  $γ_x = g(x) + εγ^*$ where $ε > 0$ is sufficiently small to ensure that
+  $B_{E\times F}((x,β(x)),2ε)\subseteq \Omega$ (recall $Ω$ is
+  open and $K$ is compact).
+  \Cref{lem:∃_surrounding_loops} extends this family to a continuous
+  family of surrounding loops $γ_x$ for all $x$ (this is not yet our
+  final $γ$).
+
+  We then need to approximate this continuous family by a smooth one.
+  Some care is needed to ensure that it stays based at $β$.
+  We can first reparametrize $γ$ on $[0,1] \times 𝕊^1$
+  to ensure that $γ$ is constant in a neighborhood of
+  $C = \{(t, s) \in [0,1] \times 𝕊^1 \mid t = 0 \text{ or } s = 0\}$.
+  Using \Cref{lem:exists_cont_diff_of_convex}, we can find a smooth function
+  that has distance at most $ε$ from $γ$ and coincides with $γ$ on $C$
+  (using the fact that $γ$ is already smooth near $C$).
+  Since all loops that are sufficiently close to $γ$ still surround $g$,
+  we can also ensure that the new smoothened $γ$ is still surrounding.
+
+  Then \Cref{lem:reparametrization} gives a family of circle
+  diffeomorphisms $h_x$ such that $γ^1_x ∘ h_x$ has average $g(x)$.
+
+  Finally we choose a cut-off function function $χ$ which vanishes near
+  $E ∖ U^*$ and equals one near $K$. As our final family of loops,
+  we choose $χ(x)g(x) + (1-χ(x))(γ_x ∘ h_x)$. This
+  operation does not change the average values of these loops, because
+  it rescales them around their average value, but makes them constant
+  near $K$. Also, those loops stay in $Ω$, thanks to our choice of $ε$.
+\end{proof}
+
+% vim: set expandtab sw=2 tabstop=2:

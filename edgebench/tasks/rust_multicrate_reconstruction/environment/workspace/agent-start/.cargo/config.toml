@@ -1,0 +1,15 @@
+# CAS Build Configuration
+
+[build]
+jobs = 16
+target-dir = "target"
+
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "vendor-deps"

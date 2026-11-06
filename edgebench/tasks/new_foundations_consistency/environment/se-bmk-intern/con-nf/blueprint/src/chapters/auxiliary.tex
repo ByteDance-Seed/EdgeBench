@@ -1,0 +1,121 @@
+\section{Relations}
+
+\begin{definition}
+  \label{def:relation_props}
+  Let \( R : \sigma \to \tau \to \Prop \).
+  We define
+  \begin{itemize}
+    \item the \emph{image} of \( R \) to be the set \( \im R = \{ y : \tau \mid \exists x : \sigma,\, x \mathrel{R} y \} \);
+    \item the \emph{coimage} of \( R \) to be the set \( \coim R = \{ x : \sigma \mid \exists y : \tau,\, x \mathrel{R} y \} \) (note that this is \emph{not} the same as the category-theoretic coimage of a morphism);
+    \item the \emph{field} of \( R \) to be the set \( \field R = \coim R \cup \im R \);
+    \item the \emph{image of \( R \) on} \( s : \Set \sigma \) to be the set \( \im R|_s = \{ y : \tau \mid \exists x \in s,\, x \mathrel{R} y \} \);
+    \item the \emph{coimage of \( R \) on} \( t : \Set \tau \) to be the set \( \coim R|_t = \{ x : \sigma \mid \exists y \in t,\, x \mathrel{R} y \} \);
+    \item the \emph{converse} of \( R \) to be the relation \( R^{-1} : \tau \to \sigma \to \Prop \) such that \( y \mathrel{R^{-1}} x \) if and only if \( x \mathrel{R} y \);
+    \item if \( S : \tau \to \upsilon \to \Prop \), the \emph{composition} \( S \circ R : \sigma \to \upsilon \to \Prop \) is the relation given by \( x \mathrel{(S\circ R)} z \) if and only if there is \( y : \tau \) such that \( x \mathrel{R} y \) and \( y \mathrel{S} z \);
+    \item for a natural number \( n \), the \emph{\( n \)th power} of \( R : \tau \to \tau \to \Prop \) is defined by \( R^{n+1} = R \circ R^n \) and \( R^0 \) is the identity relation on \( \coim R \);
+    \item for an integer \( n \), the \emph{\( n \)th power} of \( R : \tau \to \tau \to \Prop \) is defined by \( R^{(n : \mathbb Z)} = R^n \) and \( R^{-(n : \mathbb Z)} = (R^n)^{-1} \) for \( n : \mathbb N \).\footnote{This may be implemented using \texttt{Int.negInduction} from mathlib.}
+  \end{itemize}
+  We say that \( R \) is
+  \begin{itemize}
+    \item \emph{injective}, if \( s_1 \mathrel{R} t, s_2 \mathrel{R} t \) imply \( s_1 = s_2 \);
+    \item \emph{surjective}, if for every \( t : \tau \), there is some \( s : \sigma \) such that \( s \mathrel{R} t \);
+    \item \emph{coinjective}, if \( s \mathrel{R} t_1, s \mathrel{R} t_2 \) imply \( t_1 = t_2 \);
+    \item \emph{cosurjective}, if for every \( s : \sigma \), there is some \( t : \tau \) such that \( s \mathrel{R} t \);
+    \item \emph{functional}, if \( R \) is coinjective and cosurjective, or equivalently, for every \( s : \sigma \) there is exactly one \( t : \tau \) such that \( s \mathrel{R} t \);
+    \item \emph{cofunctional}, if \( R \) is injective and surjective, or equivalently, for every \( t : \tau \) there is exactly one \( s : \sigma \) such that \( s \mathrel{R} t \);
+    \item \emph{one-to-one}, if \( R \) is injective and coinjective;
+    \item \emph{bijective}, if \( R \) is functional and cofunctional;
+    \item \emph{permutative}, if \( R : \tau \to \tau \to \Prop \) is one-to-one and has equal image and coimage.
+  \end{itemize}
+  We also define the \emph{graph} of a function \( f : \sigma \to \tau \) to be the functional relation \( R : \sigma \to \tau \to \Prop \) given by \( (x, y) \in R \) if and only if \( f(x) = y \).
+  Most of these definitions are from \url{https://www.kylem.net/math/relations.html}, and most of these are in mathlib under \texttt{Mathlib.Logic.Relator}.
+\end{definition}
+\begin{proposition}\mbox\negthinspace
+  \uses{def:relation_props}
+  \label{prop:relation_results}
+  \begin{enumerate}
+    \item \( R : \tau \to \tau \to \Prop \) is permutative if and only if it is one-to-one and for all \( x : \tau \), there exists \( y \) such that \( x \mathrel{R} y \) if and only if there exists \( y \) such that \( y \mathrel{R} x \).
+    \item If \( R, S : \tau \to \tau \to \Prop \) are permutative and \( \coim R \cap \coim S = \emptyset \), then \( R \sqcup S \) is permutative and has coimage \( \coim R \cup \coim S \).
+    \item If \( R, S : \tau \to \tau \to \Prop \) are permutative and \( \coim R = \coim S \), then \( R \circ S \) is permutative and has coimage equal to that of \( R \) and \( S \).
+    \item If \( R \) is permutative, then \( \coim R^n = \coim R = \im R = \im R^n \) for any natural number or integer \( n \).
+    \item If \( R \) is permutative and \( s_1, s_2 \subseteq \coim R \), then the image of \( R \) on \( s_1 \) is equal to \( s_2 \) if and only if the coimage of \( R \) on \( s_2 \) is equal to \( s_1 \).
+  \end{enumerate}
+\end{proposition}
+\begin{definition}
+  \label{def:OrbitRestriction}
+  \lean{Rel.OrbitRestriction}
+  \leanok
+  Let \( s : \Set \tau \).
+  An \emph{orbit restriction} for \( s \) (over some type \( \sigma \)) consists of a set \( t : \Set \tau \) disjoint from \( s \), a function \( f : \tau \to \sigma \), and a permutation \( \pi : \sigma \simeq \sigma \), such that for each \( u : \sigma \), the set \( t \cap f^{-1}(u) \) has cardinality at least \( \max(\aleph_0, \#s, \#d) \).
+
+  An orbit restriction encapsulates information about how orbits should be completed.
+  \begin{itemize}
+    \item \( t \) is the \emph{sandbox}, the set inside which all added items must reside.
+    \item \( f \) is a \emph{categorisation function}, placing each value \( x : \tau \) into a category \( u : \sigma \).
+    \item \( \pi \) is a permutation of categories. If \( x \) has category \( u \), then anything that \( x \) is mapped to should have category \( \pi(u) \).
+  \end{itemize}
+\end{definition}
+\begin{proposition}[completing restricted orbits]
+  \uses{def:OrbitRestriction}
+  \label{prop:completing_restricted_orbits}
+  \lean{Rel.permutativeExtension}
+  \leanok
+  Let \( R : \tau \to \tau \to \Prop \) be a one-to-one relation, and let \( (t, f, \pi) \) be an orbit restriction for \( \field R \) over some type \( \sigma \).
+  Then there is a permutative relation \( T \) such that
+  \begin{itemize}
+    \item \( \coim T \subseteq \field R \cup t \);
+    \item \( \#\coim T \leq \max(\aleph_0, \#\coim R) \);
+    \item \( R \leq T \); and
+    \item if \( (x, y) \in T \), then \( (x, y) \in R \vee f(y) = \pi(f(x)) \).
+  \end{itemize}
+\end{proposition}
+\begin{proof}
+  \leanok
+  For each \( u : \sigma \), define an injection \( i_u : \field R \times \mathbb N \to \tau \) where \( \im i_u \subseteq t \cap f^{-1}(u) \).
+  Define a relation \( S \) on \( \tau \) by the following constructors.
+  \begin{align*}
+    \forall x \in \coim R \setminus \im R,\, &(i_{\pi^{-1}(f(x))}(x, 0), x) \in S \\
+    \forall n : \mathbb N,\, \forall x \in \coim R \setminus \im R,\, &(i_{\pi^{-n-2}(x)}(x, n+1), i_{\pi^{-n-1}(x)}(x, n)) \in S \\
+    \forall x \in \im R \setminus \coim R,\, &(x, i_{\pi(f(x))}(x, 0)) \in S \\
+    \forall n : \mathbb N,\, \forall x \in \im R \setminus \coim R,\, &(i_{\pi^{n+1}(f(x))}(x, n), i_{\pi^{n+2}(f(x))}(x, n+1)) \in S
+  \end{align*}
+  Note that \( (x, y) \in S \) implies \( f(y) = \pi(f(x)) \).
+  Finally, as \( R \sqcup S \) is permutative, it satisfies the required conclusion.
+\end{proof}
+\begin{proposition}[completing orbits]
+  \label{prop:completing_orbits}
+  \lean{Rel.permutativeExtension'}
+  \leanok
+  Let \( R : \tau \to \tau \to \Prop \) be a one-to-one relation.
+  Let \( s : \Set \tau \) be an infinite set such that \( \#\field R \leq \#s \), and \( \field R \) and \( s \) are disjoint.
+  Then there is a permutative relation \( S \) such that \( R \leq S \) and \( \coim S \subseteq \field R \cup s \).
+\end{proposition}
+\begin{proof}
+  \leanok
+  \uses{prop:completing_restricted_orbits}
+  Define the orbit restriction \( (s, f, \pi) \) for \( \field R \) over \( \Unit \).
+  Note that for this to be defined, we used the inequality
+  \[ \#s \geq \max(\aleph_0, \#\field R) \]
+  Use \cref{prop:completing_restricted_orbits} to obtain a permutative relation \( T \) extending \( R \) defined on \( \field R \cup s \).
+\end{proof}
+
+\section{Cardinal arithmetic}
+
+\begin{lemma}[mathlib]
+  \label{prop:card_subset_card_lt_cof}
+  Let \( \#\mu \) be a strong limit cardinal.
+  Then there are precisely \( \#\mu \)-many subsets of \( \mu \) of size strictly less than \( \cof(\ord(\#\mu)) \).
+\end{lemma}
+\begin{proof}
+  Endow \( \mu \) with its initial well-ordering.
+  Each such subset is bounded in \( \mu \) with respect to this well-ordering as its size is less than \( \cof(\ord(\#\mu)) \).
+  So it suffices to prove there are precisely \( \#\mu \)-many bounded subsets of \( \mu \).
+  \begin{align*}
+    \#\{ s : \Set \mu \mid \exists \nu : \mu,\, \forall x \in s,\, x < \nu \}
+    &= \#\bigcup_{\nu : \mu} \{ s : \Set \mu \mid \forall x \in s,\, x < \nu \} \\
+    &\leq \sum_{\nu : \mu} \#\{ s : \Set \mu \mid \forall x \in s,\, x < \nu \} \\
+    &= \sum_{\nu : \mu} \#\{ s : \Set \{ x : \mu \mid x < \nu \}\} \\
+    &= \sum_{\nu : \mu} \underbrace{2^{\#\{ x : \mu \mid x < \nu \}}}_{<\mu} \\
+    &\leq \mu
+  \end{align*}
+\end{proof}

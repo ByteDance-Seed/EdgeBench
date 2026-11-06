@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "cas": {
+      "args": [
+        "serve"
+      ],
+      "command": "cas"
+    }
+  }
+}

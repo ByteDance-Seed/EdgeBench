@@ -1,0 +1,7 @@
+all: weave tex
+
+tex:
+	latexmk -shell-escape -pdf -pdflatex=lualatex -file-line-error -halt-on-error -interaction=nonstopmode -cd -output-directory=build ./main.tex
+
+weave:
+	python3 weave.py

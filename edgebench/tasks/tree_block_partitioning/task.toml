@@ -1,0 +1,39 @@
+schema_version = 0
+id = "tree_block_partitioning"
+name = "Tree Block Partitioning"
+category = "Combinatorial Optimization"
+language = "C++"
+description = "Solve six progressive problems on tree decomposition and block partitioning, where algorithmic ideas discovered in simpler variants transfer to harder ones."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "cpp"               # bases/cpp; python3 (3.10.12, pinned) added by the task, as in v1
+platform = "linux/amd64"
+cwd = "/home/workspace/p1"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["T1.cpp", "T2.cpp", "T3.cpp", "T4.cpp", "T5.cpp", "T6.cpp"]
+exclude = []
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 600
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# eval.py runs every case sequentially under a wall-clock limit equal to the statement's limit
+# (--time-factor 1 --time-grace 0) and an RSS limit polled every 10 ms, so scores near the limits
+# depend on host speed and load; see NOTES.md.
+
+[[blobs]]                  # hidden data: /opt/p1_judge/prob/P1/T*_*/data (290 entries, 415 MB unpacked)
+path = "judge/blobs/p1_data.tar.gz"
+sha256 = "15dd5397130ea0adc370024f0772f3599fdd43608c63f5317bec1a57907737a9"
+
+[score]
+direction = "maximize"
+rescale = { kind = "linear", lower = 0.0, upper = 100.0 }

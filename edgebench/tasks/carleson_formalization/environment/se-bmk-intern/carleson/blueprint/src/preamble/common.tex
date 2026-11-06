@@ -1,0 +1,75 @@
+% !TeX root = print.tex
+% Put any macro and import needed for the project here.
+% This will be used by both the web and print versions of the blueprint.
+% This file is not meant to be built. Build src/web.tex or src/print.text instead.
+
+\usepackage{mathtools}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{enumerate}
+% \usepackage{showlabels} % not compatible with Plastex
+\usepackage[normalem]{ulem}
+
+\newcommand{\rs}[1]{{\color{blue}  RS: #1.}}
+\newcommand{\lars}[1]{{\color{red}  LB: #1.}}
+\newcommand{\asgar}[1]{{\color{green} AJ: #1}} %\color{TealBlue}
+\newcommand{\ct}[1]{{\color{purple}  CT: #1}}
+
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[subsection]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{cor}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{remark}[theorem]{Remark}
+\newtheorem{example}[theorem]{Example}
+\newtheorem{examples}[theorem]{Examples}
+% \numberwithin{section}{chapter}
+%\numberwithin{subsection}{section}
+%\numberwithin{subsubsection}{subsection}
+\numberwithin{equation}{subsection}
+
+\usepackage[hidelinks, colorlinks=false, hypertexnames=false]{hyperref}
+
+
+\newcommand{\N}{{\mathbb{N}}}
+\newcommand{\Z}{{\mathbb{Z}}}
+\newcommand{\Q}{{\mathbb{Q}}}
+\newcommand{\R}{{\mathbb{R}}}
+
+\DeclareMathOperator{\ch}{\operatorname{ch}}
+\DeclareMathOperator{\dens}{\operatorname{dens}}
+\DeclareMathOperator{\supp}{\operatorname{supp}}
+\DeclareMathOperator{\tp}{\operatorname{top}}
+\DeclareMathOperator{\im}{\operatorname{im}}
+\DeclareMathOperator{\Lip}{\operatorname{Lip}}
+\DeclareMathOperator{\bd}{\operatorname{bd}}
+\DeclareMathOperator*{\esssup}{\operatorname{ess\,sup}}
+
+\newcommand{\fp}{{\mathfrak p}}
+\newcommand{\fP}{{\mathfrak P}}
+\newcommand{\fu}{{\mathfrak u}}
+\newcommand{\fU}{{\mathfrak U}}
+\newcommand{\fv}{{\mathfrak v}}
+\newcommand{\fq}{{\mathfrak q}}
+\newcommand{\fQ}{{\mathfrak Q}}
+\newcommand{\fT}{{\mathfrak T}}
+\newcommand{\fL}{{\mathfrak L}}
+\newcommand{\fC}{{\mathfrak C}}
+\newcommand{\pc}{{\mathrm{c}}}
+\newcommand{\ps}{{\mathrm{s}}}
+\newcommand{\AD}{{\bf s}}
+\newcommand{\fc}{{\Omega}}
+\newcommand{\borel}{{\mathcal{E}}}
+\newcommand{\borelb}{{\mathcal{G}}}
+\newcommand{\scI}{{\mathcal{I}}} % note: renamed because it conflicted with another command
+\newcommand{\tQ}{{Q}}
+\newcommand{\mfa}{{\vartheta}}
+\newcommand{\mfb}{{\theta}}
+\newcommand{\Mf}{{\Theta}}
+\newcommand{\fcc}{{\mathcal{Q}}}

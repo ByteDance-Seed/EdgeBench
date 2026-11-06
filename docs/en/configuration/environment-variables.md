@@ -6,153 +6,78 @@ title: Environment Variables
 
 ## Overview
 
-Most SForge configuration can be injected via `SFORGE_*` environment variables. CLI-only fields, such as judge CPU/memory limits, are called out below. The resolution priority is:
+SForge reads a small set of `SFORGE_*` environment variables. Anything that has a CLI flag (model, effort, timeout, backend, resource limits) is set with the flag or in an [experiment file](/en/configuration/experiments), not with a variable. The resolution order is:
 
 ```
 defaults  <  env vars  <  experiment YAML  <  CLI flags
 ```
 
-Proxy, mirror, API key, path, backend, registry, and hub settings can be overridden at runtime.
+An experiment file's `env:` block sets variables in the `sforge run` process before anything else is read.
 
-## Build Stage Variables
-
-These variables are passed as Docker build args during `sforge build`. They affect image construction but are **not** baked into the final image.
+## Agent
 
 | Variable | Purpose |
 |----------|---------|
-| `SFORGE_HTTP_PROXY` | HTTP proxy for Docker build |
-| `SFORGE_HTTPS_PROXY` | HTTPS proxy for Docker build |
-| `SFORGE_NO_PROXY` | Addresses to bypass proxy |
-| `SFORGE_PYPI_INDEX_URL` | PyPI mirror URL (sets `PIP_INDEX_URL` at build time) |
-| `SFORGE_MAVEN_MIRROR_URL` | Maven repository mirror (sets `MAVEN_MIRROR_URL` at build time) |
-| `SFORGE_GO_PROXY` | Go module proxy (sets `GOPROXY` at build time) |
-| `SFORGE_APT_MIRROR_URL` | APT source mirror (rewrites `/etc/apt/sources.list` in base image) |
-| `SFORGE_GIT_USER` | Git username for private repos |
-| `SFORGE_GIT_TOKEN` | Git access token (injected as BuildKit secret, **not** stored in image) |
-| `SFORGE_EXTRA_HOSTS` | DNS overrides during build, format: `"host1:ip1,host2:ip2"` |
+| `SFORGE_AGENT_API_KEY` | API key for the model. It stays on the host: the judge server's LLM gateway adds it to the agent's requests |
+| `SFORGE_AGENT_API_BASE_URL` | Model API endpoint, if not the agent's default (Anthropic for Claude Code and OpenCode, OpenAI for Codex) |
+| `SFORGE_AGENT_EXTRA_ENV` | Extra variables for the work container, format `"KEY1=VAL1,KEY2=VAL2"` (e.g. Claude Code's model routing variables) |
+| `SFORGE_NODEJS_MIRROR_URL` | Node.js download mirror used on the host when building agent bundles (the tarball is still checked against its pinned sha256) |
+| `SFORGE_CACHE_DIR` | Cache for agent bundles and `sforge replay` (default `~/.cache/sforge`) |
 
-### How build args work
-
-Proxy variables (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`) are Docker predefined build args --- they are automatically available to `RUN` commands but do not persist in the final image layer.
-
-Package mirror variables (`PIP_INDEX_URL`, `GOPROXY`, `MAVEN_MIRROR_URL`) are declared as `ARG` directives, making them available during `RUN` but also not persisted.
-
-## Run Stage Variables
-
-Used when running agents via `sforge run`. These are injected as container environment variables.
+## Judge
 
 | Variable | Purpose |
 |----------|---------|
-| `SFORGE_AGENT_API_KEY` | API key passed to the selected agent using that agent's expected env var (`ANTHROPIC_AUTH_TOKEN` for Claude Code, `CODEX_API_KEY` for Codex, `ANTHROPIC_API_KEY` for OpenCode) |
-| `SFORGE_AGENT_API_BASE_URL` | API base URL override passed through the selected agent's base-url env var when it has one |
-| `SFORGE_AGENT_MODEL` | Model override for the agent |
-| `SFORGE_AGENT_EFFORT` | Reasoning effort (`low`, `medium`, `high`, or `max`) |
-| `SFORGE_AGENT_TIMEOUT` | Agent timeout in seconds |
-| `SFORGE_AGENT_EXTRA_ENV` | Extra env vars for agent container, format: `"KEY1=VAL1,KEY2=VAL2"` |
-| `SFORGE_HTTP_PROXY` | HTTP proxy injected into the agent container at run time. Not recommended for normal use; incompatible with `--disable-internet`. |
-| `SFORGE_HTTPS_PROXY` | HTTPS proxy injected into the agent container at run time. Not recommended for normal use; incompatible with `--disable-internet`. |
-| `SFORGE_NO_PROXY` | Addresses that bypass the run-time proxy |
-| `SFORGE_NODEJS_MIRROR_URL` | Node.js download mirror (used during agent runtime install) |
-| `SFORGE_NPM_REGISTRY_URL` | NPM registry mirror (sets `npm_config_registry` in container) |
-| `SFORGE_CLAUDE_CACHE_OPT` | Suppress Claude Code attribution header and dynamic system prompt sections for better caching on third-party proxies. Set to `1` to enable. |
+| `SFORGE_JUDGE_EXTRA_ENV` | Variables for judge containers, format `"KEY1=VAL1,KEY2=VAL2"`, e.g. the credentials an LLM-graded task needs. Judge containers get nothing else from the host |
+| `SFORGE_ADMIN_SECRET` | Shared secret between `sforge run` and an external `sforge serve` (session registration, auto-eval, usage). If unset, `sforge serve` creates a mode-`0600` file under `SFORGE_LOG_DIR` and `sforge run` reads it from the same place; an in-process judge uses a random one. Never expose it to work containers |
 
-::: warning Direct run-time proxies
-Directly injecting `SFORGE_HTTP_PROXY` / `SFORGE_HTTPS_PROXY` into the agent container gives that container proxy-mediated network access. This is useful only for exceptional run-time dependency downloads and is **not recommended** for LLM API access.
-
-It is also incompatible with network isolation (`--disable-internet`). If the agent needs to call an LLM API through a corporate proxy while network isolation is enabled, run `sforge proxy` on the host and point `SFORGE_AGENT_API_BASE_URL` to `http://host.docker.internal:<port>` instead.
-
-For E2B, generic host `HTTP_PROXY` / `HTTPS_PROXY` variables are not forwarded
-to Work Sandboxes. Set the `SFORGE_` variants only when the proxy is reachable
-from E2B; isolated E2B runs always remove proxy variables and use the native
-host allowlist directly.
-:::
-
-## Judge Variables
-
-| Variable | Purpose |
-|----------|---------|
-| `SFORGE_JUDGE_EXTRA_ENV` | Extra env vars for judge containers, format: `"KEY1=VAL1,KEY2=VAL2"` |
-| `SFORGE_ADMIN_SECRET` | Trusted-host credential for Judge session registration and auto-eval. If omitted, SForge creates a mode-`0600` secret under `SFORGE_LOG_DIR`. Never expose it to Work containers. |
-
-## Resource Limit Variables
-
-| Variable | Purpose |
-|----------|---------|
-| `SFORGE_WORK_CPU_LIMIT` | Number of CPUs for work containers (e.g., `4`) |
-| `SFORGE_WORK_MEM_LIMIT` | Memory limit for work containers (e.g., `8g`) |
-
-Judge CPU/memory limits are currently set through CLI flags (`--judge-cpu-limit`, `--judge-mem-limit`) or experiment YAML (`judge_cpu_limit`, `judge_mem_limit`), not environment variables.
-
-## Container Backend Variables
+## Images and Tasks
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `SFORGE_BACKEND` | `docker` | Container backend: `docker`, `k8s`, or official `e2b` |
+| `SFORGE_BENCHMARK` | `edgebench` | Benchmark directory, the default for `-b` |
+| `SFORGE_LOG_DIR` | `logs/` | Build logs and run outputs |
+| `SFORGE_REGISTRY` | the benchmark's `registry` | Registry prefix for `sforge pull` / `sforge push`; images live at `<prefix>/<image>:<tag>` |
+| `SFORGE_BLOB_URL` | the benchmark's `blob_url` | Where `sforge build` downloads task blobs, as `<url>/<sha256>` (a `file://` URL works for a local copy) |
+
+## Proxies
+
+| Config | Env vars checked (first match wins) |
+|--------|-------------------------------------|
+| HTTP proxy | `SFORGE_HTTP_PROXY` > `HTTP_PROXY` > `http_proxy` |
+| HTTPS proxy | `SFORGE_HTTPS_PROXY` > `HTTPS_PROXY` > `https_proxy` |
+| No-proxy list | `SFORGE_NO_PROXY` > `NO_PROXY` > `no_proxy` |
+
+Where the proxy is used is described in [Network Setup](/en/configuration/network-setup#proxies).
+
+## Container Backends
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
 | `SFORGE_K8S_NAMESPACE` | `default` | Kubernetes namespace |
-| `SFORGE_K8S_IMAGE_REGISTRY` | --- | Container registry for K8s image pulls |
+| `SFORGE_K8S_IMAGE_REGISTRY` | `SFORGE_REGISTRY`, else the benchmark's `registry` | Registry prefix pods pull images from |
 | `SFORGE_K8S_KUBECONFIG` | --- | Path to kubeconfig file |
-| `SFORGE_K8S_NODE_SELECTOR` | --- | Node selector for K8s pods, format: `"key1=val1,key2=val2"` |
-| `SFORGE_E2B_TEMPLATE_MAP` | --- | Explicit E2B image-key to Template mapping, overriding the derived name. Inline `"image_key=template,..."` pairs, or a path ending in `.json` holding a JSON object |
-| `SFORGE_E2B_TEMPLATE_NAMESPACE` | --- | Namespace for published E2B Templates (for example, `edgebench`) |
-| `SFORGE_E2B_SANDBOX_TTL` | `3600` | E2B Sandbox TTL in seconds |
+| `SFORGE_K8S_NODE_SELECTOR` | --- | Node selector for pods, format `"key1=val1,key2=val2"` |
+| `SFORGE_E2B_TEMPLATE_NAMESPACE` | --- | Namespace of shared E2B Templates (unset: your own team's Templates) |
+| `SFORGE_E2B_TEMPLATE_MAP` | --- | Explicit image-key to Template mapping, overriding the derived name. Inline `"image_key=template,..."` pairs, or a path ending in `.json` holding a JSON object |
+| `SFORGE_E2B_PROVIDER` | `e2b` | E2B-compatible provider profile: `e2b` (official) or `vefaas` (Volcano Engine veFaaS). Set it on both the `run` and `serve` hosts |
 
-## Path Variables
+The E2B SDK itself reads `E2B_API_KEY` (and `E2B_DOMAIN` for other endpoints).
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `SFORGE_LOG_DIR` | `logs/` | Override log output directory |
-| `SFORGE_TASKS_DIR` | `tasks/` | Override task definitions directory |
-| `SFORGE_REGISTRY` | --- | Default Docker registry URL for `pull`/`push` commands |
-
-## Proxy Fallback Chain
-
-For proxy variables, SForge checks multiple environment variable names in priority order:
-
-| Config Field | Env vars checked (first match wins) |
-|-------------|--------------------------------------|
-| `http_proxy` | `SFORGE_HTTP_PROXY` > `HTTP_PROXY` > `http_proxy` |
-| `https_proxy` | `SFORGE_HTTPS_PROXY` > `HTTPS_PROXY` > `https_proxy` |
-| `no_proxy` | `SFORGE_NO_PROXY` > `NO_PROXY` > `no_proxy` |
-
-This means if you already have `HTTP_PROXY` set in your shell, SForge will pick it up automatically. Use the `SFORGE_` prefix to override without affecting other tools.
-
-Because these proxy values are also injected into work containers during `sforge run`, unset them when using `--disable-internet` or use `sforge proxy` for LLM API forwarding.
-
-## Build vs Run Decoupling
-
-::: warning Important
-Build and Run variables are completely independent. Build-stage variables are only used during `docker build` --- they are **not** baked into images. The run stage needs its own configuration.
-:::
-
-This means:
-
-- Setting `SFORGE_PYPI_INDEX_URL` only affects `sforge build` (package installation during image construction)
-- Setting `SFORGE_AGENT_API_KEY` only affects `sforge run` (agent execution)
-- Proxy settings are read by both build and run stages. Run-time direct proxies are not recommended and do not work with network isolation; use `sforge proxy` for LLM API access through an upstream proxy.
-
-## Example: Full Configuration
+## Example
 
 ```bash
-# Build stage
-export SFORGE_HTTP_PROXY="http://proxy.corp.example:8080"
-export SFORGE_HTTPS_PROXY="http://proxy.corp.example:8080"
-export SFORGE_PYPI_INDEX_URL="https://mirrors.example.com/pypi/simple/"
-export SFORGE_APT_MIRROR_URL="http://mirrors.example.com"
-export SFORGE_GO_PROXY="https://goproxy.example.com"
-
-# Run stage
+# Model
 export SFORGE_AGENT_API_KEY="sk-ant-..."
-export SFORGE_AGENT_API_BASE_URL="https://api.anthropic.com"
-export SFORGE_AGENT_MODEL="claude-sonnet-4-20250514"
-export SFORGE_AGENT_TIMEOUT="7200"
-export SFORGE_NODEJS_MIRROR_URL="https://mirrors.example.com/nodejs-release/"
 
-# Resource limits
-export SFORGE_WORK_CPU_LIMIT="4"
-export SFORGE_WORK_MEM_LIMIT="8g"
+# Credentials for the LLM-graded task
+export SFORGE_JUDGE_EXTRA_ENV="SFORGE_JUDGE_API_KEY=sk-...,SFORGE_JUDGE_MODEL=gpt-5.5"
 
-# Container backend (Kubernetes)
-export SFORGE_BACKEND="k8s"
+# Kubernetes
 export SFORGE_K8S_NAMESPACE="sforge-runs"
-export SFORGE_K8S_IMAGE_REGISTRY="registry.example.com/sforge"
+
+sforge run --backend k8s --task ad_placement_optimization --agent claude-code \
+  --model claude-opus-4-8 --timeout 43200 \
+  --work-cpu-limit 4 --work-mem-limit 16g \
+  --judge-advertise 10.0.0.12 --judge-port 8080
 ```

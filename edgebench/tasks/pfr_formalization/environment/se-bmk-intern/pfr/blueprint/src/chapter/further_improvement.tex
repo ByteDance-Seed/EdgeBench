@@ -1,0 +1,382 @@
+\chapter{Further improvement to exponent}
+
+\section{Kullback--Leibler divergence}
+
+In the definitions below, $G$ is a set.
+
+\begin{definition}[Kullback--Leibler divergence]\label{kl-div}\lean{KLDiv}\leanok If $X,Y$ are two $G$-valued random variables, the Kullback--Leibler divergence is defined as
+  $$ D_{KL}(X\Vert Y) := \sum_x \mathbf{P}(X=x) \log \frac{\mathbf{P}(X=x)}{\mathbf{P}(Y=x)}.$$
+\end{definition}
+
+\begin{lemma}[Kullback--Leibler divergence of copy]
+  \label{kl-div-copy}
+  \lean{ProbabilityTheory.IdentDistrib.KLDiv_eq}
+  \leanok
+
+  If $X'$ is a copy of $X$, and $Y'$ is a copy of $Y$, then $D_{KL}(X'\Vert Y') = D_{KL}(X\Vert Y)$.
+\end{lemma}
+
+\begin{proof}\uses{kl-div}\leanok  Clear from definition.
+\end{proof}
+
+\begin{lemma}[Gibbs inequality]\label{Gibbs}\uses{kl-div}\lean{KLDiv_nonneg}\leanok  $D_{KL}(X\Vert Y) \geq 0$.
+\end{lemma}
+
+\begin{proof}\leanok
+  \uses{log-sum}
+  Apply \Cref{log-sum} on the definition.
+\end{proof}
+
+\begin{lemma}[Converse Gibbs inequality]\label{Gibbs-converse}\lean{KLDiv_eq_zero_iff_identDistrib}\leanok  If $D_{KL}(X\Vert Y) = 0$, then $Y$ is a copy of $X$.
+\end{lemma}
+
+\begin{proof}\leanok
+  \uses{converse-log-sum}
+  Apply \Cref{converse-log-sum}.
+\end{proof}
+
+\begin{lemma}[Convexity of Kullback--Leibler]\label{kl-div-convex}\lean{KLDiv_of_convex}\leanok  If $S$ is a finite set, $\sum_{s \in S} w_s = 1$ for some non-negative $w_s$, and ${\bf P}(X=x) = \sum_{s\in S} w_s  {\bf P}(X_s=x)$, ${\bf P}(Y=x) = \sum_{s\in S} w_s  {\bf P}(Y_s=x)$ for all $x$, then
+$$D_{KL}(X\Vert Y) \le \sum_{s\in S} w_s D_{KL}(X_s\Vert Y_s).$$
+\end{lemma}
+
+\begin{proof}\leanok
+  \uses{kl-div,log-sum}
+For each $x$, replace $\log \frac{\mathbf{P}(X_s=x)}{\mathbf{P}(Y_s=x)}$ in the definition with $\log \frac{w_s\mathbf{P}(X_s=x)}{w_s\mathbf{P}(Y_s=x)}$ for each $s$, and apply \Cref{log-sum}.
+\end{proof}
+
+
+\begin{lemma}[Kullback--Leibler and injections]\label{kl-div-inj}\lean{KLDiv_of_comp_inj}\leanok  If $f:G \to H$ is an injection, then $D_{KL}(f(X)\Vert f(Y)) = D_{KL}(X\Vert Y)$.
+\end{lemma}
+
+\begin{proof}\leanok\uses{kl-div} Clear from definition.
+\end{proof}
+
+Now let $G$ be an additive group.
+
+\begin{lemma}[Kullback--Leibler and sums]\label{kl-sums}\lean{KLDiv_add_le_KLDiv_of_indep}\leanok If $X, Y, Z$ are independent $G$-valued random variables, then
+  $$D_{KL}(X+Z\Vert Y+Z) \leq D_{KL}(X\Vert Y).$$
+\end{lemma}
+
+\begin{proof}\leanok
+  \uses{kl-div-inj,kl-div-convex}
+For each $z$, $D_{KL}(X+z\Vert Y+z)=D_{KL}(X\Vert Y)$ by \Cref{kl-div-inj}. Then apply \Cref{kl-div-convex} with $w_z=\mathbf{P}(Z=z)$.
+\end{proof}
+
+\begin{definition}[Conditional Kullback--Leibler divergence]\label{ckl-div}  \uses{kl-div}\leanok
+  If $X,Y,Z$ are random variables, with $X,Z$ defined on the same sample space, we define
+$$ D_{KL}(X|Z \Vert  Y) := \sum_z \mathbf{P}(Z=z) D_{KL}( (X|Z=z) \Vert  Y).$$
+\end{definition}
+
+\begin{lemma}[Kullback--Leibler and conditioning]\label{kl-cond}\lean{condKLDiv_eq}\leanok If $X, Y$ are independent $G$-valued random variables, and $Z$ is another random variable defined on the same sample space as $X$, then
+  $$D_{KL}((X|Z)\Vert Y) = D_{KL}(X\Vert Y) + \bbH[X] - \bbH[X|Z].$$
+\end{lemma}
+
+\begin{proof}\leanok
+  \uses{ckl-div} Compare the terms correspond to each $x\in G$ on both sides.
+\end{proof}
+
+\begin{lemma}[Conditional Gibbs inequality]\label{Conditional-Gibbs}\lean{condKLDiv_nonneg}\leanok  $D_{KL}((X|W)\Vert Y) \geq 0$.
+\end{lemma}
+
+\begin{proof}\leanok \uses{Gibbs, ckl-div}  Clear from Definition \ref{ckl-div} and Lemma \ref{Gibbs}.
+\end{proof}
+
+\section{Rho functionals}
+
+Let $G$ be an additive group, and let $A$ be a non-empty subset of $G$.
+
+\begin{definition}[Rho minus]\label{rhominus-def}\lean{rhoMinus}\leanok  For any $G$-valued random variable $X$, we define $\rho^-(X)$ to be the infimum of $D_{KL}(X \Vert  U_A + T)$, where $U_A$ is uniform on $A$ and $T$ ranges over $G$-valued random variables independent of $U_A$.
+\end{definition}
+
+\begin{definition}[Rho plus]\label{rhoplus-def}\lean{rhoPlus}\uses{rhominus-def}\leanok  For any $G$-valued random variable $X$, we define $\rho^+(X) := \rho^-(X) + \bbH(X) - \bbH(U_A)$.
+\end{definition}
+
+\begin{lemma}[Rho minus non-negative]\label{rhominus-nonneg}\label{rhoMinus_nonneg}\uses{rhominus-def}\leanok  We have $\rho^-(X) \geq 0$.
+\end{lemma}
+
+\begin{proof}\leanok \uses{Conditional-Gibbs} Clear from Lemma \ref{Conditional-Gibbs}.
+\end{proof}
+
+\begin{lemma}[Rho minus of subgroup]\label{rhominus-subgroup}\lean{rhoMinus_of_subgroup}\uses{rhominus-def}\leanok If $H$ is a finite subgroup of $G$, then $\rho^-(U_H) = \log |A| - \log \max_t |A \cap (H+t)|$.
+\end{lemma}
+
+\begin{proof}\leanok
+  \uses{log-sum}
+  For every $G$-valued random variable $T$ that is independent of $Y$,
+  $$D_{KL}(U_H \Vert U_A+T) = \sum_{h\in H} \frac{1}{|H|}\log\frac{1/|H|}{\mathbf{P}[U_A+T=h]}\ge -\log(\mathbf{P}[U_A+T\in H]),$$
+  by \Cref{log-sum}. Then observe that $$-\log(\mathbf{P}[U_A+T\in H])=-\log(\mathbf{P}[U_A\in H-T])\ge -\log(\max_{t\in G} \mathbf{P}[U_A\in H+t]).$$ This proves $\ge$.
+
+  To get the equality, let $t^*:=\arg\max_t |A \cap (H+t)|$ and observe that $$\rho^-(U_H)\le D_{KL}(U_H \Vert  U_A+(U_H-t^*))= \log |A| - \log \max_t|A \cap (H+t)|.$$
+\end{proof}
+
+\begin{corollary}[Rho plus of subgroup]\label{rhoplus-subgroup}\lean{rhoPlus_of_subgroup}\uses{rhoplus-def}\leanok If $H$ is a finite subgroup of $G$, then $\rho^+(U_H) = \log |H| - \log \max_t |A \cap (H+t)|$.
+\end{corollary}
+
+\begin{proof}\leanok \uses{rhominus-subgroup} Straightforward by definition and \Cref{rhominus-subgroup}.
+\end{proof}
+
+\begin{definition}[Rho functional]\label{rho-def}\lean{rho}\uses{rhoplus-def}\leanok  We define $\rho(X) := (\rho^+(X) + \rho^-(X))/2$.
+\end{definition}
+
+\begin{lemma}\label{rho-init}\label{rho_of_uniform}\uses{rho-def}\leanok  We have $\rho(U_A) = 0$.
+\end{lemma}
+
+\begin{proof}\leanok \uses{rhominus-nonneg} $\rho^-(U_A)\le 0$ by the choice $T=0$. The claim then follows from \Cref{rhominus-nonneg}.
+\end{proof}
+
+\begin{lemma}[Rho of subgroup]\label{rho-subgroup}\uses{rho-def}\lean{rho_of_subgroup}\leanok
+If $H$ is a finite subgroup of $G$, and $\rho(U_H) \leq r$, then there exists
+$t$ such that $|A \cap (H+t)| \geq e^{-r} \sqrt{|A||H|}$, and
+$|H|/|A|\in[e^{-2r},e^{2r}]$.
+\end{lemma}
+
+\begin{proof}\leanok\uses{rhominus-subgroup, rhoplus-subgroup} The first claim is a direct corollary of \Cref{rhominus-subgroup} and \Cref{rhoplus-subgroup}. To see the second claim, observe that \Cref{rhominus-nonneg} and \Cref{rhoplus-subgroup} imply $\rho^-(U_H),\rho^+(U_H)\ge 0$. Therefore $$|H(U_A)-H(U_H)|=|\rho^+(U_H)-\rho^-(U_H)|\le \rho^-(U_H)+\rho^+(U_H)= 2\rho(U_H)\le 2r,$$
+  which implies the second claim.
+\end{proof}
+
+\begin{lemma}[Rho invariant]\label{rho-invariant}\lean{rho_of_translate}\leanok\uses{rho-def}  For any $s \in G$, $\rho(X+s) = \rho(X)$.
+\end{lemma}
+
+\begin{proof}\leanok\uses{kl-div-inj} Observe that by \Cref{kl-div-inj}, $$\inf_T D_{KL}(X\Vert U_A+T)=\inf_T D_{KL}(X+s\Vert U_A+T+s)=\inf_{T'} D_{KL}(X+s\Vert U_A+T').$$
+\end{proof}
+
+\begin{lemma}[Rho continuous]\label{rho-cts}\lean{rho_continuous}\leanok\uses{rho-def} $\rho(X)$ depends continuously on the distribution of $X$.
+\end{lemma}
+
+\begin{proof}  \leanok Clear from definition.
+\end{proof}
+
+\begin{lemma}[Rho and sums]\label{rho-sums}\lean{rhoMinus_of_sum, rhoPlus_of_sum, rho_of_sum}\leanok  If $X,Y$ are independent, one has
+  $$ \rho^-(X+Y) \leq \rho^-(X)$$
+  $$ \rho^+(X+Y) \leq \rho^+(X) + \bbH[X+Y] - \bbH[X]$$
+and
+  $$ \rho(X+Y) \leq \rho(X) + \frac{1}{2}( \bbH[X+Y] - \bbH[X] ).$$
+\end{lemma}
+
+\begin{proof}\leanok
+  \uses{kl-sums}
+The first inequality follows from \Cref{kl-sums}. The second and third inequalities are direct corollaries of the first.
+\end{proof}
+
+
+\begin{definition}[Conditional Rho functional]\label{rho-cond-def}\lean{condRho}\leanok We define $\rho(X|Y) := \sum_y {\bf P}(Y=y) \rho(X|Y=y)$.
+\end{definition}
+
+\begin{lemma}[Conditional rho and translation]\label{rho-cond-invariant}\lean{condRho_of_translate}\leanok
+  For any $s\in G$, $\rho(X+s|Y)=\rho(X|Y)$.
+\end{lemma}
+\begin{proof}
+  \uses{rho-cond-def,rho-invariant}\leanok
+  Direct corollary of \Cref{rho-invariant}.
+\end{proof}
+
+\begin{lemma}[Conditional rho and relabeling]\label{rho-cond-relabeled}\lean{condRho_of_injective}\leanok
+  If $f$ is injective, then $\rho(X|f(Y))=\rho(X|Y)$.
+\end{lemma}
+\begin{proof}\leanok
+  \uses{rho-cond-def}
+  Clear from the definition.
+\end{proof}
+
+\begin{lemma}[Rho and conditioning]\label{rho-cond}\lean{condRhoMinus_le, condRhoPlus_le, condRho_le}\leanok  If $X,Z$ are defined on the same space, one has
+  $$ \rho^-(X|Z) \leq \rho^-(X) + \bbH[X] - \bbH[X|Z]$$
+  $$ \rho^+(X|Z) \leq \rho^+(X)$$
+and
+  $$ \rho(X|Z) \leq \rho(X) + \frac{1}{2}( \bbH[X] - \bbH[X|Z] ).$$
+\end{lemma}
+
+\begin{proof}\leanok
+  \uses{kl-cond}
+  The first inequality follows from \Cref{kl-cond}. The second and third inequalities are direct corollaries of the first.
+\end{proof}
+
+The following lemmas hold for $G=\mathbb{F}_2^n$.
+
+\begin{lemma}[Rho and sums, symmetrized]\label{rho-sums-sym}\lean{rho_of_sum_le}\leanok  If $X,Y$ are independent, then
+  $$ \rho(X+Y) \leq \frac{1}{2}(\rho(X)+\rho(Y) + d[X;Y]).$$
+\end{lemma}
+\begin{proof}\leanok
+  \uses{rho-sums}
+Apply \Cref{rho-sums} for $(X,Y)$ and $(Y,X)$ and take their average.
+\end{proof}
+
+\begin{lemma}[Rho and conditioning, symmetrized]\label{rho-cond-sym}\lean{condRho_of_sum_le}\leanok
+  If $X,Y$ are independent, then
+  $$ \rho(X | X+Y) \leq \frac{1}{2}(\rho(X)+\rho(Y) + d[X;Y]).$$
+\end{lemma}
+\begin{proof}\leanok
+  \uses{rho-invariant,rho-cond}
+  First apply \Cref{rho-cond} to get $\rho(X|X+Y)\le \rho(X) + \frac{1}{2}(\bbH[X+Y]-\bbH[Y])$, and $\rho(Y|X+Y)\le \rho(Y)+\frac{1}{2}(\bbH[X+Y]-\bbH[X])$. Then apply \Cref{rho-invariant} to get $\rho(Y|X+Y)=\rho(X|X+Y)$ and take the average of the two inequalities.
+\end{proof}
+
+\section{Studying a minimizer}
+
+Set $\eta < 1/8$. In this section, consider $G=\mathbb{F}_2^n$.
+
+\begin{definition}\label{phi-min-def}\lean{phiMinimizes}\leanok  Given $G$-valued random variables $X,Y$, define
+$$ \phi[X;Y] := d[X;Y] + \eta(\rho(X) + \rho(Y))$$
+and define a \emph{$\phi$-minimizer} to be a pair of random variables $X,Y$ which minimizes $\phi[X;Y]$.
+\end{definition}
+
+\begin{lemma}[$\phi$-minimizers exist]\label{phi-min-exist}\lean{phi_min_exists}\leanok  There exists a $\phi$-minimizer.
+\end{lemma}
+
+\begin{proof}\leanok\uses{rho-cts} Clear from compactness.
+\end{proof}
+
+Let $(X_1, X_2)$ be a $\phi$-minimizer, and $\tilde X_1, \tilde X_2$ be independent copies of $X_1,X_2$ respectively.
+Similar to the original proof we define
+$$ I_1 :=  I [X_1+X_2 : \tilde X_1 + X_2 | X_1+X_2+\tilde X_1+\tilde X_2], I_2 := \bbI[X_1+X_2 : X_1 + \tilde X_1 | X_1+X_2+\tilde X_1+\tilde X_2].$$
+First we need the $\phi$-minimizer variants of \Cref{first-estimate} and \Cref{second-estimate}.
+
+\begin{lemma}\label{phi-first-estimate}\lean{I_one_le}\leanok
+$I_1\le 2\eta d[X_1;X_2]$
+\end{lemma}
+
+\begin{proof}\leanok
+  \uses{phi-min-def,first-fibre}
+Similar to \Cref{first-estimate}: get upper bounds for $d[X_1;X_2]$ by $\phi[X_1;X_2]\le \phi[X_1+X_2;\tilde X_1+\tilde X_2]$ and $\phi[X_1;X_2]\le \phi[X_1|X_1+X_2;\tilde X_2|\tilde X_1+\tilde X_2]$, and then apply \Cref{first-fibre} to get an upper bound for $I_1$.
+\end{proof}
+
+\begin{lemma}\label{I1-I2-diff}\lean{rdist_add_rdist_eq}\leanok
+  $d[X_1;X_1]+d[X_2;X_2]= 2d[X_1;X_2]+(I_2-I_1)$.
+\end{lemma}
+\begin{proof}\leanok
+  \uses{first-fibre,cor-fibre}
+Compare \Cref{first-fibre} with the identity obtained from applying \Cref{cor-fibre} on $(X_1,\tilde X_1, X_2, \tilde X_2)$.
+\end{proof}
+
+\begin{lemma}\label{phi-second-estimate}\lean{I_two_le}\leanok
+$I_2\le 2\eta d[X_1;X_2] + \frac{\eta}{1-\eta}(2\eta d[X_1;X_2]-I_1)$.
+\end{lemma}
+
+\begin{proof}\leanok
+  \uses{phi-min-def,cor-fibre,I1-I2-diff}
+First of all, by $\phi[X_1;X_2]\le \phi[X_1+\tilde X_1;X_2+\tilde X_2]$, $\phi[X_1;X_2]\le \phi[X_1|X_1+\tilde X_1;X_2|X_2+\tilde X_2]$, and the fibring identity obtained by applying \Cref{cor-fibre} on $(X_1,X_2,\tilde X_1,\tilde X_2)$,
+we have $I_2\le \eta (d[X_1;X_1]+d[X_2;X_2])$. Then apply \Cref{I1-I2-diff} to get $I_2\le 2\eta d[X_1;X_2] +\eta(I_2-I_1)$, and rearrange.
+\end{proof}
+
+
+Next we need some inequalities for the endgame.
+
+\begin{lemma}\label{rho-BSG-triplet}\lean{dist_le_of_sum_zero}\leanok
+  If $G$-valued random variables $T_1,T_2,T_3$ satisfy $T_1+T_2+T_3=0$, then
+  $$d[X_1;X_2]\le 3\bbI[T_1:T_2] + (2\bbH[T_3]-\bbH[T_1]-\bbH[T_2])+ \eta(\rho(T_1|T_3)+\rho(T_2|T_3)-\rho(X_1)-\rho(X_2)).$$
+\end{lemma}
+
+\begin{proof}\leanok\uses{entropic-bsg,phi-min-def}
+  Conditioned on every $T_3=t$, $d[X_1;X_2]\le d[T_1|T_3=t;T_2|T_3=t]+\eta(\rho(T_1|T_3=t)+\rho(T_2|T_3=t)-\rho(X_1)-\rho(X_2))$ by \Cref{phi-min-def}. Then take the weighted average with weight $\mathbf{P}(T_3=t)$ and then apply \Cref{entropic-bsg} to bound the RHS.
+\end{proof}
+
+\begin{lemma}\label{rho-BSG-triplet-symmetrized}\lean{dist_le_of_sum_zero'}\leanok
+  If $G$-valued random variables $T_1,T_2,T_3$ satisfy $T_1+T_2+T_3=0$, then
+  $$d[X_1;X_2] \leq  \sum_{1 \leq i<j \leq 3} \bbI[T_i:T_j] + \frac{\eta}{3}   \sum_{1 \leq i<j \leq 3} (\rho(T_i|T_j) + \rho(T_j|T_i) -\rho(X_1)-\rho(X_2))$$
+\end{lemma}
+
+\begin{proof}\leanok\uses{rho-BSG-triplet}
+  Take the average of \Cref{rho-BSG-triplet} over all $6$ permutations of $T_1,T_2,T_3$.
+\end{proof}
+
+
+\begin{lemma}\label{rho-increase}\lean{condRho_sum_le}\leanok
+  For independent random variables $Y_1,Y_2,Y_3,Y_4$ over $G$, define $S:=Y_1+Y_2+Y_3+Y_4$, $T_1:=Y_1+Y_2$, $T_2:=Y_1+Y_3$. Then
+  $$\rho(T_1|T_2,S)+\rho(T_2|T_1,S) - \frac{1}{2}\sum_{i} \rho(Y_i)\le \frac{1}{2}(d[Y_1;Y_2]+d[Y_3;Y_4]+d[Y_1;Y_3]+d[Y_2;Y_4]).$$
+\end{lemma}
+
+\begin{proof}\leanok\uses{rho-sums-sym, rho-cond, rho-cond-sym, rho-cond-relabeled, cor-fibre}
+  Let $T_1':=Y_3+Y_4$, $T_2':=Y_2+Y_4$.
+  First note that
+  \begin{align*}
+    \rho(T_1|T_2,S)
+    &\le \rho(T_1|S) + \frac{1}{2}\bbI(T_1:T_2\mid S)  \\
+    &\le \frac{1}{2}(\rho(T_1)+\rho(T_1'))+\frac{1}{2}(d[T_1;T_1']+\bbI(T_1:T_2\mid S)) \\
+    &\le \frac{1}{4} \sum_{i} \rho(Y_i) +\frac{1}{4}(d[Y_1;Y_2]+d[Y_3;Y_4]) + \frac{1}{2}(d[T_1;T_1']+\bbI(T_1:T_2\mid S)).
+  \end{align*}
+  by \Cref{rho-cond}, \Cref{rho-cond-sym}, \Cref{rho-sums-sym} respectively.
+  On the other hand, observe that
+  \begin{align*}
+    \rho(T_1|T_2,S)
+    &=\rho(Y_1+Y_2|T_2,T_2') \\
+    &\le \frac{1}{2}(\rho(Y_1|T_2)+\rho(Y_2|T_2'))+\frac{1}{2}(d[Y_1|T_2;Y_2|T_2'])  \\
+    &\le \frac{1}{4} \sum_{i} \rho(Y_i) +\frac{1}{4}(d[Y_1;Y_3]+d[Y_2;Y_4]) + \frac{1}{2}(d[Y_1|T_2;Y_2|T_2']).
+  \end{align*}
+  by \Cref{rho-cond-relabeled}, \Cref{rho-sums-sym}, \Cref{rho-cond-sym} respectively.
+  By replacing $(Y_1,Y_2,Y_3,Y_4)$ with $(Y_1,Y_3,Y_2,Y_4)$ in the above inequalities, one has
+  $$\rho(T_2|T_1,S) \le \frac{1}{4} \sum_{i} \rho(Y_i) +\frac{1}{4}(d[Y_1;Y_3]+d[Y_2;Y_4]) + \frac{1}{2}(d[T_2;T_2']+\bbI(T_1:T_2\mid S))$$
+  and
+  $$\rho(T_2|T_1,S) \le \frac{1}{4} \sum_{i} \rho(Y_i) +\frac{1}{4}(d[Y_1;Y_2]+d[Y_3;Y_4]) + \frac{1}{2}(d[Y_1|T_1;Y_3|T_1']).$$
+  Finally, take the sum of all four inequalities, apply \Cref{cor-fibre} on $(Y_1,Y_2,Y_3,Y_4)$ and $(Y_1,Y_3,Y_2,Y_4)$ to rewrite the sum of last terms in the four inequalities, and divide the result by $2$.
+\end{proof}
+
+\begin{lemma}\label{rho-increase-symmetrized}\lean{condRho_sum_le'}\leanok
+  For independent random variables $Y_1,Y_2,Y_3,Y_4$ over $G$, define $T_1:=Y_1+Y_2,T_2:=Y_1+Y_3,T_3:=Y_2+Y_3$ and $S:=Y_1+Y_2+Y_3+Y_4$. Then
+  $$\sum_{1 \leq i<j \leq 3} (\rho(T_i|T_j,S) + \rho(T_j|T_i,S) -  \frac{1}{2}\sum_{i} \rho(Y_i))\le \sum_{1\leq i < j \leq 4}d[Y_i;Y_j]$$
+\end{lemma}
+
+\begin{proof}\uses{rho-increase}\leanok
+  Apply Lemma \ref{rho-increase} on $(Y_i,Y_j,Y_k,Y_4)$ for $(i,j,k)=(1,2,3),(2,3,1),(1,3,2)$, and take the sum.
+\end{proof}
+
+\begin{proposition}\label{phi-minimizer-zero-distance}\lean{dist_of_min_eq_zero}\leanok  If $X_1,X_2$ is a $\phi$-minimizer, then $d[X_1;X_2] = 0$.
+\end{proposition}
+
+\begin{proof}\leanok
+  \uses{rho-BSG-triplet-symmetrized,rho-increase-symmetrized,I1-I2-diff,phi-first-estimate,phi-second-estimate}
+Consider $T_1:=X_1+X_2,T_2:=X_1+\tilde X_1, T_3:=\tilde X_1 + X_2$, and $S=X_1+X_2+\tilde X_1 + \tilde X_2$. Note that $T_1+T_2+T_3=0$.
+First apply \Cref{rho-BSG-triplet-symmetrized} on $(T_1,T_2,T_3)$ when conditioned on $S$ to get
+\begin{align}  \label{eq:further-bsg}
+d[X_1;X_2] &\leq  \sum_{1 \leq i<j \leq 3} \bbI[T_i:T_j\mid S] + \frac{\eta}{3}   \sum_{1 \leq i<j \leq 3} (\rho(T_i|T_j,S) + \rho(T_j|T_i,S) -\rho(X_1)-\rho(X_2))\nonumber\\
+&= (I_1+2I_2) + \frac{\eta}{3}   \sum_{1 \leq i<j \leq 3} (\rho(T_i|T_j,S) + \rho(T_j|T_i,S) -\rho(X_1)-\rho(X_2)).
+\end{align}
+Then apply \Cref{rho-increase-symmetrized} on $(X_1,X_2,\tilde X_1,\tilde X_2)$ and get
+$$\sum_{1 \leq i<j \leq 3} (\rho(T_i|T_j,S) + \rho(T_j|T_i,S) -  \rho(X_1)-\rho(X_2))\le (4d[X_1;X_2]+d[X_1;X_2]+d[X_2;X_2])= 6 d[X_1;X_2]+(I_2-I_1)$$
+by \Cref{I1-I2-diff}. Plug in the inequality above to (\ref{eq:further-bsg}), we get
+$$d[X_1;X_2] \le (I_1+2I_2)+2\eta d[X_1;X_2]+\frac{\eta}{3}(I_2-I_1).$$
+By \Cref{phi-second-estimate} we can conclude that
+$$d[X_1;X_2] \le 8\eta d[X_1;X_2]-\frac{3-10\eta}{3-3\eta} (2\eta d[X_1;X_2]-I_1).$$
+Finally by \Cref{phi-first-estimate} and $\eta<1$ we get that the second term is $\le 0$, and thus $d[X_1;X_2] \le 8\eta d[X_1;X_2]$. By the choice $\eta<1/8$ and the non-negativity of $d$ we have $d[X_1;X_2]=0$.
+\end{proof}
+
+
+\begin{proposition} \label{pfr-rho}\lean{rho_PFR_conjecture}\leanok For any random variables $Y_1,Y_2$, there exist a subgroup $H$ such that
+  $$ 2\rho(U_H) \leq \rho(Y_1) + \rho(Y_2) + 8 d[Y_1;Y_2].$$
+\end{proposition}
+
+\begin{proof}\leanok
+  \uses{phi-min-exist, phi-minimizer-zero-distance,phi-min-def,rho-invariant,sym-zero}
+Let $X_1,X_2$ be a $\phi$-minimizer. By \Cref{phi-minimizer-zero-distance} $d[X_1;X_2]=0$, which by \Cref{phi-min-def} implies $\rho(X_1)+\rho(X_2)\le \rho(Y_1) + \rho(Y_2) + \frac{1}{\eta} d[Y_1;Y_2]$ for every $\eta<1/8$. Take the limit at $\eta=1/8$ to get $\rho(X_1)+\rho(X_2)\le \rho(Y_1) + \rho(Y_2) + 8 d[Y_1;Y_2]$.
+By \Cref{ruzsa-triangle} and \Cref{ruzsa-nonneg} we have $d[X_1;X_1]=d[X_2;X_2]=0$, and by \Cref{sym-zero} there are $H_1:=\mathrm{Sym}[X_1],H_2:=\mathrm{Sym}[X_2]$ such that $X_1=U_{H_1}+x_1$ and $X_2=U_{H_2}+x_2$ for some $x_2$.
+By \Cref{rho-invariant} we get $\rho(U_{H_1})+\rho(U_{H_2})\le \rho(Y_1) + \rho(Y_2) + 8 d[Y_1;Y_2]$, and thus the claim holds for $H=H_1$ or $H=H_2$.
+\end{proof}
+
+\begin{corollary}\label{pfr-9-aux}\lean{better_PFR_conjecture_aux0}\leanok
+If $|A+A| \leq K|A|$, then there exists a subgroup $H$ and $t\in G$ such that
+$|A \cap (H+t)| \geq K^{-4} \sqrt{|A||H|}$, and $|H|/|A|\in[K^{-8},K^8]$.
+\end{corollary}
+
+\begin{proof}\leanok
+  \uses{pfr-rho,rho-init,rho-subgroup}
+  Apply \Cref{pfr-rho} on $U_A,U_A$ to get a subspace such that $2\rho(U_H)\le 2\rho(U_A)+8d[U_A;U_A]$. Recall that $d[U_A;U_A]\le \log K$ as proved in \Cref{pfr_aux}, and $\rho(U_A)=0$ by \Cref{rho-init}. Therefore $\rho(U_H)\le 4\log(K)$. The claim then follows from \Cref{rho-subgroup}.
+\end{proof}
+
+
+\begin{corollary}\label{pfr-9-aux'}\lean{better_PFR_conjecture_aux}\leanok
+If $|A+A| \leq K|A|$, then there exist a subgroup $H$ and a subset $c$ of $G$
+with $A \subseteq c + H$, such that $|c| \leq K^{5} |A|^{1/2}/|H|^{1/2}$ and
+$|H|/|A|\in[K^{-8},K^8]$.
+\end{corollary}
+
+\begin{proof}\leanok
+  \uses{pfr-9-aux, ruz-cov}
+Apply \Cref{pfr-9-aux} and \Cref{ruz-cov} to get the result, as in the proof
+of \Cref{pfr_aux}.
+\end{proof}
+
+
+\begin{theorem}[PFR with \texorpdfstring{$C=9$}{C=9}]\label{pfr-9}\lean{better_PFR_conjecture}\leanok  If $A \subset {\bf F}_2^n$ is finite non-empty with $|A+A| \leq K|A|$, then there exists a subgroup $H$ of ${\bf F}_2^n$ with $|H| \leq |A|$ such that $A$ can be covered by at most $2K^9$ translates of $H$.
+\end{theorem}
+
+\begin{proof}\leanok
+  \uses{pfr-9-aux,ruz-cov}
+Given \Cref{pfr-9-aux'}, the proof is the same as that of \Cref{pfr}.
+\end{proof}

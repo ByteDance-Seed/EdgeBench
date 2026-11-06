@@ -1,0 +1,35 @@
+schema_version = 0
+id = "nethack_dungeon_agent"
+name = "Nethack Dungeon Agent"
+category = "Interactive Games & Simulators"
+language = "Python"
+description = "Implement a decision policy for NetHack via the NLE harness, parsing ASCII map observations and stat vectors to navigate, fight, and survive across multiple procedurally generated runs."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python310"
+platform = "linux/amd64"
+cwd = "/home/nethack_agent"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["agent.py"]
+exclude = []
+
+[judge]
+cmd = "python3 /judge/grade.py"
+timeout_sec = 3600
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# eval_nethack.py plays 20 games (10 seeds x 2 repeats) one after another, each in a subprocess
+# under a 120 s wall-clock timeout and at most 5000 steps. NLE games are not seeded (see
+# NOTES.md), so scores vary run to run.
+
+[score]
+direction = "maximize"
+rescale = { kind = "linear", lower = 0.0, upper = 1000.0 }

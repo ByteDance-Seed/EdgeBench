@@ -1,0 +1,456 @@
+{
+  "total_score": 3.8189,
+  "public_score": 3.3913,
+  "max_score": 100.0,
+  "score_status": "OK",
+  "infra_errors": [],
+  "raw_passed": 66,
+  "raw_total": 2611,
+  "weighted_passed": 3.8189,
+  "weighted_total": 100.0,
+  "total_duration_sec": 400.32,
+  "layers": [
+    {
+      "layer": "L0",
+      "weight": 13,
+      "crates": [
+        "cas-types"
+      ],
+      "passed": 1,
+      "total": 136,
+      "score": 0.0956,
+      "status": "TEST_FAIL"
+    },
+    {
+      "layer": "L1",
+      "weight": 8,
+      "crates": [
+        "cas-code"
+      ],
+      "passed": 0,
+      "total": 50,
+      "score": 0.0,
+      "status": "TEST_FAIL"
+    },
+    {
+      "layer": "L2",
+      "weight": 10,
+      "crates": [
+        "cas-factory-protocol",
+        "cas-diffs"
+      ],
+      "passed": 25,
+      "total": 196,
+      "score": 1.2755,
+      "status": "TEST_FAIL"
+    },
+    {
+      "layer": "L3",
+      "weight": 4,
+      "crates": [
+        "cas-pty",
+        "cas-recording"
+      ],
+      "passed": 2,
+      "total": 40,
+      "score": 0.2,
+      "status": "TEST_FAIL"
+    },
+    {
+      "layer": "L4",
+      "weight": 15,
+      "crates": [
+        "cas-store"
+      ],
+      "passed": 2,
+      "total": 216,
+      "score": 0.1389,
+      "status": "TEST_FAIL"
+    },
+    {
+      "layer": "L5",
+      "weight": 12,
+      "crates": [
+        "cas-search"
+      ],
+      "passed": 0,
+      "total": 136,
+      "score": 0.0,
+      "status": "COMPILE_FAIL_ROOT"
+    },
+    {
+      "layer": "L6",
+      "weight": 15,
+      "crates": [
+        "cas-core"
+      ],
+      "passed": 18,
+      "total": 201,
+      "score": 1.3433,
+      "status": "TEST_FAIL"
+    },
+    {
+      "layer": "L7",
+      "weight": 8,
+      "crates": [
+        "cas-mux",
+        "cas-factory"
+      ],
+      "passed": 4,
+      "total": 171,
+      "score": 0.1871,
+      "status": "TEST_FAIL"
+    },
+    {
+      "layer": "L8",
+      "weight": 5,
+      "crates": [
+        "cas-mcp",
+        "cas-tui-test"
+      ],
+      "passed": 14,
+      "total": 121,
+      "score": 0.5785,
+      "status": "TEST_FAIL"
+    },
+    {
+      "layer": "L9",
+      "weight": 10,
+      "crates": [
+        "cas-cli"
+      ],
+      "passed": 0,
+      "total": 1344,
+      "score": 0.0,
+      "status": "COMPILE_FAIL_DOWNSTREAM"
+    }
+  ],
+  "public_layers": [
+    {
+      "layer": "L0",
+      "weight": 13,
+      "crates": [
+        "cas-types"
+      ],
+      "passed": 1,
+      "total": 136,
+      "score": 0.0956,
+      "status": "TEST_FAIL"
+    },
+    {
+      "layer": "L1",
+      "weight": 8,
+      "crates": [
+        "cas-code"
+      ],
+      "passed": 0,
+      "total": 50,
+      "score": 0.0,
+      "status": "TEST_FAIL"
+    },
+    {
+      "layer": "L2",
+      "weight": 10,
+      "crates": [
+        "cas-factory-protocol",
+        "cas-diffs"
+      ],
+      "passed": 18,
+      "total": 196,
+      "score": 0.9184,
+      "status": "TEST_FAIL"
+    },
+    {
+      "layer": "L3",
+      "weight": 4,
+      "crates": [
+        "cas-pty",
+        "cas-recording"
+      ],
+      "passed": 1,
+      "total": 40,
+      "score": 0.1,
+      "status": "TEST_FAIL"
+    },
+    {
+      "layer": "L4",
+      "weight": 15,
+      "crates": [
+        "cas-store"
+      ],
+      "passed": 2,
+      "total": 216,
+      "score": 0.1389,
+      "status": "TEST_FAIL"
+    },
+    {
+      "layer": "L5",
+      "weight": 12,
+      "crates": [
+        "cas-search"
+      ],
+      "passed": 4,
+      "total": 136,
+      "score": 0.3529,
+      "status": "TEST_FAIL"
+    },
+    {
+      "layer": "L6",
+      "weight": 15,
+      "crates": [
+        "cas-core"
+      ],
+      "passed": 14,
+      "total": 201,
+      "score": 1.0448,
+      "status": "TEST_FAIL"
+    },
+    {
+      "layer": "L7",
+      "weight": 8,
+      "crates": [
+        "cas-mux",
+        "cas-factory"
+      ],
+      "passed": 2,
+      "total": 171,
+      "score": 0.0936,
+      "status": "TEST_FAIL"
+    },
+    {
+      "layer": "L8",
+      "weight": 5,
+      "crates": [
+        "cas-mcp",
+        "cas-tui-test"
+      ],
+      "passed": 9,
+      "total": 121,
+      "score": 0.3719,
+      "status": "TEST_FAIL"
+    },
+    {
+      "layer": "L9",
+      "weight": 10,
+      "crates": [
+        "cas-cli"
+      ],
+      "passed": 37,
+      "total": 1344,
+      "score": 0.2753,
+      "status": "TEST_FAIL"
+    }
+  ],
+  "crates": [
+    {
+      "crate_name": "cas-types",
+      "package_name": "cas-types",
+      "status": "TEST_FAIL",
+      "passed": 1,
+      "failed": 135,
+      "total": 136,
+      "public_passed": 1,
+      "public_failed": 95,
+      "hidden_passed": 0,
+      "hidden_failed": 39,
+      "blocked_by": null,
+      "duration_sec": 15.155375957489014,
+      "error_message": null
+    },
+    {
+      "crate_name": "cas-code",
+      "package_name": "cas-code",
+      "status": "TEST_FAIL",
+      "passed": 0,
+      "failed": 50,
+      "total": 50,
+      "public_passed": 0,
+      "public_failed": 35,
+      "hidden_passed": 0,
+      "hidden_failed": 14,
+      "blocked_by": null,
+      "duration_sec": 11.019164800643921,
+      "error_message": null
+    },
+    {
+      "crate_name": "cas-factory-protocol",
+      "package_name": "cas-factory-protocol",
+      "status": "TEST_FAIL",
+      "passed": 13,
+      "failed": 85,
+      "total": 98,
+      "public_passed": 9,
+      "public_failed": 22,
+      "hidden_passed": 4,
+      "hidden_failed": 12,
+      "blocked_by": null,
+      "duration_sec": 24.959702014923096,
+      "error_message": null
+    },
+    {
+      "crate_name": "cas-diffs",
+      "package_name": "cas-diffs",
+      "status": "TEST_FAIL",
+      "passed": 12,
+      "failed": 86,
+      "total": 98,
+      "public_passed": 9,
+      "public_failed": 67,
+      "hidden_passed": 3,
+      "hidden_failed": 10,
+      "blocked_by": null,
+      "duration_sec": 23.825079679489136,
+      "error_message": null
+    },
+    {
+      "crate_name": "cas-pty",
+      "package_name": "cas-pty",
+      "status": "TEST_FAIL",
+      "passed": 1,
+      "failed": 10,
+      "total": 11,
+      "public_passed": 1,
+      "public_failed": 4,
+      "hidden_passed": 0,
+      "hidden_failed": 5,
+      "blocked_by": null,
+      "duration_sec": 12.892874002456665,
+      "error_message": null
+    },
+    {
+      "crate_name": "cas-recording",
+      "package_name": "cas-recording",
+      "status": "TEST_FAIL",
+      "passed": 1,
+      "failed": 28,
+      "total": 29,
+      "public_passed": 0,
+      "public_failed": 20,
+      "hidden_passed": 1,
+      "hidden_failed": 4,
+      "blocked_by": null,
+      "duration_sec": 9.708455801010132,
+      "error_message": null
+    },
+    {
+      "crate_name": "cas-store",
+      "package_name": "cas-store",
+      "status": "TEST_FAIL",
+      "passed": 2,
+      "failed": 214,
+      "total": 216,
+      "public_passed": 2,
+      "public_failed": 141,
+      "hidden_passed": 0,
+      "hidden_failed": 52,
+      "blocked_by": null,
+      "duration_sec": 15.480759859085083,
+      "error_message": null
+    },
+    {
+      "crate_name": "cas-search",
+      "package_name": "cas-search",
+      "status": "COMPILE_FAIL_ROOT",
+      "passed": 0,
+      "failed": 136,
+      "total": 136,
+      "public_passed": 0,
+      "public_failed": 0,
+      "hidden_passed": 0,
+      "hidden_failed": 0,
+      "blocked_by": null,
+      "duration_sec": 50.15218901634216,
+      "error_message": "   Compiling memchr v2.7.6\n   Compiling libm v0.2.16\n   Compiling num-traits v0.2.19\n   Compiling rand_core v0.6.4\n   Compiling siphasher v1.0.2\n   Compiling byteorder v1.5.0\n   Compiling bitflags v2.10.0\n   Compiling syn v2.0.114\n   Compiling zstd-sys v2.0.16+zstd.1.5.7\n   Compiling getrandom v0.2.17\n   Compiling crunchy v0.2.4\n   Compiling deranged v0.5.5\n   Compiling zstd-safe v7.2.4\n   Compiling stable_deref_trait v1.2.1\n   Compiling prettyplease v0.2.37\n   Compiling phf_shared v0.11.3\n   Co"
+    },
+    {
+      "crate_name": "cas-core",
+      "package_name": "cas-core",
+      "status": "TEST_FAIL",
+      "passed": 18,
+      "failed": 183,
+      "total": 201,
+      "public_passed": 14,
+      "public_failed": 121,
+      "hidden_passed": 4,
+      "hidden_failed": 52,
+      "blocked_by": null,
+      "duration_sec": 20.10420823097229,
+      "error_message": null
+    },
+    {
+      "crate_name": "cas-mux",
+      "package_name": "cas-mux",
+      "status": "TEST_FAIL",
+      "passed": 0,
+      "failed": 37,
+      "total": 37,
+      "public_passed": 0,
+      "public_failed": 14,
+      "hidden_passed": 0,
+      "hidden_failed": 6,
+      "blocked_by": null,
+      "duration_sec": 19.492234230041504,
+      "error_message": null
+    },
+    {
+      "crate_name": "cas-factory",
+      "package_name": "cas-factory",
+      "status": "TEST_FAIL",
+      "passed": 4,
+      "failed": 130,
+      "total": 134,
+      "public_passed": 2,
+      "public_failed": 69,
+      "hidden_passed": 2,
+      "hidden_failed": 20,
+      "blocked_by": null,
+      "duration_sec": 18.224480152130127,
+      "error_message": null
+    },
+    {
+      "crate_name": "cas-mcp",
+      "package_name": "cas-mcp",
+      "status": "TEST_FAIL",
+      "passed": 14,
+      "failed": 2,
+      "total": 16,
+      "public_passed": 9,
+      "public_failed": 1,
+      "hidden_passed": 5,
+      "hidden_failed": 1,
+      "blocked_by": null,
+      "duration_sec": 28.52187204360962,
+      "error_message": null
+    },
+    {
+      "crate_name": "cas-tui-test",
+      "package_name": "cas-tui-test",
+      "status": "TEST_FAIL",
+      "passed": 0,
+      "failed": 105,
+      "total": 105,
+      "public_passed": 0,
+      "public_failed": 61,
+      "hidden_passed": 0,
+      "hidden_failed": 28,
+      "blocked_by": null,
+      "duration_sec": 7.8111302852630615,
+      "error_message": null
+    },
+    {
+      "crate_name": "cas-cli",
+      "package_name": "cas",
+      "status": "COMPILE_FAIL_DOWNSTREAM",
+      "passed": 0,
+      "failed": 1344,
+      "total": 1344,
+      "public_passed": 0,
+      "public_failed": 0,
+      "hidden_passed": 0,
+      "hidden_failed": 0,
+      "blocked_by": "cas-search",
+      "duration_sec": 142.96863412857056,
+      "error_message": "   Compiling log v0.4.29\n   Compiling smallvec v1.15.1\n   Compiling num-traits v0.2.19\n   Compiling syn v2.0.114\n   Compiling bitflags v2.10.0\n   Compiling futures-io v0.3.31\n   Compiling futures-channel v0.3.31\n   Compiling getrandom v0.2.17\n   Compiling strsim v0.11.1\n   Compiling tracing-core v0.1.36\n   Compiling writeable v0.6.2\n   Compiling litemap v0.8.1\n   Compiling icu_properties_data v2.1.2\n   Compiling time v0.3.47\n   Compiling icu_normalizer_data v2.1.1\n   Compiling percent-encoding v"
+    }
+  ]
+}

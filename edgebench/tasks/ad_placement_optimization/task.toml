@@ -1,0 +1,34 @@
+schema_version = 0
+id = "ad_placement_optimization"
+name = "Ad Placement Optimization"
+category = "Combinatorial Optimization"
+language = "C++"
+description = "Partition a large integer grid into non-overlapping rectangles, each containing a designated anchor point, maximizing total satisfaction from how closely each rectangle's area matches its target."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "cpp"
+platform = "linux/amd64"
+cwd = "/home/workspace/ad-placement"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["solution.cpp"]
+exclude = []
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 600
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# eval_ahc.sh runs at most 2 cases in parallel (min(nproc, 2)), each under `timeout 5`. Scores of
+# time-limited solutions depend on host CPU speed; see NOTES.md.
+
+[score]
+direction = "maximize"
+rescale = { kind = "piecewise_max", baseline = 0.0, rank30 = 47169682940.0, rank1 = 49702568341.0, super_anchor = 50000000000.0 }

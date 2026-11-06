@@ -1,0 +1,329 @@
+\chapter{Shannon entropy inequalities}
+
+Random variables in this paper are measurable maps $X : \Omega \to S$ from a probability space $\Omega$ to a measurable space $S$, and called $S$-valued random variables. In many cases we will assume that singletons in $S$ are measurable.  Often we will restrict further to the case when $S$ is finite with the discrete $\sigma$-algebra, which of course implies that $S$ has measurable singletons.
+
+\begin{definition}[Entropy]
+  \label{entropy-def}
+  \lean{ProbabilityTheory.entropy}
+  \leanok
+  If $X$ is an $S$-valued random variable, the entropy $\bbH[X]$ of $X$ is defined
+  $$ \bbH[X] := \sum_{s \in S} \bbP[X=x] \log \frac{1}{\bbP[X=x]}$$
+  with the convention that $0 \log \frac{1}{0} = 0$.
+\end{definition}
+
+\begin{lemma}[Entropy and relabeling]\label{relabeled-entropy}\lean{ProbabilityTheory.entropy_comp_of_injective, ProbabilityTheory.entropy_of_comp_eq_of_comp} \uses{entropy-def}\leanok
+  \begin{itemize}
+\item[(i)]   If $X: \Omega \to S$ and $Y: \Omega \to T$ are random variables, and $Y = f(X)$ for some injection $f: S \to T$, then $\bbH[X] = \bbH[Y]$.
+\item[(ii)]   If $X: \Omega \to S$ and $Y: \Omega \to T$ are random variables, and $Y = f(X)$ and $X = g(Y)$ for some functions $f: S \to T$, $g: T \to S$, then $\bbH[X] = \bbH[Y]$.
+\end{itemize}
+\end{lemma}
+
+\begin{proof} \leanok Expand out both entropies and rearrange.
+\end{proof}
+
+\begin{lemma}[Jensen bound]\label{jensen-bound}
+  \uses{entropy-def}
+  \lean{ProbabilityTheory.entropy_le_log_card, ProbabilityTheory.entropy_le_log_card_of_mem}
+  \leanok
+  If $X$ is an $S$-valued random variable, then $\bbH[X] \leq \log |S|$.
+\end{lemma}
+
+\begin{proof}
+  \uses{concave}
+  \leanok
+
+  This is a direct consequence of \Cref{concave} and Jensen's inequality.
+\end{proof}
+
+\begin{definition}[Uniform distribution]\label{uniform-def}\leanok
+  \lean{ProbabilityTheory.IsUniform} If $H$ is a subset of $S$, an $S$-random variable $X$ is said to be uniformly distributed on $H$ if $\bbP[X = s] = 1/|H|$ for $s \in X$ and $\bbP[X=s] = 0$ otherwise.
+\end{definition}
+
+\begin{lemma}[Uniform distributions exist]\label{unif-exist}
+  \uses{uniform-def}
+  \lean{ProbabilityTheory.exists_isUniform, ProbabilityTheory.exists_isUniform_measureSpace}\leanok
+  Given a finite non-empty subset $H$ of a set $S$, there exists a random variable $X$ (on some probability space) that is uniformly distributed on $H$.
+\end{lemma}
+
+\begin{proof}\leanok Direct construction.
+\end{proof}
+
+
+\begin{lemma}[Entropy of uniform random variable]\label{uniform-entropy}
+  \uses{entropy-def}
+  \lean{ProbabilityTheory.IsUniform.entropy_eq}\leanok
+  If $X$ is $S$-valued random variable, then $\bbH[X] = \log |S|$ if and only if $X$ is uniformly distributed on $S$.
+\end{lemma}
+
+\begin{proof}
+  \uses{concave}
+  \leanok
+
+  Direct computation in one direction.
+  Converse direction needs the strict Jensen inequality and \Cref{concave}.
+\end{proof}
+
+\begin{lemma}[Entropy of uniform random variable, II]\label{uniform-entropy-II}
+  \uses{entropy-def, uniform-def}
+  \lean{ProbabilityTheory.IsUniform.entropy_eq}\leanok
+  If $X$ is uniformly distributed on $H$, then, then $\bbH[X] = \log |H|$.
+\end{lemma}
+
+\begin{proof}\leanok Direct computation.
+\end{proof}
+
+\begin{lemma}[Bounded entropy implies concentration]\label{bound-conc}
+  \uses{entropy-def}
+  \lean{ProbabilityTheory.prob_ge_exp_neg_entropy}\leanok
+  If $X$ is an $S$-valued random variable, then there exists $s \in S$ such that $\bbP[X=s] \geq \exp(-\bbH[X])$.
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  We have
+  $$ \bbH[X] = \sum_{s \in S} \bbP[X=s] \log \frac{1}{\bbP[X=s]} \geq \min_{s \in S} \log \frac{1}{\bbP[X=s]}$$
+  and the claim follows.
+\end{proof}
+
+We use $X,Y$ to denote the pair $\omega \mapsto (X(\omega),Y(\omega)$).
+
+\begin{lemma}[Commutativity and associativity of joint entropy]
+  \label{entropy-comm}
+  \lean{ProbabilityTheory.entropy_comm, ProbabilityTheory.entropy_assoc}
+  \leanok
+  If $X: \Omega \to S$, $Y: \Omega \to T$, and $Z: \Omega \to U$ are random variables, then $\bbH[X, Y] = \bbH[Y, X]$ and $\bbH[X, (Y,Z)] = \bbH[(X,Y), Z]$.
+\end{lemma}
+\begin{proof}
+  \leanok
+  \uses{relabeled-entropy}
+  Set up an injection from $(X,Y)$ to $(Y,X)$ and use \Cref{relabeled-entropy} for the first claim. Similarly for the second claim.
+\end{proof}
+
+
+\begin{definition}[Conditioned event]
+  \label{condition-event-def}
+  \lean{ProbabilityTheory.cond}
+  \leanok
+  If $X: \Omega \to S$ is an $S$-valued random variable and $E$ is an event in $\Omega$, then the conditioned event $(X|E)$ is defined to be the same random variable as $X$, but now the ambient probability measure has been conditioned to $E$.
+\end{definition}
+
+Note: it may happen that $E$ has zero measure.  In which case, the ambient probability measure should be replaced with a zero measure.  (In our formalization we achieve this by working with arbitrary measures, and normalizing them to be probability measures if possible, else using the zero measure.  Conditioning is also formalized using existing Mathlib definitions.)
+
+\begin{definition}[Conditional entropy]
+  \label{conditional-entropy-def}
+  \uses{entropy-def,condition-event-def}
+  \lean{ProbabilityTheory.condEntropy}
+  \leanok
+  If $X: \Omega \to S$ and $Y: \Omega \to T$ are random variables, the conditional entropy $\bbH[X|Y]$ is defined as
+  $$ \bbH[X|Y] := \sum_{y \in Y} \bbP[Y = y] \bbH[(X | Y=y)].$$
+\end{definition}
+
+\begin{lemma}[Conditional entropy and relabeling]\label{relabeled-entropy-cond}
+  \uses{conditional-entropy-def}
+  \lean{ProbabilityTheory.condEntropy_comp_of_injective, ProbabilityTheory.condEntropy_of_injective'}\leanok
+  If $X: \Omega \to S$, $Y: \Omega \to T$, and $Z: \Omega \to U$ are random variables, and $Y = f(X,Z)$ almost surely for some map $f: S \times U \to T$ that is injective for each fixed $U$, then $\bbH[X|Z] = \bbH[Y|Z]$.
+
+  Similarly, if $g: T \to U$ is injective, then $\bbH[X|g(Y)] = \bbH[X|Y]$.
+\end{lemma}
+
+\begin{proof}
+  \uses{relabeled-entropy}\leanok
+  For the first part, use \Cref{conditional-entropy-def} and then \Cref{relabeled-entropy}.  The second part is a direct computation.
+\end{proof}
+
+
+\begin{lemma}[Chain rule]\label{chain-rule}
+  \uses{conditional-entropy-def}
+  \lean{ProbabilityTheory.chain_rule, ProbabilityTheory.chain_rule'}
+  \leanok
+  If $X: \Omega \to S$ and $Y: \Omega \to T$ are random variables, then
+  $$ \bbH[X, Y] = \bbH[Y] + \bbH[X|Y].$$
+  \end{lemma}
+  \begin{proof}
+  \leanok
+  Direct computation.
+\end{proof}
+
+\begin{lemma}[Conditional chain rule]\label{conditional-chain-rule}
+  \lean{ProbabilityTheory.cond_chain_rule, ProbabilityTheory.cond_chain_rule'}\leanok
+  If $X: \Omega \to S$, $Y: \Omega \to T$, $Z: \Omega \to U$ are random variables, then
+$$ \bbH[X, Y | Z] = \bbH[Y | Z] + \bbH[X|Y, Z].$$
+\end{lemma}
+
+\begin{proof}  \uses{chain-rule}\leanok
+   For each $z \in U$, we can apply \Cref{chain-rule} to the random variables $(X|Z=z)$ and $(Y|Z=z)$ to obtain
+  $$ \bbH[(X|Z=z),(Y|Z=z)] = \bbH[Y|Z=z] + \bbH[(X|Z=z)|(Y|Z=z)].$$
+  Now multiply by $\bbP[Z=z]$ and sum.  Some helper lemmas may be needed to get to the form above.  This sort of ``average over conditioning'' argument to get conditional entropy inequalities from unconditional ones is commonly used in this paper.
+\end{proof}
+
+\begin{definition}[Mutual information]
+  \label{information-def}
+  \uses{entropy-def}
+  \lean{ProbabilityTheory.mutualInfo, ProbabilityTheory.mutualInfo_def}
+  \leanok
+  If $X: \Omega \to S$, $Y: \Omega \to T$ are random variables, then
+  $$\bbI[X : Y] := \bbH[X] + \bbH[Y] - \bbH[X,Y].$$
+\end{definition}
+
+\begin{lemma}[Alternative formulae for mutual information]
+  \label{alternative-mutual}
+  \uses{information-def}
+  \lean{ProbabilityTheory.mutualInfo_comm, ProbabilityTheory.mutualInfo_eq_entropy_sub_condEntropy}
+  \leanok
+  With notation as above, we have
+  $$  \bbI[X : Y] = \bbI[Y:X]$$
+  $$  \bbI[X : Y] = \bbH[X] - \bbH[X|Y]$$
+  $$  \bbI[X : Y] = \bbH[Y] - \bbH[Y|X]$$
+\end{lemma}
+
+\begin{proof}
+  \uses{entropy-comm,chain-rule}
+  \leanok
+  Immediate from Lemmas \ref{entropy-comm}, \ref{chain-rule}.
+\end{proof}
+
+\begin{lemma}[Nonnegativity of mutual information]
+  \label{mutual-nonneg}
+  \lean{ProbabilityTheory.mutualInfo_nonneg}
+  \leanok
+  We have $\bbI[X:Y] \geq 0$.
+\end{lemma}
+
+\begin{proof}
+  \uses{concave, alternative-mutual}
+  \leanok
+
+  An application of jensen's inequality and \Cref{concave,alternative-mutual}.
+\end{proof}
+
+\begin{corollary}[Subadditivity]
+  \label{subadditive}
+  \lean{ProbabilityTheory.entropy_pair_le_add}
+  \leanok
+  With notation as above, we have $\bbH[X,Y] \leq \bbH[X] + \bbH[Y]$.
+\end{corollary}
+
+\begin{proof}
+  \uses{mutual-nonneg, alternative-mutual}
+  \leanok
+  Use \Cref{mutual-nonneg}.
+\end{proof}
+
+\begin{corollary}[Conditioning reduces entropy]
+  \label{cond-reduce}
+  \lean{ProbabilityTheory.condEntropy_le_entropy}
+  \leanok
+  With notation as above, we have $\bbH[X|Y] \leq \bbH[X]$.
+\end{corollary}
+\begin{proof}
+  \uses{mutual-nonneg, alternative-mutual}
+  \leanok
+  Combine \Cref{mutual-nonneg} with \Cref{alternative-mutual}.
+\end{proof}
+
+\begin{corollary}[Submodularity]\label{submodularity}
+  \lean{ProbabilityTheory.entropy_submodular, ProbabilityTheory.condEntropy_comp_ge}\leanok
+  With three random variables $X,Y,Z$, one has $\bbH[X|Y,Z] \leq \bbH[X|Z]$.
+\end{corollary}
+
+\begin{proof} \uses{cond-reduce}\leanok Apply the ``averaging over conditioning'' argument to \Cref{cond-reduce}.
+\end{proof}
+
+\begin{corollary}[Alternate form of submodularity]\label{alt-submodularity}
+  \lean{ProbabilityTheory.entropy_triple_add_entropy_le}\leanok
+  With three random variables $X,Y,Z$, one has
+  $$ \bbH[X,Y,Z] + \bbH[Z] \leq \bbH[X,Z] + \bbH[Y,Z].$$
+\end{corollary}
+
+\begin{proof}  \uses{submodularity,chain-rule} \leanok Apply \Cref{submodularity} and \Cref{chain-rule}.
+\end{proof}
+
+\begin{definition}[Independent random variables]
+  \label{independent-def}
+  \lean{ProbabilityTheory.IndepFun}
+  \leanok
+  Two random variables $X: \Omega \to S$ and $Y: \Omega \to T$ are independent if the law of $(X,Y)$ is the product of the law of $X$ and the law of $Y$.  Similarly for more than two variables.
+\end{definition}
+
+\begin{lemma}[Vanishing of mutual information]
+  \label{vanish-entropy}
+  \uses{information-def, independent-def}
+  \lean{ProbabilityTheory.mutualInfo_eq_zero}
+  \leanok
+  If $X,Y$ are random variables, then $\bbI[X:Y] = 0$ if and only if $X,Y$ are independent.
+  \end{lemma}
+
+  \begin{proof}
+    \uses{concave}
+    \leanok
+
+    An application of the equality case of Jensen's inequality and \Cref{concave}.
+  \end{proof}
+
+\begin{corollary}[Additivity of entropy]\label{add-entropy}
+  \lean{ProbabilityTheory.entropy_pair_eq_add}
+  \leanok
+  If $X,Y$ are random variables, then $\bbH[X,Y] = \bbH[X] + \bbH[Y]$ if and only if $X,Y$ are independent.
+\end{corollary}
+
+\begin{proof} \uses{vanish-entropy}\leanok
+  Direct from \Cref{vanish-entropy}.
+\end{proof}
+
+\begin{definition}[Conditional mutual information]
+\label{conditional-mutual-def}
+\uses{information-def,condition-event-def}
+\lean{ProbabilityTheory.condMutualInfo}
+\leanok
+If $X,Y,Z$ are random variables, with $Z$ $U$-valued, then
+$$ \bbI[X:Y|Z] := \sum_{z \in U} P[Z=z] \bbI[(X|Z=z): (Y|Z=z)].$$
+\end{definition}
+
+\begin{lemma}[Alternate formula for conditional mutual information]
+  \label{conditional-mutual-alt}
+  \uses{conditional-mutual-def}
+  \lean{ProbabilityTheory.condMutualInfo_eq, ProbabilityTheory.condMutualInfo_eq'}\leanok
+We have
+  $$ \bbI[X:Y|Z] := \bbH[X|Z] + \bbH[Y|Z] - \bbH[X,Y|Z]$$
+and
+  $$ \bbI[X:Y|Z] := \bbH[X|Z] - \bbH[X|Y,Z].$$
+\end{lemma}
+
+\begin{proof}\leanok Routine computation.
+\end{proof}
+
+\begin{lemma}[Nonnegativity of conditional mutual information]
+\label{conditional-nonneg}
+\uses{conditional-mutual-def}
+\lean{ProbabilityTheory.condMutualInfo_nonneg}\leanok
+If $X,Y,Z$ are random variables, then $\bbI[X:Y|Z] \ge 0$.
+\end{lemma}
+\begin{proof}
+\uses{submodularity}
+\leanok
+Use \Cref{conditional-mutual-def} and \Cref{submodularity}.
+\end{proof}
+
+\begin{definition}[Conditionally independent random variables]
+\label{conditional-independent-def}
+\lean{ProbabilityTheory.CondIndepFun}\leanok
+  Two random variables $X: \Omega \to S$ and $Y: \Omega \to T$ are conditionally independent relative to another random variable $Z: \Omega \to U$ if $P[X = s \wedge Y = t| Z=u] = P[X=s|Z=u] P[Y=t|Z=u]$ for all $s \in S, t \in T, u \in U$.  (We won't need conditional independence for more variables than this.)
+\end{definition}
+
+\begin{lemma}[Vanishing conditional mutual information]\label{conditional-vanish}
+  \lean{ProbabilityTheory.condMutualInfo_eq_zero}
+  \leanok
+  If $X,Y,Z$ are random variables, then $\bbI[X:Y|Z] = 0$ iff $X,Y$ are conditionally independent over $Z$.
+\end{lemma}
+
+\begin{proof} \uses{vanish-entropy, conditional-independent-def}\leanok Immediate from \Cref{vanish-entropy} and \Cref{conditional-independent-def}.
+\end{proof}
+
+\begin{corollary}[Entropy of conditionally independent variables]\label{cond-trial-ent}
+  \lean{ProbabilityTheory.ent_of_cond_indep}\leanok
+  If $X, Y$ are conditionally independent over $Z$, then
+  $$ \bbH[X,Y,Z] =\bbH[X,Z] + \bbH[Y,Z] - \bbH[Z].$$
+\end{corollary}
+
+\begin{proof} \uses{conditional-vanish, conditional-mutual-alt}\leanok Immediate from \Cref{conditional-vanish} and \Cref{conditional-mutual-alt}.
+\end{proof}

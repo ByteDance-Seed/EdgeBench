@@ -115,8 +115,8 @@ class DockerBackend(ContainerBackend):
         cap_drop: list[str] | None = None,
         cpu_limit: int | None = None,
         mem_limit: str | None = None,
-        user: str | None = None,
         annotations: dict[str, str] | None = None,
+        network: bool = True,
     ) -> DockerContainerHandle:
         kwargs: dict = {}
         if cpu_limit is not None:
@@ -125,10 +125,10 @@ class DockerBackend(ContainerBackend):
             kwargs["mem_limit"] = mem_limit
         if cap_drop:
             kwargs["cap_drop"] = cap_drop
-        if extra_hosts:
+        if not network:
+            kwargs["network_mode"] = "none"
+        elif extra_hosts:
             kwargs["extra_hosts"] = extra_hosts
-        if user:
-            kwargs["user"] = user
 
         container = self._client.containers.create(
             image,
@@ -189,14 +189,16 @@ class DockerBackend(ContainerBackend):
             except ValueError:
                 pass
 
-    def container_exists(self, name: str) -> bool:
+    def container_exists(self, name: str, image_key: str | None = None) -> bool:
         try:
             self._client.containers.get(name)
             return True
         except docker.errors.NotFound:
             return False
 
-    def remove_container_by_name(self, name: str) -> None:
+    def remove_container_by_name(
+        self, name: str, image_key: str | None = None,
+    ) -> None:
         try:
             c = self._client.containers.get(name)
             c.remove(force=True)
@@ -250,15 +252,12 @@ class DockerBackend(ContainerBackend):
         handle: ContainerHandle,
         cmd: str | list[str],
         *,
-        user: str | None = None,
         workdir: str | None = None,
         environment: dict[str, str] | None = None,
         detach: bool = False,
     ) -> ExecResult:
         container = self._raw(handle)
         kwargs: dict = {}
-        if user:
-            kwargs["user"] = user
         if workdir:
             kwargs["workdir"] = workdir
         if environment:
@@ -276,7 +275,6 @@ class DockerBackend(ContainerBackend):
         timeout: int | None = 60,
         *,
         log_file: Path | None = None,
-        user: str | None = None,
         workdir: str | None = None,
         environment: dict[str, str] | None = None,
         stream_to_stdout: bool = False,
@@ -286,7 +284,7 @@ class DockerBackend(ContainerBackend):
     ) -> StreamingExecResult:
         result = self._exec_run_impl(
             handle, cmd, timeout,
-            log_file=log_file, user=user, workdir=workdir,
+            log_file=log_file, workdir=workdir,
             environment=environment, stream_to_stdout=stream_to_stdout,
             shutdown_event=shutdown_event, log_append=log_append,
             on_chunk=on_chunk,
@@ -302,13 +300,12 @@ class DockerBackend(ContainerBackend):
         cmd: str | list[str],
         timeout: int | None = 60,
         *,
-        user: str | None = None,
         workdir: str | None = None,
         environment: dict[str, str] | None = None,
     ) -> StreamingExecResult:
         result = self._exec_run_impl(
             handle, cmd, timeout,
-            user=user, workdir=workdir, environment=environment,
+            workdir=workdir, environment=environment,
         )
         return StreamingExecResult(
             output=result[0], exit_code=result[1],
@@ -322,7 +319,6 @@ class DockerBackend(ContainerBackend):
         timeout: int | None = 60,
         *,
         log_file: Path | None = None,
-        user: str | None = None,
         workdir: str | None = None,
         environment: dict[str, str] | None = None,
         stream_to_stdout: bool = False,
@@ -346,8 +342,6 @@ class DockerBackend(ContainerBackend):
                 nonlocal exec_id, exception
                 try:
                     kwargs = {}
-                    if user:
-                        kwargs["user"] = user
                     if workdir:
                         kwargs["workdir"] = workdir
                     if environment:

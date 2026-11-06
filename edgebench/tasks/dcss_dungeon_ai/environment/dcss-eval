@@ -1,0 +1,279 @@
+#!/usr/bin/env python3
+"""Local DCSS evaluator for the agent. Same engine as the judge, but with
+configurable seeds, optional morgue dump, and a separate seed pool (1-100)
+that does NOT overlap the hidden holdout seeds used by the judge.
+
+Usage:
+  dcss-eval                          # 2 games on seeds 1,2
+  dcss-eval --seeds 1,2,3,7,42       # specific seeds
+  dcss-eval --n 5                    # 5 games on seeds 1..5
+  dcss-eval --max-turns 800          # tighter turn budget
+  dcss-eval --timeout SECONDS        # choose any local debug wall-time
+  dcss-eval --show-morgue            # also dump morgue text (death cause,
+                                     # turns, kills, inventory, notes)
+  dcss-eval --morgue-tail 60         # last N lines of each morgue (default 80)
+  dcss-eval --rc /path/my_bot.rc     # use a different rc file
+
+On WA/no-morgue failures, dcss-eval also prints the crawl stderr tail so
+Lua/RC syntax errors are visible without spelunking through screen state.
+
+Exits 0 on success. Prints CASE/TOTAL_SCORE lines compatible with the judge
+format, so you can sanity-check the same output that the holdout produces.
+The seed pool here (1-100) is intentionally separated from the holdout —
+improving on a few public seeds does not guarantee holdout improvement, so
+rotate seeds and aim for a robust strategy.
+"""
+import argparse, glob, os, re, subprocess, sys, threading, time, shutil, random
+
+CRAWL_BIN = "/usr/games/crawl"
+GAME_DIR = os.environ.get("HOME", "/home/dcss_agent") + "/.dcss-eval"
+MORGUE_DIR = os.path.join(GAME_DIR, "morgue")
+WORK_DIR = "/home/dcss_agent"
+
+def _stuff(session, keys):
+    subprocess.run(f"screen -S {session} -X stuff {keys}",
+                   shell=True, executable="/bin/bash", capture_output=True, timeout=5)
+
+def _stuff_raw(session, escape_seq):
+    # screen's `eval 'stuff \\NNN'` lets us send raw bytes like Esc (\033), Ctrl+Q (\021), CR (\015)
+    subprocess.run(f"screen -S {session} -X eval 'stuff {escape_seq}'",
+                   shell=True, executable="/bin/bash", capture_output=True, timeout=5)
+
+def _suicide(session):
+    # Force-end the game and write a morgue from any state.
+    # Sequence:
+    #   * Ctrl+G opens the autotravel prompt — this forcibly interrupts any
+    #     continuous action (autoexplore, autofight, autorest) and returns to
+    #     the command-input layer.
+    #   * Esc x2 cancels the autotravel prompt + any other menu, back at the
+    #     bare "command" prompt.
+    #   * Ctrl+Q opens the "Are you sure you want to abandon this character?"
+    #     prompt.
+    #   * Literal "yes" + Enter confirms, crawl writes morgue.
+    with open(f"/tmp/_suicide_{session}.log", "a") as logf:
+        logf.write(f"{time.time():.1f} suicide start\n")
+        # Clear --more-- prompts and close menus before sending Ctrl+Q.
+        for _ in range(12):
+            _stuff(session, "' '")
+            time.sleep(0.2)
+        for _ in range(8):
+            _stuff_raw(session, r"\033")
+            time.sleep(0.15)
+        _stuff_raw(session, r"\007")   # Ctrl+G (BEL) — interrupt continuous action
+        time.sleep(0.6)
+        for _ in range(8):
+            _stuff_raw(session, r"\033")
+            time.sleep(0.25)
+        _stuff_raw(session, r"\021")   # Ctrl+Q
+        time.sleep(2.0)
+        _stuff_raw(session, r"\025")   # Ctrl+U clears any bot-typed prompt input
+        time.sleep(0.2)
+        _stuff(session, "'yes'")
+        time.sleep(0.6)
+        _stuff_raw(session, r"\015")   # Enter
+        time.sleep(0.5)
+        # capture screen for debug
+        subprocess.run(f"screen -S {session} -X hardcopy /tmp/_suicide_{session}_scr.txt",
+                       shell=True, executable="/bin/bash", capture_output=True, timeout=5)
+        logf.write(f"{time.time():.1f} suicide end\n")
+
+def _dismiss_loop(session, stop):
+    keys = ["' '", "' '", "' '", "$'\\r'", "' '", "' '", "$'\\e'"]
+    i = 0
+    while not stop.is_set():
+        try: _stuff(session, keys[i % len(keys)])
+        except: pass
+        i += 1
+        stop.wait(1.5)
+
+def _alive(session):
+    return subprocess.run(f"screen -list 2>/dev/null | grep -q {session}",
+                          shell=True).returncode == 0
+
+WIZARD_RE = re.compile(r"Entered (wizard|explore) mode|WIZARD|EX-WIZARD")
+
+def extract_morgue_score(path):
+    try:
+        text = open(path).read()
+        if WIZARD_RE.search(text):
+            return None, "wizard/explore mode detected"
+        lines = text.splitlines()
+        if len(lines) >= 5:
+            m = re.match(r"^\s*(\d+)\s+", lines[4])
+            if m: return int(m.group(1)), None
+    except: pass
+    return None, "score line missing"
+
+def summarize_stderr(path, tail_n):
+    try:
+        if not path or not os.path.exists(path) or os.path.getsize(path) == 0:
+            return None
+        lines = open(path, errors="replace").read().splitlines()
+        out = [f"  --- crawl stderr last {min(tail_n, len(lines))} lines ---"]
+        out.extend("  " + l for l in lines[-tail_n:])
+        return "\n".join(out)
+    except Exception as e:
+        return f"  (stderr read error: {e})"
+
+
+def summarize_morgue(path, tail_n):
+    try:
+        text = open(path).read()
+        lines = text.splitlines()
+        out = []
+        out.append(f"  header: {lines[0][:120] if lines else '(empty)'}")
+        if len(lines) >= 5: out.append(f"  score line: {lines[4][:120]}")
+        # death cause
+        for ln in lines[:60]:
+            if re.match(r"^\s*\.\.\.\s+(killed|slain|drowned|petrified|engulfed|incinerated|annihilated|quit|escaped|safely)", ln, re.I):
+                out.append(f"  death: {ln.strip()[:160]}")
+                break
+            if re.match(r"^\s*The game.*ended", ln, re.I) or "Killed by" in ln or "Slain by" in ln:
+                out.append(f"  death: {ln.strip()[:160]}")
+                break
+        # last `tail_n` lines
+        out.append(f"  --- last {tail_n} lines ---")
+        out.extend("  " + l for l in lines[-tail_n:])
+        return "\n".join(out)
+    except Exception as e:
+        return f"  (morgue read error: {e})"
+
+def run_game(seed, idx, rc_file, timeout, max_turns):
+    name = f"Eval{idx}"
+    session = f"dcss_{idx}_{os.getpid()}"
+    done_flag = f"/tmp/dcss_done_{idx}_{os.getpid()}"
+    if os.path.exists(done_flag): os.remove(done_flag)
+    # Each parallel game gets an isolated crawl dir; morgues stay shared.
+    game_dir = os.path.join(GAME_DIR, f"game_{idx}")
+    shutil.rmtree(game_dir, ignore_errors=True)
+    os.makedirs(game_dir, exist_ok=True)
+    for pattern in ["*.rc", "*.lua"]:
+        for f in glob.glob(os.path.join(WORK_DIR, pattern)):
+            try: shutil.copy(f, os.path.join(game_dir, os.path.basename(f)))
+            except: pass
+    subprocess.run(f"screen -S {session} -X quit", shell=True, capture_output=True)
+    time.sleep(0.3)
+
+    existing = set(glob.glob(os.path.join(MORGUE_DIR, f"morgue-{name}-*.txt")))
+    wrapper_rc = os.path.join(game_dir, f"_wrap_{idx}.rc")
+    stderr_path = os.path.join(game_dir, f"crawl-{name}.stderr")
+    with open(wrapper_rc, "w") as f:
+        f.write(f": MAX_TURNS = {max_turns}\n")
+        f.write(open(rc_file).read())
+
+    cmd = (f"{CRAWL_BIN} -name {name} -species Mi -background Be -seed {seed} -extra-opt-last weapon=mace"
+           f" -rc {wrapper_rc} -rcdir {game_dir} -morgue {MORGUE_DIR} -dir {game_dir}")
+    subprocess.run(f"screen -dmS {session} bash -lc 'stty -ixon; {cmd} 2>{stderr_path}; echo DONE > {done_flag}'",
+                   shell=True)
+    time.sleep(5)
+    _stuff(session, "$'\\n'"); time.sleep(1)
+    _stuff(session, "$'\\n'"); time.sleep(1)
+    _stuff(session, "'#'"); time.sleep(1)
+    _stuff(session, "'+'"); time.sleep(2)
+    for _ in range(5): _stuff(session, "' '"); time.sleep(0.2)
+
+    stop = threading.Event()
+    t = threading.Thread(target=_dismiss_loop, args=(session, stop), daemon=True); t.start()
+
+    t0 = time.time()
+    suicided = False
+    hard_timeout = timeout + 90
+    suicide_at = max(0, timeout)
+    while True:
+        elapsed = time.time() - t0
+        if elapsed > hard_timeout:
+            subprocess.run(f"pkill -f 'crawl.*-name {name}'", shell=True, capture_output=True)
+            time.sleep(2); break
+        if os.path.exists(done_flag): os.remove(done_flag); break
+        if not _alive(session): break
+        # Gracefully abandon before the wall-time deadline so crawl writes a morgue.
+        # Stop dismiss_loop first so its space keys don't fight the suicide prompt.
+        if not suicided and elapsed > suicide_at:
+            suicided = True
+            stop.set()
+            time.sleep(3.0)   # let dismiss_loop fully stop
+            _suicide(session)
+            # Wait until either morgue is produced (crawl exits) or hard timeout.
+            wait_t0 = time.time()
+            while time.time() - wait_t0 < 18:
+                if os.path.exists(done_flag) or not _alive(session): break
+                time.sleep(1)
+            # One retry if still alive and before the hard timeout.
+            if _alive(session) and time.time() - t0 < hard_timeout:
+                _suicide(session)
+                time.sleep(4)
+        time.sleep(1)
+    stop.set(); t.join(timeout=3); time.sleep(1)
+    _stuff(session, "$'\\r'"); time.sleep(1)
+    subprocess.run(f"screen -S {session} -X quit", shell=True, capture_output=True)
+
+    current = set(glob.glob(os.path.join(MORGUE_DIR, f"morgue-{name}-*.txt")))
+    new_morgues = current - existing
+    if new_morgues:
+        mf = max(new_morgues, key=os.path.getmtime)
+        sc, err = extract_morgue_score(mf)
+        if sc is not None:
+            return ("OK", sc, mf, None, stderr_path)
+        return ("WA", 0, mf, err, stderr_path)
+    return ("WA", 0, None, "no morgue produced", stderr_path)
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--seeds", help="comma-separated seeds (overrides --n, --random)")
+    ap.add_argument("--n", type=int, default=2, help="number of games (default 2; ~2-3 min)")
+    ap.add_argument("--random", action="store_true", help="random seeds from 1..100 (NOT overlapping holdout)")
+    ap.add_argument("--max-turns", type=int, default=100000, help="per-game turn cap (default effectively unlimited; wall-time is the real constraint)")
+    ap.add_argument("--timeout", type=int, default=180, help="per-game wall timeout sec for local debugging; choose any value")
+    ap.add_argument("--rc", default="/home/dcss_agent/my_bot.rc", help="rc file")
+    ap.add_argument("--show-morgue", action="store_true", help="print morgue summary")
+    ap.add_argument("--morgue-tail", type=int, default=80, help="morgue tail lines (default 80)")
+    ap.add_argument("--parallel", type=int, default=1, help="run N games concurrently (default 1; matches judge when set to N_GAMES)")
+    args = ap.parse_args()
+
+    if args.seeds:
+        seeds = [int(s.strip()) for s in args.seeds.split(",") if s.strip()]
+    elif args.random:
+        seeds = random.sample(range(1, 101), min(args.n, 100))
+    else:
+        seeds = list(range(1, args.n + 1))
+
+    os.makedirs(MORGUE_DIR, exist_ok=True)
+    for pattern in ["*.rc", "*.lua"]:
+        for f in glob.glob(os.path.join(WORK_DIR, pattern)):
+            try: shutil.copy(f, os.path.join(GAME_DIR, os.path.basename(f)))
+            except: pass
+    if not os.path.exists(args.rc):
+        print(f"rc file not found: {args.rc}"); sys.exit(2)
+
+    print(f"dcss-eval: {len(seeds)} games, seeds={seeds}, max_turns={args.max_turns}, timeout={args.timeout}s, parallel={args.parallel}", flush=True)
+    results = [(None, 0, None, None, None)] * len(seeds)
+    import concurrent.futures
+    parallel = max(1, min(args.parallel, len(seeds)))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=parallel) as ex:
+        futures = {ex.submit(run_game, seed, i + 1, args.rc, args.timeout, args.max_turns): i
+                   for i, seed in enumerate(seeds)}
+        for fut in concurrent.futures.as_completed(futures):
+            i = futures[fut]
+            try: results[i] = fut.result()
+            except Exception as e:
+                results[i] = ("WA", 0, None, f"thread error: {e}", None)
+    for i, (status, score, mf, err, stderr_path) in enumerate(results):
+        seed = seeds[i]
+        msg = f"CASE {i:04d} {status} score={score} seed={seed}"
+        if err and status != "OK":
+            msg += f" err='{err}'"
+        print(msg, flush=True)
+        if args.show_morgue and mf and os.path.exists(mf):
+            print(summarize_morgue(mf, args.morgue_tail), flush=True)
+        stderr_summary = summarize_stderr(stderr_path, args.morgue_tail)
+        if stderr_summary and status != "OK":
+            print(stderr_summary, flush=True)
+
+    mean = round(sum(s for _, s, _, _, _ in results) / max(len(results), 1), 1)
+    ok = sum(1 for s, _, _, _, _ in results if s == "OK")
+    print(f"TOTAL_SCORE {mean}", flush=True)
+    print(f"CASES_OK {ok}", flush=True)
+    print(f"CASES_TOTAL {len(seeds)}", flush=True)
+
+if __name__ == "__main__":
+    main()

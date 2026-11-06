@@ -1,0 +1,67 @@
+cff-version: 1.2.0
+message: >
+  If you use this project in your work, please cite it using the metadata below.
+title: "Formalization of the Polynomial Freiman-Ruzsa Conjecture of Marton"
+version: 0.1.0
+date-released: Nov 12, 2023
+authors:
+  - family-names: Anderson
+    given-names: Aaron
+  - family-names: Bakšys
+    given-names: Mantas
+  - family-names: Bayer
+    given-names: Jonas
+  - family-names: Collares
+    given-names: Mauricio
+  - family-names: Degenne
+    given-names: Rémy
+  - family-names: Dillies
+    given-names: Yaël
+  - family-names: Eltschig
+    given-names: Ben
+  - family-names: Gouëzel
+    given-names: Sébastien
+  - family-names: Kytölä
+    given-names: Kalle
+  - family-names: Lewis
+    given-names: Rob
+  - family-names: Lez
+    given-names: Paul
+  - family-names: Lorenzo
+    given-names: Luccioli
+  - family-names: Macbeth
+    given-names: Heather
+  - family-names: Massot
+    given-names: Patrick
+  - family-names: Mellendijk
+    given-names: Arend
+  - family-names: Miller
+    given-names: Kyle
+  - family-names: Monticone
+    given-names: Pietro
+  - family-names: Morrison
+    given-names: Kim
+  - family-names: Nash
+    given-names: Oliver
+  - family-names: Song
+    given-names: Utensil
+  - family-names: Tao
+    given-names: Terence
+    orcid: https://orcid.org/0000-0002-0140-7641
+  - family-names: van Doorn
+    given-names: Floris
+  - family-names: Wilshaw
+    given-names: Sky
+  - family-names: Wu
+    given-names: Lawrence
+repository-code: https://github.com/teorth/pfr
+url: https://github.com/teorth/pfr
+abstract: >
+  A collaborative project to formalize the Polynomial Freiman-Ruzsa Conjecture of
+  Katalin Marton, as well as related results, in the Lean4 proof assistant language.
+
+  Organized by Yael Dillies and Terence Tao. Launched Nov 12, 2023.
+keywords:
+  - additive combinatorics
+  - polynomial Freiman-Ruzsa conjecture
+  - formalization project

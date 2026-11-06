@@ -77,6 +77,19 @@ class ContainerBackend(abc.ABC):
     def backend_name(self) -> str:
         ...
 
+    @property
+    def uses_hostname_egress(self) -> bool:
+        """True when the provider enforces egress rules by hostname and its
+        sandboxes resolve DNS themselves (official e2b). Otherwise the harness
+        resolves the judge/API hosts and pins them into /etc/hosts."""
+        return False
+
+    @property
+    def public_dns(self) -> tuple[str, ...]:
+        """Resolvers that internet-enabled sandboxes should use instead of the
+        provider's own DNS (empty = keep the provider's)."""
+        return ()
+
     # --- Lifecycle ---
 
     @abc.abstractmethod
@@ -91,9 +104,12 @@ class ContainerBackend(abc.ABC):
         cap_drop: list[str] | None = None,
         cpu_limit: int | None = None,
         mem_limit: str | None = None,
-        user: str | None = None,
         annotations: dict[str, str] | None = None,
+        network: bool = True,
     ) -> ContainerHandle:
+        """``network=False`` is honoured at creation where the backend can
+        (docker); elsewhere the caller isolates the started container with
+        ``create_network_isolation(handle, [])``."""
         ...
 
     @abc.abstractmethod
@@ -107,11 +123,16 @@ class ContainerBackend(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def container_exists(self, name: str) -> bool:
+    def container_exists(self, name: str, image_key: str | None = None) -> bool:
+        """``image_key`` is an optional lookup hint for backends that cannot
+        enumerate containers globally (veFaaS scopes listing per function)."""
         ...
 
     @abc.abstractmethod
-    def remove_container_by_name(self, name: str) -> None:
+    def remove_container_by_name(
+        self, name: str, image_key: str | None = None,
+    ) -> None:
+        """``image_key`` as in :meth:`container_exists`."""
         ...
 
     # --- Image ---
@@ -148,7 +169,6 @@ class ContainerBackend(abc.ABC):
         handle: ContainerHandle,
         cmd: str | list[str],
         *,
-        user: str | None = None,
         workdir: str | None = None,
         environment: dict[str, str] | None = None,
         detach: bool = False,
@@ -163,7 +183,6 @@ class ContainerBackend(abc.ABC):
         timeout: int | None = 60,
         *,
         log_file: Path | None = None,
-        user: str | None = None,
         workdir: str | None = None,
         environment: dict[str, str] | None = None,
         stream_to_stdout: bool = False,
@@ -180,7 +199,6 @@ class ContainerBackend(abc.ABC):
         cmd: str | list[str],
         timeout: int | None = 60,
         *,
-        user: str | None = None,
         workdir: str | None = None,
         environment: dict[str, str] | None = None,
     ) -> StreamingExecResult:

@@ -1,0 +1,27 @@
+name = "«flt-regular»"
+defaultTargets = ["FltRegular"]
+
+[leanOptions]
+pp.unicode.fun = true # pretty-prints `fun a ↦ b`
+autoImplicit = false # no "assume a typo is a new variable"
+relaxedAutoImplicit = false # no "assume a typo is a new variable"
+maxSynthPendingDepth = 3 # same as mathlib, changes behaviour of typeclass inference
+# Enable all mathlib linters: automatically matches what mathlib uses.
+linter.mathlibStandardSet = true
+linter.flexible = true
+linter.style.header = false
+
+[[require]]
+name = "mathlib"
+git = "https://github.com/leanprover-community/mathlib4"
+rev = "v4.28.0"
+
+# This creates problems with the cache
+#[[require]]
+#name = "«doc-gen4»"
+#git = "git@github.com:leanprover/doc-gen4.git"
+#rev = "main"
+
+[[lean_lib]]
+name = "FltRegular"
+roots = ["FltRegular", "ListDeclAxiom"]

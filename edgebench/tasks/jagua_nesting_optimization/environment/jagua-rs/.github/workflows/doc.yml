@@ -1,0 +1,43 @@
+name: Deploy docs
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - '**.rs'
+      - '**.toml'
+      - '**.yml'
+  pull_request:
+    paths:
+      - '**.rs'
+      - '**.toml'
+      - '**.yml'
+  workflow_dispatch: # Added for manual triggering if needed
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rustdoc:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to push to gh-pages branch
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.90.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Build jagua-rs docs
+        run: RUSTDOCFLAGS="-D warnings" cargo doc --all # Build all docs, including lbf
+      - name: Deploy docs
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: gh-pages
+          folder: target/doc
+          clean: true # Automatically remove deleted files from the deploy branch
+          clean-exclude: | # Exclude benchmark data from being cleaned
+            benchmarks
+            lbf-wasm-demo
+          commit-message: "auto deploy docs"
+          single-commit: true

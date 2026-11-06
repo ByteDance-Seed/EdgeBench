@@ -20,6 +20,7 @@ import abc
 import logging
 from pathlib import Path
 
+from sforge.harness.agent.bundle import ensure_bundle, inject_bundle
 from sforge.harness.backend import ContainerBackend, ContainerHandle
 from sforge.harness.config import SForgeConfig
 
@@ -28,13 +29,16 @@ class Agent(abc.ABC):
     """Base class for coding agents.
 
     Subclasses declare agent configuration as class-level attributes
-    (``name``, ``install_cmds``, ``run_cmd``, …) and override hook
-    methods for agent-specific behavior.
+    (``name``, ``npm_package``, ``run_cmd``, …) and override hook
+    methods for agent-specific behavior. The CLI is installed at run time
+    from a host-built bundle (see :mod:`sforge.harness.agent.bundle`);
+    containers run as root.
     """
 
     # -- required (no default) --
     name: str
-    install_cmds: list[str]
+    npm_package: str
+    default_version: str
     run_cmd: str  # template: {prompt_file}, {cwd} placeholders
     api_key_env: str  # env var name the agent expects for API key
 
@@ -46,9 +50,35 @@ class Agent(abc.ABC):
     timeout: int = 3600
     stop_hook: str | None = None
     resume_cmd: str | None = None
+    # Directories holding the agent's native session transcripts (JSONL);
+    # mirrored into ``<run>/sessions`` during and after the run.
+    session_dirs: tuple[str, ...] = ()
 
-    def __init__(self, config: SForgeConfig) -> None:
+    def __init__(self, config: SForgeConfig, version: str | None = None) -> None:
         self._config = config
+        self.version = version or self.default_version
+
+    @property
+    def spec(self) -> str:
+        """``name@version``, recorded with every run."""
+        return f"{self.name}@{self.version}"
+
+    def install(
+        self,
+        backend: ContainerBackend,
+        handle: ContainerHandle,
+        logger: logging.Logger,
+    ) -> None:
+        """Inject the agent CLI into the container. Subclasses that need
+        config files call ``super()`` first."""
+        bundle = ensure_bundle(
+            self.npm_package,
+            self.version,
+            node_mirror=self._config.nodejs_mirror_url,
+            logger=logger,
+        )
+        inject_bundle(backend, handle, bundle)
+        logger.info("Installed %s from %s", self.spec, bundle.name)
 
     # ------------------------------------------------------------------
     # Overridable hooks

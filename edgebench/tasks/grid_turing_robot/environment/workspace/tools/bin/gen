@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+"""Input generator for Grid Turing Robot (AHC056).
+Usage: ./gen <seed>
+Outputs test input to stdout.
+"""
+import sys
+import os
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+from gen import generate
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: ./gen <seed>", file=sys.stderr)
+        sys.exit(1)
+    print(generate(int(sys.argv[1])), end='')

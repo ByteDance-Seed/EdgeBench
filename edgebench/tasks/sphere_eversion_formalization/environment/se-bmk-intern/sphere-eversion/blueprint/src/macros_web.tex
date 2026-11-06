@@ -1,0 +1,24 @@
+\newtheorem{theorem}{Theorem}[chapter]
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{sublemma}[theorem]{Sub-lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{remark}[theorem]{Remark}
+\newtheorem{example}[theorem]{Example}
+
+\newtheorem*{theorem-intro}{Theorem}[chapter]
+\newtheorem*{definition-intro}[theorem]{Definition}
+\newtheorem*{proposition-intro}[theorem]{Proposition}
+\newtheorem*{lemma-intro}[theorem]{Lemma}
+\newtheorem*{corollary-intro}[theorem]{Corollary}
+
+\newcommand{\D}[1]{\mathrm{Diff}(#1)}
+
+\newenvironment{diagram}[1][]{\begin{tikzcd}[#1]}{\end{tikzcd}}
+\newenvironment{dessin}[1][]{\begin{tikzpicture}[#1]}{\end{tikzpicture}}
+\renewcommand\qedhere{}
+
+\newcommand{\intprod}{\,\lrcorner\,}
+
+\newcommand{\N}[1]{\mathcal{N}_{#1}} % neighborhood

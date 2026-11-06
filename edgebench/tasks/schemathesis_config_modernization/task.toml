@@ -1,0 +1,34 @@
+schema_version = 0
+id = "schemathesis_config_modernization"
+name = "Schemathesis Config Modernization"
+category = "Systems & Software Engineering"
+language = "Python"
+description = "Implement six modernization targets in Schemathesis: a TOML-based configuration system with auto-discovery, API namespace reorganization, a metrics framework, transport and response abstractions, and a redesigned check registration system."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python"            # bases/python (python:3.11 + git curl jq build-essential)
+platform = "linux/amd64"
+cwd = "/app"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["."]
+exclude = [".git", "__pycache__", "*.pyc", "*.egg-info", ".eggs", "*.so", "TODO.md"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 1800
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# A run (6 pytest files, ~126 checks) takes about a minute.
+
+[score]
+direction = "maximize"
+# raw score = test.sh TOTAL_SCORE = weighted mean of per-phase check pass ratios, weights 3,1,1,2,2,1 (0..1).
+rescale = { kind = "linear", lower = 0.0, upper = 1.0 }

@@ -17,27 +17,19 @@ from __future__ import annotations
 import os
 import secrets
 import stat
-from pathlib import Path
-
-from typing_extensions import NotRequired, TypedDict
+from pathlib import Path, PurePosixPath
 
 # --- Paths ---
 # Resolved from env vars or cwd-relative defaults so sforge works as a
 # pip-installed tool without depending on the source checkout location.
 LOG_DIR = Path(os.environ.get("SFORGE_LOG_DIR", "logs")).resolve()
-TASKS_DIR = Path(os.environ.get("SFORGE_TASKS_DIR", "tasks")).resolve()
 
-BUILD_DIR = LOG_DIR / "build_images"
-BASE_IMAGE_BUILD_DIR = BUILD_DIR / "base"
-WORK_IMAGE_BUILD_DIR = BUILD_DIR / "work"
-JUDGE_IMAGE_BUILD_DIR = BUILD_DIR / "judge"
-RUNS_LOG_DIR = LOG_DIR / "runs"
+# Benchmark directory used when neither -b nor SFORGE_BENCHMARK is given:
+# EdgeBench, in this repository.
+DEFAULT_BENCHMARK_DIR = Path("edgebench")
 
-# --- Benchmark registry (name → HuggingFace repo) ---
-BENCHMARK_REGISTRY: dict[str, str] = {
-    "edgebench": "ByteDance-Seed/EdgeBench",
-}
-DEFAULT_BENCHMARK = "edgebench"
+# Everything SForge puts into a work/judge container lives here.
+CONTAINER_DIR = PurePosixPath("/opt/sforge")
 
 # --- Defaults ---
 DEFAULT_EVAL_INTERVAL = 300  # seconds
@@ -72,45 +64,5 @@ def get_admin_secret(log_dir: Path | None = None) -> str:
             os.fsync(secret_file.fileno())
         return secret
 
-# --- Docker ---
-DOCKER_USER = "root"
+
 UTF8 = "utf-8"
-
-# --- Log markers (reuse SWE-bench convention) ---
-START_TEST_OUTPUT = ">>>>> Start Test Output"
-END_TEST_OUTPUT = ">>>>> End Test Output"
-
-# --- Test status ---
-PASSED = "PASSED"
-FAILED = "FAILED"
-ERROR = "ERROR"
-SKIPPED = "SKIPPED"
-
-
-class WorkConfig(TypedDict):
-    specs_dir: NotRequired[str]
-    agent_query: NotRequired[str]
-    setup_cmds: NotRequired[list[str]]
-    image_tag: NotRequired[str]
-
-
-class JudgeConfig(TypedDict):
-    eval_cmd: str
-    eval_timeout: int
-    parser: str
-    score_direction: NotRequired[str]
-    selection: NotRequired[str]
-    setup_cmds: NotRequired[list[str]]
-    image_tag: NotRequired[str]
-
-
-class SForgeTask(TypedDict):
-    task_id: str
-    name: str
-    base_image: str
-    platform: str
-    cwd: str
-    submit_paths: list[str]
-    work: WorkConfig
-    judge: JudgeConfig
-    internet: NotRequired[bool]

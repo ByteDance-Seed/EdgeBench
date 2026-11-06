@@ -1,0 +1,12 @@
+---
+source: cas-cli/src/ui/components/snapshot_tests.rs
+expression: tf.output()
+---
+--- CAS Doctor ---
+
+Store
+Database: /home/user/.cas/store.db
+[OK] Store connected
+
+----------------------------------------
+[INFO] All systems operational

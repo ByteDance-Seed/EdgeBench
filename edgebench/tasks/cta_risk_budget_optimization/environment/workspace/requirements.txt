@@ -1,0 +1,7 @@
+pandas==1.5.3
+numpy==1.23.5
+scipy==1.10.1
+scikit-learn==1.2.2
+statsmodels==0.13.5
+matplotlib==3.7.1
+openpyxl==3.1.2

@@ -1,0 +1,31 @@
+schema_version = 0
+id = "flt_regular_formalization"
+name = "Flt Regular Formalization"
+category = "Formal Math & Theorem Proving"
+language = "Lean 4"
+description = "Resolve proof obligations in a Lean 4 formalization of Fermat's Last Theorem for regular primes via Kummer's cyclotomic theory. Top-level results earn no credit unless foundational prerequisites are also fully proved."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "lean-4.28.0-mathlib-8f9d9cf"
+platform = "linux/amd64"
+cwd = "/home/workspace/"
+internet = false
+cpus = 8
+memory = "16g"
+
+[submission]
+paths = ["se-bmk-intern/FltRegular"]
+exclude = ["se-bmk-intern/FltRegular/.lake"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 2400
+cpus = 8
+memory = "16g"
+
+[score]
+direction = "maximize"
+# raw score = repaired weight / 87 (25 weighted target declarations; v1 eval_lean `score`)
+rescale = { kind = "linear", lower = 0.0, upper = 1.0 }

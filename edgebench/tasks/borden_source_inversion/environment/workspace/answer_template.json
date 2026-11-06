@@ -1,0 +1,26 @@
+{
+  "source_type": "rectangular_region",
+  "dimension": 3,
+  "x_center": 0.0,
+  "y_center": 0.0,
+  "z_center": 0.0,
+  "half_length_x": 0.0,
+  "half_length_y": 0.0,
+  "half_length_z": 0.0,
+  "C0": 0.0,
+  "t_start": 0.0,
+  "duration": 0.0,
+  "transport_model": {
+    "equation_type": "advection_dispersion_reaction",
+    "governing_equation": "R*dC/dt = div(D grad C) - v dot grad C - lambda*C + source",
+    "velocity_m_per_day": 0.0,
+    "alpha_L_m": 0.0,
+    "alpha_TH_m": 0.0,
+    "alpha_TV_m": 0.0,
+    "porosity": 0.0,
+    "retardation_factor": 1.0,
+    "lambda_per_day": 0.0,
+    "numerical_approach": "brief description of forward model and optimization"
+  },
+  "method": "brief description of your inversion method"
+}

@@ -19,7 +19,6 @@ from __future__ import annotations
 import io
 import json
 import logging
-import os
 import shlex
 import signal
 import subprocess
@@ -37,6 +36,7 @@ from sforge.harness.backend.base import (
     NetworkIsolationStrategy,
     StreamingExecResult,
 )
+from sforge.harness.docker_build import registry_has, remote_ref
 
 
 class K8sPodHandle(ContainerHandle):
@@ -158,7 +158,7 @@ class K8sBackend(ContainerBackend):
         if not image_registry:
             raise RuntimeError(
                 "K8s backend requires an image registry (pods cannot use locally-built images). "
-                "Set SFORGE_K8S_IMAGE_REGISTRY or pass --k8s-image-registry."
+                "Set SFORGE_K8S_IMAGE_REGISTRY."
             )
         self._namespace = namespace
         self._kubeconfig = kubeconfig
@@ -199,8 +199,8 @@ class K8sBackend(ContainerBackend):
         cap_drop: list[str] | None = None,
         cpu_limit: int | None = None,
         mem_limit: str | None = None,
-        user: str | None = None,
         annotations: dict[str, str] | None = None,
+        network: bool = True,
     ) -> K8sPodHandle:
         full_image = self._resolve_image(image)
         k8s_name = _sanitize_k8s_name(name)
@@ -226,11 +226,6 @@ class K8sBackend(ContainerBackend):
         security_context = {}
         if cap_drop:
             security_context["capabilities"] = {"drop": cap_drop}
-        if user:
-            try:
-                security_context["runAsUser"] = int(user)
-            except ValueError:
-                pass
 
         container_spec = {
             "name": "work",
@@ -359,7 +354,7 @@ class K8sBackend(ContainerBackend):
             except ValueError:
                 pass
 
-    def container_exists(self, name: str) -> bool:
+    def container_exists(self, name: str, image_key: str | None = None) -> bool:
         k8s_name = _sanitize_k8s_name(name)
         r = self._kubectl(
             ["get", "pod", k8s_name],
@@ -367,7 +362,9 @@ class K8sBackend(ContainerBackend):
         )
         return r.returncode == 0
 
-    def remove_container_by_name(self, name: str) -> None:
+    def remove_container_by_name(
+        self, name: str, image_key: str | None = None,
+    ) -> None:
         k8s_name = _sanitize_k8s_name(name)
         self._kubectl(
             ["delete", "pod", k8s_name, "--grace-period=0", "--ignore-not-found"],
@@ -377,30 +374,7 @@ class K8sBackend(ContainerBackend):
     # --- Image ---
 
     def image_exists(self, image_key: str) -> bool:
-        full_image = self._resolve_image(image_key)
-        # full_image: "registry:5000/edgebench.work.task:hash"
-        parts = full_image.split("/", 1)
-        if len(parts) != 2:
-            return False
-        registry_host, name_tag = parts
-        if ":" in name_tag:
-            name, tag = name_tag.rsplit(":", 1)
-        else:
-            name, tag = name_tag, "latest"
-        try:
-            import urllib.request
-            url = f"http://{registry_host}/v2/{name}/manifests/{tag}"
-            req = urllib.request.Request(url, method="HEAD")
-            req.add_header(
-                "Accept",
-                "application/vnd.docker.distribution.manifest.v2+json, "
-                "application/vnd.oci.image.index.v1+json, "
-                "application/vnd.oci.image.manifest.v1+json",
-            )
-            with urllib.request.urlopen(req, timeout=10):
-                return True
-        except Exception:
-            return False
+        return registry_has(self._resolve_image(image_key))
 
     # --- File transfer ---
 
@@ -474,13 +448,12 @@ class K8sBackend(ContainerBackend):
         handle: ContainerHandle,
         cmd: str | list[str],
         *,
-        user: str | None = None,
         workdir: str | None = None,
         environment: dict[str, str] | None = None,
         detach: bool = False,
     ) -> ExecResult:
         h = self._handle(handle)
-        shell_cmd = self._build_shell_cmd(cmd, user=user, workdir=workdir, environment=environment)
+        shell_cmd = self._build_shell_cmd(cmd, workdir=workdir, environment=environment)
 
         if detach:
             thread = threading.Thread(
@@ -499,7 +472,6 @@ class K8sBackend(ContainerBackend):
         timeout: int | None = 60,
         *,
         log_file: Path | None = None,
-        user: str | None = None,
         workdir: str | None = None,
         environment: dict[str, str] | None = None,
         stream_to_stdout: bool = False,
@@ -509,7 +481,7 @@ class K8sBackend(ContainerBackend):
     ) -> StreamingExecResult:
         output, exit_code, timed_out, elapsed = self._exec_streaming(
             handle, cmd, timeout,
-            log_file=log_file, user=user, workdir=workdir,
+            log_file=log_file, workdir=workdir,
             environment=environment, stream_to_stdout=stream_to_stdout,
             shutdown_event=shutdown_event, log_append=log_append,
             on_chunk=on_chunk,
@@ -525,13 +497,12 @@ class K8sBackend(ContainerBackend):
         cmd: str | list[str],
         timeout: int | None = 60,
         *,
-        user: str | None = None,
         workdir: str | None = None,
         environment: dict[str, str] | None = None,
     ) -> StreamingExecResult:
         output, exit_code, timed_out, elapsed = self._exec_streaming(
             handle, cmd, timeout,
-            user=user, workdir=workdir, environment=environment,
+            workdir=workdir, environment=environment,
         )
         return StreamingExecResult(
             output=output, exit_code=exit_code,
@@ -545,7 +516,6 @@ class K8sBackend(ContainerBackend):
         timeout: int | None = 60,
         *,
         log_file: Path | None = None,
-        user: str | None = None,
         workdir: str | None = None,
         environment: dict[str, str] | None = None,
         stream_to_stdout: bool = False,
@@ -554,7 +524,7 @@ class K8sBackend(ContainerBackend):
         on_chunk: Callable[[bytes], None] | None = None,
     ) -> tuple[str, int, bool, float]:
         h = self._handle(handle)
-        shell_cmd = self._build_shell_cmd(cmd, user=user, workdir=workdir, environment=environment)
+        shell_cmd = self._build_shell_cmd(cmd, workdir=workdir, environment=environment)
         exit_marker = "__SFORGE_EXIT__"
         wrapped = f'({shell_cmd}); echo "{exit_marker}$?"'
 
@@ -679,7 +649,7 @@ class K8sBackend(ContainerBackend):
 
     def _resolve_image(self, image: str) -> str:
         if self._image_registry and not image.startswith(self._image_registry):
-            return f"{self._image_registry}/{image}"
+            return remote_ref(self._image_registry, image)
         return image
 
     def _exec_simple(self, h: K8sPodHandle, cmd: str) -> str:
@@ -697,7 +667,6 @@ class K8sBackend(ContainerBackend):
     def _build_shell_cmd(
         cmd: str | list[str],
         *,
-        user: str | None = None,
         workdir: str | None = None,
         environment: dict[str, str] | None = None,
     ) -> str:
@@ -713,13 +682,7 @@ class K8sBackend(ContainerBackend):
         if workdir:
             parts.append(f"cd {workdir}")
         parts.append(shell_cmd)
-        full = " && ".join(parts)
-
-        if user == "root":
-            full = f"sudo sh -c {shlex.quote(full)}"
-        elif user:
-            full = f"su - {user} -c {shlex.quote(full)}"
-        return full
+        return " && ".join(parts)
 
     @staticmethod
     def _handle(handle: ContainerHandle) -> K8sPodHandle:

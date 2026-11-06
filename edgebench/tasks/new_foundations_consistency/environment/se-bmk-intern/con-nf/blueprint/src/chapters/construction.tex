@@ -1,0 +1,242 @@
+In this section, we are trying to construct the type of tangled sets at level \( \alpha \).
+We assume model data, position functions for \( \Tang_\beta \), and typed near-litters for all types \( \beta < \alpha \).
+
+\section{Codes and clouds}
+\begin{definition}[code]
+  \label{def:Code}
+  \uses{def:ModelData}
+  A \emph{code} is a pair \( c = (\beta, s) \) where \( \beta < \alpha \) is a type index and \( s \) is a nonempty set of \( \TSet_\beta \).
+\end{definition}
+\begin{definition}[cloud]
+  \label{def:cloud}
+  \uses{def:ModelData,def:TypedNearLitter,prop:fuzz,def:Code}
+  The \emph{cloud relation} \( \prec \) on codes is given by the constructor
+  \[ (\beta, s) \prec (\gamma, \{ \typed_\gamma(N) \mid \exists t : \Tang_\beta,\, \set(t) \in s \wedge N^\circ = f_{\beta,\gamma}(t) \}) \]
+  where \( \beta, \gamma < \alpha \) are distinct and \( \gamma \) is proper.
+\end{definition}
+\begin{proposition}
+  \label{prop:eq_of_cloud}
+  \uses{def:cloud}
+  If \( c \prec (\gamma, s_1) \) and \( c \prec (\gamma, s_2) \), then \( s_1 = s_2 \).
+\end{proposition}
+\begin{proof}
+  Let \( c = (\beta, s) \).
+  We obtain
+  \[ s_1 = \{ \typed_\gamma(N) \mid \exists t : \Tang_\beta,\, \set(t) \in s \wedge N^\circ = f_{\beta,\gamma}(t) \} = s_2 \]
+  as required.
+\end{proof}
+\begin{proposition}
+  \label{prop:cloud_injective}
+  \uses{def:cloud}
+  The cloud relation is injective (\cref{def:relation_props}).
+  That is, if \( c_1, c_2 \prec d \), then \( c_1 = c_2 \).
+\end{proposition}
+\begin{proof}
+  Let \( c_i = (\beta_i, s_i) \) for \( i = 1, 2 \), and let \( d = (\gamma, s') \).
+
+  We first show that \( \beta_1 = \beta_2 \).
+  Choose some \( t_1 : \Tang_{\beta_1} \) such that \( \set(t_1) \in s_1 \).
+  We can show directly that \( \typed_\gamma(\NL(f_{\beta_1,\gamma}(t_1))) \in s' \).
+  So there is some \( t_2 : \Tang_{\beta_2} \) such that
+  \[ \typed_\gamma(\NL(f_{\beta_1,\gamma}(t_1))) = \typed_\gamma(N);\quad N^\circ = f_{\beta_2,\gamma}(t_2) \]
+  Then since the typed near-litter map is injective (\cref{def:TypedNearLitter}), the fact that the equations \( N^\circ = L_1 \) and \( N = \NL(L_2) \) imply \( L_1 = L_2 \), and that the \( f \)-maps have disjoint ranges (\cref{prop:fuzz}), we obtain \( \beta_1 = \beta_2 \).
+
+  We now show that if \( (\beta, s_1), (\beta, s_2) \prec d \), then \( s_1 \subseteq s_2 \).
+  Let \( d = (\gamma, s') \) as above.
+  Let \( x \in s_1 \), and choose \( t_1 : \Tang_\beta \) such that \( x = \set(t_1) \).
+  Then as \( (\beta, s_1) \prec d \), we have \( \typed_\gamma(\NL(f_{\beta,\gamma}(t_1))) \in s' \).
+  So there is some \( t_2 : \Tang_\beta \) with \( \set(t_2) \in s_2 \) such that
+  \[ \typed_\gamma(\NL(f_{\beta,\gamma}(t_1))) = \typed_\gamma(N);\quad N^\circ = f_{\beta,\gamma}(t_2) \]
+  For the same reasons as above, together with injectivity of \( f_{\beta,\gamma} \), we have \( t_1 = t_2 \).
+  In particular, \( x \in s_2 \) as required.
+
+  This gives the required result by antisymmetry.
+\end{proof}
+\begin{proposition}
+  \label{prop:cloud_wf}
+  \uses{def:cloud}
+  The cloud relation is well-founded.
+\end{proposition}
+\begin{proof}
+  Define a function \( F \) that maps a code \( c = (\beta, s) \) to the set
+  \[ \{ \iota(t) \mid \set(t) \in s \} : \Set \mu \]
+
+  We first show that \( c_1 \prec c_2 \) implies that
+  \[ \forall \nu_2 \in F(c_2),\, \exists \nu_1 \in F(c_1),\, \nu_1 < \nu_2 \]
+  Let \( c_i = (\beta_i, s_i) \) for \( i = 1, 2 \), and suppose \( \nu_2 \in F(c_2) \).
+  Then \( \nu_2 = \iota(t_2) \) with \( \set(t_2) \in s_2 \).
+  By definition, \( \set(t_2) = \typed_{\beta_2}(N) \) where \( N^\circ = f_{\beta_1,\beta_2}(t_1) \) and \( \set(t_1) \in s_1 \).
+  Then \( \iota(t_1) \in F(c_1) \), and \( \iota(t_1) < \iota(N) \leq \iota(t_2) \) by \cref{prop:fuzz,def:TypedNearLitter}, as required.
+
+  Now, we define a function \( f \) that maps a code \( c \) to \( \min F(c) \), which is always well-defined as \( F(c) \) is nonempty.
+  The above result shows that \( c_1 \prec c_2 \) implies \( f(c_1) < f(c_2) \).
+  Thus \( \prec \) is a subrelation of the well-founded relation given by the inverse image of \( f \), so is well-founded.
+\end{proof}
+\begin{proposition}
+  \label{prop:odd_iff_not_even}
+  \uses{def:cloud} % for layout convenience
+  Let \( \prec \) be a relation on a type \( \tau \).
+  We say that an object \( x : \tau \) is \emph{\( \prec \)-even} if all of its \( \prec \)-predecessors are odd; we say that \( x \) is \emph{\( \prec \)-odd} if it has a \( \prec \)-predecessor that is even.
+  Then:
+  \begin{enumerate}
+    \item Minimal objects are even.
+    \item If \( \prec \) is well-founded, then every object \( x : \tau \) is either even or odd, but not both.
+  \end{enumerate}
+\end{proposition}
+\begin{proof}
+  \emph{Part 1.}
+  Direct from the definition.
+
+  \emph{Part 2.}
+  We show this by induction along \( \prec \).
+  Suppose that all \( \prec \)-predecessors of \( x \) are either even or odd but not both.
+  If all of these \( \prec \)-predecessors are odd, then \( x \) is even, and it is clearly not odd, because no \( y \prec x \) is even.
+  Otherwise, there is \( y \prec x \) that is even, so \( x \) is odd, and it is not even because this \( y \) is not odd.
+\end{proof}
+\begin{definition}
+  \uses{def:cloud}
+  \label{def:Code.Represents}
+  We define the relation \( \looparrowright \) between codes by the following two constructors.
+  \begin{itemize}
+    \item If \( c \) is a \( \prec \)-even code, then \( c \looparrowright c \).
+    \item If \( c \) is a \( \prec \)-even code and \( c \prec d \), then \( c \looparrowright d \).
+  \end{itemize}
+  This relation is cofunctional (\cref{def:relation_props}): if \( d \) is a code, there is exactly one \( c \) such that \( c \looparrowright d \).
+  Moreover, if \( c \looparrowright (\beta, s_1), (\beta, s_2) \), then \( s_1 = s_2 \).
+\end{definition}
+\begin{proof}[Proof of claim]
+  \uses{prop:odd_iff_not_even,prop:cloud_wf,prop:cloud_injective,prop:eq_of_cloud}
+  If \( d \) is even, then \( d \looparrowright d \).
+  If \( c \) is any other even code, \( c \nprec d \).
+
+  If \( d \) is odd, then there is an even code \( c \) with \( c \prec d \), so \( c \looparrowright d \).
+  If \( c' \) is any other even code with \( c' \looparrowright d \), we must have \( c' \prec d \) as \( c' \) and \( d \) have different parities so cannot be equal, so \( c, c' \prec d \), so \( c = c' \) by \cref{prop:cloud_injective}.
+
+  Finally, suppose \( c \looparrowright (\beta, s_1), (\beta, s_2) \).
+  Suppose that \( c = (\beta, s_1) \).
+  Then \( (\beta, s_1) \looparrowright (\beta, s_2) \) implies \( s_1 = s_2 \) because in the other constructor we may conclude \( \beta \neq \beta \).
+  The same holds for \( c = (\beta, s_2) \) by symmetry.
+  Now suppose that \( c \prec (\beta, s_1), (\beta, s_2) \).
+  In this case, we immediately obtain \( s_1 = s_2 \) by \cref{prop:eq_of_cloud}.
+\end{proof}
+\begin{proposition}[extensionality]
+  \uses{def:Code.Represents}
+  \label{prop:Code.ext}
+  Let \( x : \TSet_\beta \) for some type index \( \beta < \alpha \), and let \( c \) be a code.
+  We say that \( x \) is a \emph{type-\( \beta \) member} of \( c \) if there is a set \( s : \Set \TSet_\beta \) such that \( x \in s \) and \( c \looparrowright (\beta, s) \), and hence for all sets \( s : \Set \TSet_\beta \) such that \( c \looparrowright (\beta, s) \), we have \( x \in s \) by \cref{def:Code.Represents}.
+  We write \( x \in_\beta c \).
+  Note that this definition is only useful when \( c \) is even.
+
+  Let \( c_1, c_2 \) be even codes.
+  If \( \beta < \alpha \) is a proper type index such that
+  \[ \forall x : \TSet_\beta,\, x \in_\beta c_1 \leftrightarrow x \in_\beta c_2 \]
+  then \( c_1 = c_2 \).
+\end{proposition}
+\begin{proof}
+  Suppose that there is no \( x : \TSet_\beta \) such that \( x \in_\beta c_1 \).
+  Then it is easy to check that \( c_1 = (\gamma, \emptyset) \) for some \( \gamma \), which is a contradiction as all codes are assumed to have nonempty second projections.
+
+  So there is some \( x : \TSet_\beta \) such that \( x \in_\beta c_1 \).
+  Then there are sets \( s_1, s_2 \) where \( c_i \looparrowright (\beta, s_i) \) for \( i = 1, 2 \).
+  Then, as \( x \in_\beta c_i \) holds if and only if \( x \in s_i \), we conclude \( s_1 = s_2 \).
+  Hence \( c_1, c_2 \looparrowright (\beta, s_1) \), so as \( \looparrowright \) is injective, we conclude \( c_1 = c_2 \).
+\end{proof}
+
+\section{Model data defined}
+\begin{definition}[new allowable permutation]
+  \label{def:NewAllPerm}
+  \uses{prop:fuzz}
+  A \emph{new allowable permutation} is a dependent function \( \rho \) of type \( \prod_{\beta < \alpha} \AllPerm_\beta \), subject to the condition
+  \[ (\rho_\gamma)_\bot(f_{\beta,\gamma}(t)) = f_{\beta,\gamma}(\rho(\beta)(t)) \]
+  for every \( t : \Tang_\beta \).
+  These form a group and have a \( \texttt{StrPermClass}_\alpha \) instance.
+\end{definition}
+\begin{proposition}
+  \label{prop:AllPerm.smul_cloud_smul}
+  \uses{def:NewAllPerm,def:Code.Represents,prop:Code.ext}
+  Define an action of allowable permutations on codes by
+  \[ \rho(\beta, s) = (\beta, \rho(\beta)[s]) \]
+  Then
+  \begin{enumerate}
+    \item \( c \prec d \) implies \( \rho(c) \prec \rho(d) \);
+    \item \( c \looparrowright d \) implies \( \rho(c) \looparrowright \rho(d) \);
+    \item \( c \) is even if and only if \( \rho(c) \) is even;
+    \item \( x \in_\beta c \) if and only if \( \rho(\beta)(x) \in_\beta \rho(c) \).
+  \end{enumerate}
+\end{proposition}
+\begin{proof}
+  \emph{Part 1.}
+  Suppose that \( c \prec d \).
+  Then, writing \( c = (\beta, s) \) and \( d = (\gamma, s') \), we obtain
+  \[ s' = \{ \typed_\gamma(N) \mid \exists t : \Tang_\beta,\, \set(t) \in s \wedge N^\circ = f_{\beta,\gamma}(t) \} \]
+  Now, note that
+  \begin{align*}
+    \rho(\gamma)[s']
+    &= \rho(\gamma)[\{ \typed_\gamma(N) \mid \exists t : \Tang_\beta,\, \set(t) \in s \wedge N^\circ = f_{\beta,\gamma}(t) \}] \\
+    &= \{ \rho(\gamma)(\typed_\gamma(N)) \mid \exists t : \Tang_\beta,\, \set(t) \in s \wedge N^\circ = f_{\beta,\gamma}(t) \} \\
+    &= \{ \typed_\gamma(\rho(\gamma)_\bot(N)) \mid \exists t : \Tang_\beta,\, \set(t) \in s \wedge N^\circ = f_{\beta,\gamma}(t) \} \\
+    &= \{ \typed_\gamma(N) \mid \exists t : \Tang_\beta,\, \set(t) \in s \wedge \rho(\gamma)_\bot^{-1}(N)^\circ = f_{\beta,\gamma}(t) \} \\
+    &= \{ \typed_\gamma(N) \mid \exists t : \Tang_\beta,\, \set(t) \in s \wedge N^\circ = \rho(\gamma)_\bot(f_{\beta,\gamma}(t)) \} \\
+    &= \{ \typed_\gamma(N) \mid \exists t : \Tang_\beta,\, \set(t) \in s \wedge N^\circ = f_{\beta,\gamma}(\rho(\beta)(t)) \}
+  \end{align*}
+  So \( \rho(c) \prec \rho(d) \) as required.
+
+  \emph{Part 2.}
+  Direct.
+
+  \emph{Part 3.}
+  Follows from the general fact that if \( f : \tau \to \sigma \) is a bijection and we have \( x \prec_\tau y \) if and only if \( f(x) \prec_\sigma f(y) \), then the \( \prec_\tau \)-parity of \( x \) is the same as the \( \prec_\sigma \)-parity of \( f(x) \).
+
+  \emph{Part 4.}
+  We only need to show one direction, because we can apply the one-directional result to \( \rho^{-1} \) to obtain the converse.
+  Suppose that \( x \in_\beta c \), so \( c \looparrowright (\beta, s) \) and \( x \in s \).
+  Then \( \rho(c) \looparrowright (\beta, \rho(\beta)[s]) \), so \( \rho(\beta)(x) \in_\beta \rho(c) \) as required,
+\end{proof}
+\begin{definition}[new t-set]
+  \label{def:NewTSet}
+  \uses{prop:AllPerm.smul_cloud_smul}
+  A \emph{new t-set} is an even code \( c \) such that there is an \( \alpha \)-support that supports \( c \) under the action of new allowable permutations, or a designated object called the empty set.
+  New allowable permutations act on new t-sets in the same way that they act on codes, and map the empty set to itself.
+  We define the map \( U_\alpha \) from new t-sets to \( \StrSet_\alpha \) by cases from the top of the path in the obvious way (using recursion on paths and the membership relation from \cref{prop:Code.ext}).
+  It is easy to check that \( \rho(U_\alpha(x)) = U_\alpha(\rho(x)) \) by \cref{prop:AllPerm.smul_cloud_smul}.
+\end{definition}
+\begin{definition}[new model data]
+  \uses{def:NewAllPerm,def:NewTSet,prop:Code.ext}
+  \label{def:NewModelData}
+  Given model data, position functions, and typed near-litters for all types \( \beta < \alpha \), \emph{new model data} is the model data at level \( \alpha \) consisting of new t-sets (\cref{def:NewTSet}) and new allowable permutations (\cref{def:NewAllPerm}).
+  The embedding from new t-sets to \( \StrSet_\alpha \) is defined by
+  \[ U_\alpha(c)(\beta) = \{ x \mid x \in_\beta c \} \]
+\end{definition}
+
+\section{Typed near-litters, singletons, and positions}
+\begin{definition}[typed near-litters]
+  \uses{def:NewTSet}
+  \label{def:newTypedNearLitter}
+  We define a function \( \typed_\alpha \) from the type of near-litters to the type of new t-sets by mapping a near-litter \( N \) to the code \( (\bot, N) \).
+  This code is even as all codes of the form \( (\bot, s) \) are even.
+  This function is clearly injective, and satisfies
+  \[ \rho(\typed_\alpha(N)) = \typed_\alpha(\rho(\bot)(N)) \]
+  by definition.
+\end{definition}
+\begin{definition}[singletons]
+  \uses{def:NewTSet}
+  \label{def:newSingleton}
+  We define a function \( \singleton_\alpha \) for each lower type index \( \beta \) from \( \TSet_\beta \) to the type of new t-sets by \( x \mapsto (\beta, \{x\}) \).
+  The given code is even as all singleton codes are even.
+  This satisfies \( U_\alpha(\singleton_\alpha(x))(\beta) = \{ x \} \).
+\end{definition}
+\begin{proposition}[position function]
+  \uses{def:NewModelData,def:newTypedNearLitter}
+  \label{prop:newPos}
+  Using the model data from \cref{def:NewModelData}, if \( \#\Tang_\alpha \leq \#\mu \), then there is a position function on the type of \( \alpha \)-tangles,\footnote{It may be easier in practice to construct a position function on the product of the type of new t-sets and the type of \( \alpha \)-supports, and then get the required position function on tangles from this.} such that
+  \begin{itemize}
+    \item if \( N \) is a near-litter and \( t \) is an \( \alpha \)-tangle such that \( \set(t) = \typed_\alpha(N) \), we have \( \iota(N) \leq \iota(t) \); and
+    \item if \( t \) is an \( \alpha \)-tangle and \( x \) is an atom or near-litter that occurs in the range of \( \supp(t)_A \), then \( \iota(x) < \iota(t) \).
+  \end{itemize}
+\end{proposition}
+\begin{proof}
+  \uses{prop:funOfDeny}
+  We use \cref{prop:funOfDeny} to construct the position function, using denied set
+  \[ D(t) = \{ \iota(N) \mid \set(t) = \typed_\alpha(N) \} \cup \{ \iota(a) \mid a \in \im \supp(t)_A^\Atom \} \cup \{ \iota(N) \mid N \in \im \supp(t)_A^\NearLitter \} \]
+  The first set is a subsingleton and the second two sets are small, so the denied set has size less than \( \cof(\ord(\#\mu)) \) as required.
+\end{proof}

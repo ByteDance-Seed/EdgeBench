@@ -1,0 +1,166 @@
+#!/usr/bin/env python3
+"""Scoring program for Vibrating Path (CodeChef VBR).
+Usage: ./tester <input_file> <output_file>
+Outputs "Score = <int>" to stderr on success, or "wrong answer: <reason>" on failure.
+Exit code: 0 on success, 1 on failure.
+"""
+import sys
+
+def main():
+    if len(sys.argv) < 3:
+        print("Usage: ./tester <input_file> <output_file>", file=sys.stderr)
+        sys.exit(1)
+
+    input_file = sys.argv[1]
+    output_file = sys.argv[2]
+
+    # Read input
+    with open(input_file, 'r') as f:
+        data = f.read().split()
+    idx = 0
+    N = int(data[idx]); idx += 1
+    M = int(data[idx]); idx += 1
+    K = int(data[idx]); idx += 1
+    costs = [int(data[idx + i]) for i in range(N)]
+    idx += N
+
+    # Build adjacency with weights
+    adj = [[] for _ in range(N)]
+    edges_list = []
+    for _ in range(M):
+        u = int(data[idx]) - 1; idx += 1
+        v = int(data[idx]) - 1; idx += 1
+        s = int(data[idx]); idx += 1
+        adj[u].append((v, s))
+        adj[v].append((u, s))
+        edges_list.append((u, v, s))
+
+    # Read output
+    try:
+        with open(output_file, 'r') as f:
+            out_lines = f.read().strip().split('\n')
+    except Exception as e:
+        print(f"wrong answer: cannot read output file: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    Q = int(out_lines[0])
+
+    if Q > 0:
+        if len(out_lines) < 3:
+            print("wrong answer: expected 3 lines of output when Q > 0", file=sys.stderr)
+            sys.exit(1)
+        hit_nodes = list(map(int, out_lines[1].split()))
+        color_line = out_lines[2]
+    else:
+        if len(out_lines) < 2:
+            print("wrong answer: expected at least 2 lines", file=sys.stderr)
+            sys.exit(1)
+        hit_nodes = []
+        color_line = out_lines[1]
+
+    if len(hit_nodes) != Q:
+        print(f"wrong answer: expected {Q} hit nodes, got {len(hit_nodes)}", file=sys.stderr)
+        sys.exit(1)
+
+    colors = list(map(int, color_line.split()))
+    if len(colors) != N:
+        print(f"wrong answer: expected {N} colors, got {len(colors)}", file=sys.stderr)
+        sys.exit(1)
+
+    for c in colors:
+        if c < 1 or c > K:
+            print(f"wrong answer: color {c} out of range [1, {K}]", file=sys.stderr)
+            sys.exit(1)
+
+    # Simulate hits and remove edges
+    removed_edges = set()
+    original_edges_set = set()
+    for u, v, s in edges_list:
+        original_edges_set.add((u, v))
+        original_edges_set.add((v, u))
+
+    current_adj_simple = [set() for _ in range(N)]
+    for u, v, s in edges_list:
+        current_adj_simple[u].add(v)
+        current_adj_simple[v].add(u)
+
+    for node_1indexed in hit_nodes:
+        node = node_1indexed - 1
+        if node < 0 or node >= N:
+            print(f"wrong answer: hit node {node_1indexed} out of range", file=sys.stderr)
+            sys.exit(1)
+
+        # Find vibrating path starting at node
+        path = [node]
+        visited = {node}
+        prev_edge = None
+
+        while len(path) < 256:
+            curr = path[-1]
+            candidates = []
+            for v, s in adj[curr]:
+                edge = (min(curr, v), max(curr, v))
+                if edge in removed_edges:
+                    continue
+                if prev_edge and edge == prev_edge:
+                    continue
+                candidates.append((v, s))
+
+            if not candidates:
+                break
+
+            candidates.sort(key=lambda x: x[1])
+
+            found = False
+            for v, s in candidates:
+                if v in visited:
+                    continue
+                # Check no back edge to earlier path nodes (except prev)
+                has_back = False
+                for i in range(len(path) - 1):
+                    pn = path[i]
+                    e = (min(v, pn), max(v, pn))
+                    if e not in removed_edges and (v, pn) in original_edges_set:
+                        has_back = True
+                        break
+                if not has_back:
+                    prev_edge = (min(curr, v), max(curr, v))
+                    path.append(v)
+                    visited.add(v)
+                    found = True
+                    break
+
+            if not found:
+                break
+
+        # Remove edges on path
+        edges_removed_this_hit = False
+        for i in range(len(path) - 1):
+            u, v = path[i], path[i+1]
+            edge = (min(u, v), max(u, v))
+            if edge not in removed_edges:
+                removed_edges.add(edge)
+                current_adj_simple[u].discard(v)
+                current_adj_simple[v].discard(u)
+                edges_removed_this_hit = True
+
+        if not edges_removed_this_hit:
+            print(f"wrong answer: hit on node {node_1indexed} removed no edges", file=sys.stderr)
+            sys.exit(1)
+
+    # Check coloring validity
+    for u, v, s in edges_list:
+        edge = (min(u, v), max(u, v))
+        if edge not in removed_edges:
+            if colors[u] == colors[v]:
+                print(f"wrong answer: edge ({u+1},{v+1}) has same color {colors[u]}", file=sys.stderr)
+                sys.exit(1)
+
+    # Score = sum of hit costs
+    total_cost = sum(costs[node - 1] for node in hit_nodes)
+
+    print(f"Score = {total_cost}", file=sys.stderr)
+    sys.exit(0)
+
+if __name__ == "__main__":
+    main()

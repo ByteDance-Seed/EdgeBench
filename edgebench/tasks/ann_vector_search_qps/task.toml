@@ -1,0 +1,39 @@
+schema_version = 0
+id = "ann_vector_search_qps"
+name = "Ann Vector Search Qps"
+category = "Systems & Software Engineering"
+language = "Python"
+description = "Replace a brute-force NumPy nearest-neighbor baseline with a high-performance approximate nearest-neighbor implementation under a hard recall constraint. Scored by queries per second."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python310"
+platform = "linux/amd64"
+cwd = "/home/workspace/ann-benchmarks"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["ann_benchmarks/algorithms/custom/"]
+exclude = []
+
+[judge]
+cmd = "python3 /judge/grade.py"
+timeout_sec = 7800
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# eval_ann_search.py runs `run.py --local` (in-process, no CPU pinning) under its own 7200 s
+# timeout and scores single-query QPS, so the raw score depends on host CPU speed, core count and
+# load (FAISS/OpenMP use every visible core); see NOTES.md.
+
+[score]
+direction = "maximize"
+rescale = { kind = "log_max", baseline = 3108.0, expert = 21472.0 }
+
+[[blobs]]                  # data/sift-128-euclidean.hdf5 (SIFT-1M, 525128288 B unpacked), used by work and judge; see NOTES.md
+path = "environment/blobs/sift-128-euclidean.tar.gz"
+sha256 = "ac46e6cc0656de741b7bfef0ff6f33e0432419af1a74ac280573099cfbbd0c29"

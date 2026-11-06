@@ -1,0 +1,9 @@
+---
+source: cas-cli/src/ui/components/snapshot_tests.rs
+expression: tf.output()
+---
+--------------------------------------------------------------------------------
+[q] Quit
+[j/k] Navigate
+[Enter] Select
+[?] Help

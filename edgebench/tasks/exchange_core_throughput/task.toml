@@ -1,0 +1,37 @@
+schema_version = 0
+id = "exchange_core_throughput"
+name = "Exchange Core Throughput"
+category = "Systems & Software Engineering"
+language = "Java"
+description = "Maximize peak throughput of a Java financial matching engine built on the LMAX Disruptor by tuning thread topology, wait strategies, ring-buffer sizing, order-book implementation, and JVM configuration."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "java"              # bases/java (maven:3.9-eclipse-temurin-17 + git curl jq build-essential ant unzip python3)
+platform = "linux/amd64"
+cwd = "/home/workspace/exchange-core"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# /root/.m2/repository holds the pinned Maven repository (same files as v1's work image), so `mvn`
+# works offline.
+
+[submission]
+paths = ["src/main/", "pom.xml", ".mvn/"]
+exclude = ["src/test"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 2400
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# The benchmark pins busy-spinning Disruptor threads (4 ME + 2 RE by default) to cores; its score
+# is wall-clock throughput, so it depends on host CPU speed, core count and load. See NOTES.md.
+
+[score]
+direction = "maximize"
+# raw score = int(round(Average MT/s * 1000)), the first TOTAL_SCORE line (v1 parser score_sum).
+rescale = { kind = "log_max", baseline = 2090.634594076933, expert = 6000.0 }

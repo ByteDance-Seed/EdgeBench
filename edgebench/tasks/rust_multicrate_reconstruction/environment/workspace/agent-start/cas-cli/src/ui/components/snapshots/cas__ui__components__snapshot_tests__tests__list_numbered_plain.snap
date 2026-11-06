@@ -1,0 +1,7 @@
+---
+source: cas-cli/src/ui/components/snapshot_tests.rs
+expression: tf.output()
+---
+1. Alpha
+2. Beta
+3. Gamma

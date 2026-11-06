@@ -1,0 +1,72 @@
+{
+  "weights": {
+    "M1": 0.35,
+    "M2": 0.2,
+    "M3": 0.25,
+    "M4": 0.15,
+    "M5": 0.05
+  },
+  "scenarios_total": 100,
+  "scenarios_submitted": 100,
+  "scenarios_matched": 100,
+  "deliverables_completeness": {
+    "checked": true,
+    "deliverables_dir": "../reference_implementation/stage2_advanced",
+    "required": [
+      "train.py",
+      "infer.py",
+      "requirements.txt",
+      "README.md"
+    ],
+    "present": [
+      "train.py",
+      "infer.py",
+      "requirements.txt",
+      "README.md"
+    ],
+    "missing": [],
+    "complete": true
+  },
+  "M1_next_question_auc": {
+    "auc_macro": 0.6745207686512835,
+    "n_scenarios_total": 100,
+    "n_scenarios_submitted": 100,
+    "n_scenarios_fully_covered_20": 100,
+    "score": 43.63019216282088
+  },
+  "M2_knowledge_calibration": {
+    "ece_per_student_mean": 0.06837749526084039,
+    "spearman_per_student_mean": 0.23977732014907815,
+    "ece_component": 72.64900189566384,
+    "spearman_component": 23.977732014907815,
+    "n_scenarios_total": 100,
+    "score": 48.31336695528583
+  },
+  "M3_learning_gain": {
+    "agent_mean": 0.5278787107404112,
+    "random_mean": 0.5159249982959535,
+    "gain": 0.011953712444457643,
+    "gain_for_full_score": 0.05,
+    "n_scenarios_total": 100,
+    "score": 23.907424888915287
+  },
+  "M4_constraint_satisfaction": {
+    "per_scenario_mean": 0.9660000000000001,
+    "per_constraint_pass_rate": {
+      "C1": 1.0,
+      "C2": 1.0,
+      "C3": 0.92,
+      "C4": 0.91,
+      "C5": 1.0
+    },
+    "n_scenarios_total": 100,
+    "score": 96.60000000000001
+  },
+  "M5_inference_efficiency": {
+    "infer_time_seconds": 1.0,
+    "score": 100.0,
+    "deliverables_penalty": -0.0,
+    "deliverables_missing": []
+  },
+  "total_score": 50.4
+}

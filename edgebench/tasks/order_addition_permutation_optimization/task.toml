@@ -1,0 +1,34 @@
+schema_version = 0
+id = "order_addition_permutation_optimization"
+name = "Order Addition Permutation Optimization"
+category = "Combinatorial Optimization"
+language = "Python"
+description = "Find a permutation of 1,000 elements that minimizes a black-box cost function, using metaheuristic search (simulated annealing, genetic algorithms, local search) without access to the cost function's internals."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python"
+platform = "linux/amd64"
+cwd = "/home/workspace/complex_job_scheduling"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["."]
+exclude = ["tests/"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 600
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# The grader is deterministic and takes about 1 s.
+
+[score]
+direction = "maximize"
+# raw score = v1 TOTAL_SCORE (0..100, see NOTES.md, Deviation 3); v1 rescale kept: linear 0..100.
+rescale = { kind = "linear", lower = 0.0, upper = 100.0 }

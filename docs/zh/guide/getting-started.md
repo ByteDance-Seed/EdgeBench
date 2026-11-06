@@ -1,6 +1,6 @@
 # 快速开始
 
-本指南只覆盖一条最短路径：安装 SForge、拉取任务定义、拉取预构建任务镜像、启动 Judge Server、运行 Agent、查看结果。默认使用 **Docker backend**。
+本指南用默认的 **Docker backend** 完整跑一道 EdgeBench 任务：安装 SForge、获取任务镜像、运行 Agent、查看结果。
 
 ::: tip 规模
 Docker backend 只适合小批量任务。在单机上并发运行大量任务（约 20 个以上）即使是高性能服务器也会被耗尽——完整套件请使用 [Kubernetes backend](/zh/configuration/container-backends)，并采用[官方 leaderboard 配置](/zh/examples/all-tasks-k8s)。
@@ -12,85 +12,57 @@ Docker backend 只适合小批量任务。在单机上并发运行大量任务�
 
 ## 前置依赖
 
-- **Linux**：SForge 目前面向 Linux 宿主机。
+- **Linux**（x86_64）：SForge 目前面向 Linux 宿主机。
 
   ::: warning
-  默认 Docker backend 需要直接访问宿主机 Docker；在容器内运行会遇到 Docker-in-Docker 问题。
+  Docker backend 需要直接访问宿主机 Docker；把 SForge 本身放在容器里运行会遇到 Docker-in-Docker 问题。
   :::
 
-- **Docker Engine**：用于拉取任务镜像，并运行 Work/Judge 容器；Docker daemon 必须处于运行状态，可用以下命令验证：
+- **Docker Engine**，且 daemon 处于运行状态。验证：
 
   ```bash
   docker run hello-world
   ```
 
-- **Python >= 3.10**。
+- **Python 3.11–3.13**。
 
 ## 安装 SForge
 
-安装发布包：
-
-```bash
-pip install sforge
-```
-
-如需使用 [E2B 后端](/zh/configuration/container-backends#e2b-后端)，请带上 `e2b` extra：`pip install "sforge[e2b]"`。
-
-也可以从源码安装：
+任务就在仓库里，因此从源码安装：
 
 ```bash
 git clone https://github.com/ByteDance-Seed/EdgeBench.git
-cd SForge
-pip install -e .
+cd EdgeBench
+pip install -e .            # 使用 E2B backend 时加上 e2b extra：pip install -e ".[e2b]"
 ```
 
-确认 CLI 可用：
-
-```bash
-sforge --help
-```
-
-## 运行 Ad Placement Optimization
-
-[Ad Placement Optimization](https://huggingface.co/datasets/ByteDance-Seed/EdgeBench/blob/main/ad_placement_optimization.json) 是 EdgeBench 里的一个 C++ 优化任务，这里用它演示完整流程。
-
-### 1. 拉取任务定义
-
-```bash
-sforge fetch-tasks edgebench
-```
-
-该命令会把默认 `edgebench` 的任务定义下载到 `./tasks`。你可以用下面命令确认任务可见：
+以下命令都在仓库根目录执行：SForge 从 `edgebench/` 读取 EdgeBench（换别的 benchmark 用 `-b <目录>` 或 `SFORGE_BENCHMARK`）。列出它的任务：
 
 ```bash
 sforge list
 ```
 
-### 2. 拉取镜像
+## 运行 Ad Placement Optimization
+
+[Ad Placement Optimization](https://github.com/ByteDance-Seed/EdgeBench/tree/main/edgebench/tasks/ad_placement_optimization) 是一道 C++ 优化题，这里用作一个小的端到端示例。
+
+### 1. 获取镜像
+
+拉取预构建的 work 和 judge 镜像：
 
 ```bash
-sforge pull --task ad_placement_optimization --registry seededge
+sforge pull --task ad_placement_optimization
 ```
 
-这会拉取该任务的 base、work、judge 预构建镜像。镜像名由 benchmark 名、镜像角色、任务/基础镜像 key 和内容哈希组成，例如：
-
-- `<benchmark>.base.cpp:<hash>`
-- `<benchmark>.work.ad_placement_optimization:<hash>`
-- `<benchmark>.judge.ad_placement_optimization:<hash>`
-
-### 3. 启动 Judge Server
-
-打开第二个终端：
+镜像 tag 是任务目录内容的哈希，例如 `edgebench.work.ad_placement_optimization:7b2f533ff7d4`，所以拉到的镜像一定和你的代码一致。如果你改过这道题，或者不想下载，也可以本地构建：
 
 ```bash
-sforge serve
+sforge build --task ad_placement_optimization
 ```
 
-Judge Server 默认监听 `0.0.0.0:8080`。
+镜像的来源见[预构建镜像](/zh/features/prebuilt-images)。
 
-### 4. 运行 Agent
-
-回到第一个终端：
+### 2. 运行 Agent
 
 ```bash
 SFORGE_AGENT_API_KEY="sk-ant-xxxx" \
@@ -100,28 +72,32 @@ sforge run --task ad_placement_optimization --agent claude-code \
   --run-id ad-placement-001
 ```
 
-Agent 会在 Work 容器中工作，向 Judge Server 提交代码，接收测试反馈，并持续迭代直到超时或完成。
+`sforge run` 会在同一进程里启动自己的 judge server。Agent 在 work 容器里工作，用 `sforge-submit` 提交代码，拿到分数和反馈后继续改进，直到超时。它的模型请求经由 judge server 转发，真实 API key 只在 judge server 上，不会进入容器。
 
 ## 查看结果
 
-启动 Web UI 可以实时查看运行结果：
+启动结果查看页面：
 
 ```bash
-sforge visualizer
+sforge viewer
 ```
 
-然后打开 `http://127.0.0.1:8000/`。
+然后打开 `http://127.0.0.1:8000/`，可以看到分数曲线、每次提交和 token 用量。要在 Agent 自己的界面里查看对话记录：
 
-如果更习惯手动查看文件，运行产物也会保存在 `logs/runs/<run-id>/<task-id>/`：
+```bash
+sforge replay --run-id ad-placement-001 --task ad_placement_optimization
+```
+
+运行输出都在 `logs/runs/<run-id>/<task-id>/` 下：
 
 ```bash
 tail -f logs/runs/ad-placement-001/ad_placement_optimization/agent_output.txt
 cat logs/runs/ad-placement-001/ad_placement_optimization/final_result.json
 ```
 
-## 接下来
+## 下一步
 
-- 需要切换 Agent 或模型：看[支持的 Agent](./agents)。
-- 需要配置 API key、镜像源、代理或资源限制：看[环境变量](/zh/configuration/environment-variables)和[网络配置](/zh/configuration/network-setup)。
-- 需要完整命令和 flag：看 [CLI 命令参考](/zh/reference/cli)。
-- 需要开发新的 benchmark 或任务：看[开发者文档](/zh/tasks/integration-guide)。
+- 换 Agent 或模型：[支持的 Agent](./agents)。
+- API key、代理、资源限制：[环境变量](/zh/configuration/environment-variables)和[网络配置](/zh/configuration/network-setup)。
+- 全部命令和参数：[CLI 命令](/zh/reference/cli)。
+- 修题或加题：[任务格式](/zh/tasks/task-format)。

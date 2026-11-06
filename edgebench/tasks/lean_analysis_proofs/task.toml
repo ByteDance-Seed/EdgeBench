@@ -1,0 +1,31 @@
+schema_version = 0
+id = "lean_analysis_proofs"
+name = "Lean Analysis Proofs"
+category = "Formal Math & Theorem Proving"
+language = "Lean 4"
+description = "Complete proof obligations across a multi-file Lean 4 project formalizing results in real and functional analysis. Proofs are checked transitively: a theorem counts only if its entire dependency chain is fully proved."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "lean-4.28.0-mathlib-8f9d9cf"
+platform = "linux/amd64"
+cwd = "/home/workspace/"
+internet = false
+cpus = 8
+memory = "16g"
+
+[submission]
+paths = ["se-bmk-intern/analysis"]
+exclude = ["se-bmk-intern/analysis/.lake"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 2400
+cpus = 8
+memory = "16g"
+
+[score]
+direction = "maximize"
+# raw score = repaired / 2901 baseline sorry declarations (v1 eval_lean `score`)
+rescale = { kind = "linear", lower = 0.0, upper = 1.0 }

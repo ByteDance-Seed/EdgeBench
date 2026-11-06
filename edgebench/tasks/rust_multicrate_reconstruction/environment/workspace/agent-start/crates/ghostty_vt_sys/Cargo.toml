@@ -1,0 +1,12 @@
+[package]
+name = "ghostty_vt_sys"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+description = "Low-level bindings to libghostty-vt terminal emulation"
+
+[lib]
+name = "ghostty_vt_sys"
+
+[build-dependencies]

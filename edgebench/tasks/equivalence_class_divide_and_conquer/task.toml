@@ -1,0 +1,41 @@
+schema_version = 0
+id = "equivalence_class_divide_and_conquer"
+name = "Equivalence Class Divide And Conquer"
+category = "Combinatorial Optimization"
+language = "C++"
+description = "Solve six progressive competitive-programming problems centered on equivalence classes and divide-and-conquer, where techniques from earlier problems inform solutions to harder ones."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "cpp"               # bases/cpp; python3 (v1 work setup) added by the task
+platform = "linux/amd64"
+cwd = "/home/workspace/p2"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["T1.cpp", "T2.cpp", "T3.cpp", "T4.cpp", "T5.cpp", "T6.cpp"]
+exclude = []
+
+[judge]
+cmd = "python3 /judge/grade.py"
+timeout_sec = 900
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# eval.py runs every case sequentially with the statement's wall-clock time limit (x1, no grace)
+# and an RSS-polled memory limit (+16 MB); scores of solutions near the limit depend on host
+# speed, see NOTES.md.
+
+[[blobs]]                  # hidden tests: /opt/p2_judge/prob/P2/T*_*/data (241 files, 1.1 GB unpacked)
+path = "judge/blobs/p2_tests.tar.gz"
+sha256 = "b6111d1dcfc70b03b2209dfa6422a352a518f5597bef796591ec0838c2a98d3b"
+
+[score]
+direction = "maximize"
+# raw score = eval.py TOTAL_SCORE (sum over problems of weight x fraction, already 0..100);
+# v1 rescale was linear 0..100, so score_0_100 == raw score.
+rescale = { kind = "linear", lower = 0.0, upper = 100.0 }

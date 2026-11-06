@@ -1,0 +1,5 @@
+# box2d-py 2.3.5 (gymnasium[box2d]) exists only as an sdist. v1 built it in the image with the
+# base's setuptools 79.0.1 (WHEEL "Generator: setuptools (79.0.1)") and gcc 14.2.0-19, using the
+# swig 4.2.1.post0 wheel from requirements.lock. Installed with --no-build-isolation so the same
+# setuptools is used and nothing unpinned is fetched.
+box2d-py==2.3.5 --hash=sha256:b37dc38844bcd7def48a97111d2b082e4f81cca3cece7460feb3eacda0da2207

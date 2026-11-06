@@ -1,0 +1,31 @@
+schema_version = 0
+id = "combinatorial_games_formalization"
+name = "Combinatorial Games Formalization"
+category = "Formal Math & Theorem Proving"
+language = "Lean 4"
+description = "Resolve proof obligations in a Lean 4 formalization of combinatorial game theory, covering surreal numbers, game arithmetic, and the Sprague-Grundy theorem."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "lean-4.28.0-mathlib-8f9d9cf"
+platform = "linux/amd64"
+cwd = "/home/workspace/"
+internet = false
+cpus = 8
+memory = "16g"
+
+[submission]
+paths = ["se-bmk-intern/combinatorial-games"]
+exclude = ["se-bmk-intern/combinatorial-games/.lake"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 2400
+cpus = 8
+memory = "16g"
+
+[score]
+direction = "maximize"
+# raw score = repaired / 3732 baseline sorry declarations (v1 eval_lean `score`)
+rescale = { kind = "linear", lower = 0.0, upper = 1.0 }

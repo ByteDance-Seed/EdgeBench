@@ -6,7 +6,7 @@ title: 实验配置
 
 ## 概述
 
-实验配置文件采用 YAML 格式，用于在多任务运行中共享模型设置并支持逐任务覆盖。这将「如何运行」（模型、超时、Agent 设置）与「测试什么」（任务 JSON 定义）解耦。
+实验配置文件采用 YAML 格式，用于在多任务运行中共享模型设置并支持逐任务覆盖。这将「如何运行」（模型、超时、Agent 设置）与「测试什么」（任务目录）解耦。
 
 ::: tip 官方 leaderboard 配置
 [all-tasks-k8s 示例](/zh/examples/all-tasks-k8s)中的 experiment YAML 就是 EdgeBench leaderboard 官方数字所使用的配置。
@@ -27,16 +27,22 @@ defaults:
   timeout: 7200
   eval_interval: 300
 
+env:
+  SFORGE_K8S_NAMESPACE: "sforge-runs"
+
 tasks:
   ad_placement_optimization:
     eval_interval: 1800
-  tinykv:
-    extra_env:
-      GOPROXY: "https://goproxy.cn"
-  gitlet: {}
+  smt_solver:
+    work_cpu_limit: 16
+  graph_node_classification: {}
 ```
 
 ## 字段说明
+
+### `env`
+
+在读取文件其余部分之前设置到 `sforge run` 进程中的环境变量，效果等同于 export（例如 `SFORGE_K8S_IMAGE_REGISTRY` 或 `SFORGE_JUDGE_EXTRA_ENV`）。值按字面使用；`${VAR}` 展开只在 `model` 段生效。
 
 ### `model`
 
@@ -54,7 +60,7 @@ tasks:
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `agent` | `string` | --- | Agent 名称（`claude-code`、`codex`、`opencode`，或 `claude-code-2.1.214` 等固定版本变体） |
+| `agent` | `string` | --- | Agent 名称（`claude-code`、`codex`、`opencode`），可带 `@<版本>`（如 `claude-code@2.1.258`） |
 | `model` | `string` | --- | 模型覆盖（在逐任务设置中可覆盖 `model.model`） |
 | `effort` | `string` | --- | 推理强度（`low`、`medium`、`high` 或 `max`），在所选 Agent 支持时映射到其原生配置 |
 | `timeout` | `int` | --- | Agent 超时时间（秒） |
@@ -62,10 +68,10 @@ tasks:
 | `disable_stop_hook` | `bool` | `false` | 禁用 Agent Stop Hook |
 | `disable_auto_eval` | `bool` | `false` | 禁用后台自动评测 |
 | `disable_auto_resume` | `bool` | `false` | 禁用 Agent 异常退出时的自动恢复 |
-| `internet` | `bool` | --- | 启用/禁用网络访问 |
+| `internet` | `bool` | --- | 覆盖任务对 work 容器的 `internet` 设置 |
 | `extra_env` | `dict` | --- | 注入 Agent 容器的额外环境变量 |
 | `backend` | `string` | --- | 容器后端（`docker`、`k8s` 或 `e2b`） |
-| `judge_url` | `string` | --- | Judge 服务器 URL 覆盖 |
+| `judge_url` | `string` | --- | 外部 judge server 的 URL（默认由 `sforge run` 自己提供 judge） |
 | `max_submissions` | `int` | --- | 每次运行中 Agent 最大提交次数 |
 | `submission_cooldown` | `int` | --- | Agent 两次提交之间的最小间隔（秒） |
 | `work_cpu_limit` | `int` | --- | Work 容器的 CPU 限制 |
@@ -75,7 +81,7 @@ tasks:
 
 ### `tasks`
 
-逐任务覆盖。每个 key 是任务 ID，必须对应 tasks 目录下的 JSON 文件。value 支持与 `defaults` 相同的字段。此处列出的任务决定了运行范围 --- 如果 CLI 中没有指定 `--task`，则使用实验配置中的任务列表。
+逐任务覆盖。每个 key 是任务 ID，即 benchmark 的 `tasks/` 下的目录名。value 支持与 `defaults` 相同的字段。此处列出的任务决定了运行范围 --- 如果 CLI 中没有指定 `--task`，则使用实验配置中的任务列表。
 
 空对象（`{}`）表示「使用所有默认设置，无覆盖」。
 
@@ -94,13 +100,13 @@ stagger: 300  # 在 5 分钟内均匀间隔启动任务
 配置值按以下顺序解析（优先级从高到低）：
 
 ```
-CLI 参数  >  逐任务覆盖  >  实验默认值  >  环境变量 / 任务 JSON
+CLI 参数  >  逐任务覆盖  >  实验默认值  >  task.toml / 环境变量 / 内置默认值
 ```
 
 举例来说：
 - CLI 中的 `--timeout 3600` 总是优先
 - 逐任务的 `timeout: 1800` 覆盖实验级的 `defaults.timeout`
-- 实验的 `defaults.timeout` 覆盖 `SFORGE_AGENT_TIMEOUT` 环境变量
+- 实验中的 `work_cpu_limit` 覆盖任务 `task.toml` 中的 `cpus`
 
 对于 `extra_env`，字典是**合并**（而非替换）的。逐任务的 key 在冲突时覆盖默认值：
 
@@ -131,7 +137,7 @@ sforge run --experiment experiments/my_config.yaml --run-id batch-001
 ### 运行部分任务
 
 ```bash
-sforge run --experiment experiments/my_config.yaml --task ad_placement_optimization tinykv
+sforge run --experiment experiments/my_config.yaml --task ad_placement_optimization smt_solver
 ```
 
 使用实验配置中的模型和默认设置，但只运行指定的任务。
@@ -162,11 +168,4 @@ model:
 
 ## 运行产物
 
-使用实验配置运行时，SForge 会保存以下文件：
-
-- `logs/runs/<run-id>/experiment.yaml` --- 实验配置文件的副本
-- `logs/runs/<run-id>/run_config.json` --- 所有任务的完整解析后配置
-- `logs/runs/<run-id>/<task-id>/run_config.json` --- 逐任务解析后配置（API 密钥已脱敏）
-- `logs/runs/<run-id>/summary.json` --- 最终结果汇总（多任务运行时）
-
-这确保每次运行都可以从日志目录完整复现。
+使用实验配置运行时，还会保存配置文件的副本和完整解析后的配置，见[运行输出](/zh/reference/cli#运行输出)。

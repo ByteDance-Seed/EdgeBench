@@ -1,0 +1,35 @@
+schema_version = 0
+id = "wesnoth_tactical_ai"
+name = "Wesnoth Tactical Ai"
+category = "Interactive Games & Simulators"
+language = "Python"
+description = "Write tactical AI logic for Battle for Wesnoth that defeats the built-in AI through custom recruitment, focus-fire targeting, terrain exploitation, and village-capture timing across multiple maps."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python310"
+platform = "linux/amd64"
+cwd = "/home/wesnoth_agent"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["."]
+exclude = [".git"]
+
+[judge]
+cmd = "python3 /judge/grade.py"
+timeout_sec = 900
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# eval_wesnoth.py plays 60 games (3 maps x 10 seeds x 2 repeats) one after another, each `wesnoth
+# --nogui` under a 180 s wall-clock timeout and at most 50 turns. Games use --rng-seed, so results
+# are deterministic up to per-game timeouts (see NOTES.md).
+
+[score]
+direction = "maximize"
+rescale = { kind = "linear", lower = 0.0, upper = 100.0 }

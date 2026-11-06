@@ -1,0 +1,102 @@
+{
+  "FLT_small": {
+    "weight": 1.0,
+    "type": "∀ {n : ℕ}, n ∈ Finset.Icc 3 7 → FermatLastTheoremFor n"
+  },
+  "FltRegular.CaseI.may_assume": {
+    "weight": 1.0,
+    "type": "FltRegular.CaseI.SlightlyEasier → FltRegular.CaseI.Statement"
+  },
+  "FltRegular.MayAssume.coprime": {
+    "weight": 1.0,
+    "type": "∀ {a b c : ℤ} {n : ℕ},   a ^ n + b ^ n = c ^ n →     a * b * c ≠ 0 →       (a / {a, b, c}.gcd id) ^ n + (b / {a, b, c}.gcd id) ^ n = (c / {a, b, c}.gcd id) ^ n ∧         {a / {a, b, c}.gcd id, b / {a, b, c}.gcd id, c / {a, b, c}.gcd id}.gcd id = 1 ∧           a / {a, b, c}.gcd id * (b / {a, b, c}.gcd id) * (c / {a, b, c}.gcd id) ≠ 0"
+  },
+  "FltRegular.a_not_cong_b": {
+    "weight": 1.0,
+    "type": "∀ {p : ℕ} {a b c : ℤ},   Nat.Prime p →     5 ≤ p →       a * b * c ≠ 0 →         a ^ p + b ^ p = c ^ p →           {a, b, c}.gcd id = 1 →             ¬↑p ∣ a * b * c →               ∃ x y z, x ^ p + y ^ p = z ^ p ∧ {x, y, z}.gcd id = 1 ∧ ¬x ≡ y [ZMOD ↑p] ∧ x * y * z ≠ 0 ∧ ¬↑p ∣ x * y * z"
+  },
+  "FltRegular.ab_coprime": {
+    "weight": 1.0,
+    "type": "∀ {p : ℕ} {a b c : ℤ}, a ^ p + b ^ p = c ^ p → p ≠ 0 → {a, b, c}.gcd id = 1 → IsCoprime a b"
+  },
+  "FltRegular.caseI": {
+    "weight": 6.0,
+    "type": "∀ {a b c : ℤ} {p : ℕ} [inst : Fact (Nat.Prime p)], IsRegularPrime p → ¬↑p ∣ a * b * c → a ^ p + b ^ p ≠ c ^ p"
+  },
+  "FltRegular.caseII": {
+    "weight": 6.0,
+    "type": "∀ {a b c : ℤ} {p : ℕ} [hpri : Fact (Nat.Prime p)],   IsRegularPrime p → p ≠ 2 → a * b * c ≠ 0 → {a, b, c}.gcd id = 1 → ↑p ∣ a * b * c → a ^ p + b ^ p ≠ c ^ p"
+  },
+  "FltRegular.caseI_easier": {
+    "weight": 5.0,
+    "type": "∀ {p : ℕ} [hpri : Fact (Nat.Prime p)] {a b c : ℤ},   IsRegularPrime p → 5 ≤ p → {a, b, c}.gcd id = 1 → ¬a ≡ b [ZMOD ↑p] → ¬↑p ∣ a * b * c → a ^ p + b ^ p ≠ c ^ p"
+  },
+  "FltRegular.ex_fin_div": {
+    "weight": 6.0,
+    "type": "∀ {p : ℕ} [hpri : Fact (Nat.Prime p)] {a b c : ℤ} {ζ : NumberField.RingOfIntegers (CyclotomicField p ℚ)},   5 ≤ p →     IsRegularPrime p →       IsPrimitiveRoot ζ p →         {a, b, c}.gcd id = 1 →           ¬↑p ∣ a * b * c →             a ^ p + b ^ p = c ^ p → ∃ k₁ k₂, ↑↑k₂ ≡ ↑↑k₁ - 1 [ZMOD ↑p] ∧ ↑p ∣ ↑a + ↑b * ζ - ↑a * ζ ^ ↑k₁ - ↑b * ζ ^ ↑k₂"
+  },
+  "FltRegular.is_principal": {
+    "weight": 6.0,
+    "type": "∀ {p : ℕ} [hpri : Fact (Nat.Prime p)] {a b c : ℤ} {ζ : NumberField.RingOfIntegers (CyclotomicField p ℚ)},   IsRegularPrime p →     5 ≤ p →       {a, b, c}.gcd id = 1 →         ¬↑p ∣ a * b * c → a ^ p + b ^ p = c ^ p → IsPrimitiveRoot ζ p → ∃ u α, ↑u * α ^ p = ↑a + ζ * ↑b"
+  },
+  "FltRegular.not_exists_Int_solution": {
+    "weight": 6.0,
+    "type": "∀ {p : ℕ} [hpri : Fact (Nat.Prime p)],   IsRegularPrime p → p ≠ 2 → ¬∃ x y z, ¬↑p ∣ y ∧ ↑p ∣ z ∧ z ≠ 0 ∧ x ^ p + y ^ p = z ^ p"
+  },
+  "FltRegular.p_dvd_c_of_ab_of_anegc": {
+    "weight": 1.0,
+    "type": "∀ {p : ℕ} {a b c : ℤ}, Nat.Prime p → p ≠ 3 → a ^ p + b ^ p = c ^ p → a ≡ b [ZMOD ↑p] → b ≡ -c [ZMOD ↑p] → ↑p ∣ c"
+  },
+  "Hilbert92": {
+    "weight": 6.0,
+    "type": "∀ {K : Type u_1} [inst : Field K] {k : Type u_2} [inst_1 : Field k] [inst_2 : Algebra k K] [IsGalois k K]   [NumberField k] [NumberField K],   Nat.Prime (Module.finrank k K) →     Module.finrank k K ≠ 2 →       ∀ (σ : Gal(K/k)),         (∀ (x : Gal(K/k)), x ∈ Subgroup.zpowers σ) →           ∃ η,             (Algebra.norm k) ((algebraMap (NumberField.RingOfIntegers K) K) ↑η) = 1 ∧               ∀ (ε : (NumberField.RingOfIntegers K)ˣ),                 (algebraMap (NumberField.RingOfIntegers K) K) ↑η ≠                   (algebraMap (NumberField.RingOfIntegers K) K) ↑ε /                     σ ((algebraMap (NumberField.RingOfIntegers K) K) ↑ε)"
+  },
+  "IsCyclotomicExtension.Rat.pid6": {
+    "weight": 2.0,
+    "type": "∀ (n : ℕ) [NeZero n] {K : Type u_1} [inst : Field K] [inst_1 : NumberField K] [IsCyclotomicExtension {n} ℚ K]   [hn : Fact (Nat.Prime n)],   (∀       p ∈         Finset.Icc 1           ⌊(4 / Real.pi) ^ NumberField.InfinitePlace.nrComplexPlaces K *               (↑(Module.finrank ℚ K).factorial / ↑(Module.finrank ℚ K) ^ Module.finrank ℚ K *                 √|↑(NumberField.discr K)|)⌋₊,       ∀ (hp : Nat.Prime p) (hpn : p ≠ n),         Nat.log p               ⌊(4 / Real.pi) ^ NumberField.InfinitePlace.nrComplexPlaces K *                   (↑(Module.finrank ℚ K).factorial / ↑(Module.finrank ℚ K) ^ Module.finrank ℚ K *                     √|↑(NumberField.discr K)|)⌋₊ <             orderOf (ZMod.unitOfCoprime p ⋯) ∨           ∃ P Q A G Qp Rp QP RP C1 C2,             P.Monic ∧               orderOf (ZMod.unitOfCoprime p ⋯) = P.natDegree ∧                 P * Q + ↑p * A = Polynomial.cyclotomic n ℤ ∧                   ↑p = G * Qp + Rp * Polynomial.cyclotomic n ℤ ∧                     P = G * QP + RP * Polynomial.cyclotomic n ℤ ∧ G = C1 * P + C2 * ↑p) →     IsPrincipalIdealRing (NumberField.RingOfIntegers K)"
+  },
+  "M7": {
+    "weight": 3.0,
+    "type": "∀ {K : Type u_1} [inst : Field K] [inst_1 : NumberField K] [IsCyclotomicExtension {7} ℚ K],   ⌊(4 / Real.pi) ^ NumberField.InfinitePlace.nrComplexPlaces K *         (↑(Module.finrank ℚ K).factorial / ↑(Module.finrank ℚ K) ^ Module.finrank ℚ K * √|↑(NumberField.discr K)|)⌋₊ =     4"
+  },
+  "Rat.seven_pid": {
+    "weight": 3.0,
+    "type": "∀ (K : Type u_1) [inst : Field K] [inst_1 : NumberField K] [IsCyclotomicExtension {7} ℚ K],   IsPrincipalIdealRing (NumberField.RingOfIntegers K)"
+  },
+  "dvd_card_classGroup_of_isUnramified_isCyclic": {
+    "weight": 5.0,
+    "type": "∀ {K L : Type} [inst : Field K] [inst_1 : Field L] [inst_2 : NumberField K] [NumberField L] [inst_4 : Algebra K L]   [FiniteDimensional K L] [IsGalois K L] [IsUnramified (NumberField.RingOfIntegers K) (NumberField.RingOfIntegers L)]   [IsCyclic Gal(L/K)],   Nat.Prime (Module.finrank K L) →     Module.finrank K L ≠ 2 → Module.finrank K L ∣ Fintype.card (ClassGroup (NumberField.RingOfIntegers K))"
+  },
+  "eq_pow_prime_of_unit_of_congruent": {
+    "weight": 5.0,
+    "type": "∀ {K : Type} {p : ℕ} [hpri : Fact (Nat.Prime p)] [inst : Field K] [inst_1 : NumberField K]   [IsCyclotomicExtension {p} ℚ K],   p ≠ 2 →     ∀ [inst_3 : Fintype (ClassGroup (NumberField.RingOfIntegers K))],       p.Coprime (Fintype.card (ClassGroup (NumberField.RingOfIntegers K))) →         ∀ (u : (NumberField.RingOfIntegers K)ˣ), (∃ n, ↑p ∣ ↑u - ↑n) → ∃ v, u = v ^ p"
+  },
+  "exists_not_dvd_spanSingleton_eq_a_div_a_zero": {
+    "weight": 6.0,
+    "type": "∀ {K : Type} {p : ℕ} [inst : NeZero p] [inst_1 : Field K] (hp : p ≠ 2) {ζ : K} (hζ : IsPrimitiveRoot ζ p)   {x y z : NumberField.RingOfIntegers K} {ε : (NumberField.RingOfIntegers K)ˣ} {m : ℕ}   (e : x ^ p + y ^ p = ↑ε * ((↑hζ.unit' - 1) ^ (m + 1) * z) ^ p) (hy : ¬↑hζ.unit' - 1 ∣ y),   ¬↑hζ.unit' - 1 ∣ z →     ∀ (η : ↥(Polynomial.nthRootsFinset p 1)) [inst_2 : NumberField K] [hpri : Fact (Nat.Prime p)]       [inst_3 : IsCyclotomicExtension {p} ℚ K] [inst_4 : Fintype (ClassGroup (NumberField.RingOfIntegers K))],       p.Coprime (Fintype.card (ClassGroup (NumberField.RingOfIntegers K))) →         η ≠ zeta_sub_one_dvd_root hp hζ e hy →           ∃ a b,             ¬↑hζ.unit' - 1 ∣ a ∧               ¬↑hζ.unit' - 1 ∣ b ∧                 FractionalIdeal.spanSingleton (nonZeroDivisors (NumberField.RingOfIntegers K)) (↑a / ↑b) =                   ↑(root_div_zeta_sub_one_dvd_gcd hp hζ e hy η) / ↑(a_eta_zero_dvd_p_pow hp hζ e hy)"
+  },
+  "exists_not_isPrincipal_and_isPrincipal_map": {
+    "weight": 5.0,
+    "type": "∀ (K L : Type) [inst : Field K] [inst_1 : Field L] [NumberField K] [NumberField L] [inst_4 : Algebra K L]   [FiniteDimensional K L] [IsGalois K L] [IsUnramified (NumberField.RingOfIntegers K) (NumberField.RingOfIntegers L)]   [h : IsCyclic Gal(L/K)],   Nat.Prime (Module.finrank K L) →     Module.finrank K L ≠ 2 →       ∃ I,         ¬Submodule.IsPrincipal I ∧           Submodule.IsPrincipal (Ideal.map (algebraMap (NumberField.RingOfIntegers K) (NumberField.RingOfIntegers L)) I)"
+  },
+  "exists_solution": {
+    "weight": 5.0,
+    "type": "∀ {K : Type} {p : ℕ} [inst : NeZero p] [inst_1 : Field K],   p ≠ 2 →     ∀ {ζ : K} (hζ : IsPrimitiveRoot ζ p) {x y z : NumberField.RingOfIntegers K} {ε : (NumberField.RingOfIntegers K)ˣ}       {m : ℕ},       x ^ p + y ^ p = ↑ε * ((↑hζ.unit' - 1) ^ (m + 1) * z) ^ p →         ¬↑hζ.unit' - 1 ∣ y →           ¬↑hζ.unit' - 1 ∣ z →             ∀ [inst_2 : NumberField K] [hpri : Fact (Nat.Prime p)] [IsCyclotomicExtension {p} ℚ K]               [inst_4 : Fintype (ClassGroup (NumberField.RingOfIntegers K))],               p.Coprime (Fintype.card (ClassGroup (NumberField.RingOfIntegers K))) →                 ∃ x' y' z' ε₁ ε₂ ε₃,                   ¬↑hζ.unit' - 1 ∣ x' ∧                     ¬↑hζ.unit' - 1 ∣ y' ∧                       ¬↑hζ.unit' - 1 ∣ z' ∧ ↑ε₁ * x' ^ p + ↑ε₂ * y' ^ p = ↑ε₃ * ((↑hζ.unit' - 1) ^ m * z') ^ p"
+  },
+  "fermatLastTheoremFive": {
+    "weight": 1.0,
+    "type": "FermatLastTheoremFor 5"
+  },
+  "fermatLastTheoremSeven": {
+    "weight": 2.0,
+    "type": "FermatLastTheoremFor 7"
+  },
+  "flt_regular": {
+    "weight": 1.0,
+    "type": "∀ {p : ℕ} [inst : Fact (Nat.Prime p)], IsRegularPrime p → p ≠ 2 → FermatLastTheoremFor p"
+  },
+  "isRegularPrime_seven": {
+    "weight": 2.0,
+    "type": "IsRegularPrime 7"
+  }
+}

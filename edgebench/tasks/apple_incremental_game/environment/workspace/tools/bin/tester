@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+"""Scoring program for Apple Incremental Game (AHC058).
+Usage: ./tester <input_file> <output_file>
+Outputs "Score = <int>" to stderr on success, or "wrong answer: <reason>" on failure.
+Exit code: 0 on success, 1 on failure.
+"""
+import sys
+import math
+
+def main():
+    if len(sys.argv) < 3:
+        print("Usage: ./tester <input_file> <output_file>", file=sys.stderr)
+        sys.exit(1)
+
+    input_file = sys.argv[1]
+    output_file = sys.argv[2]
+
+    # Read input
+    with open(input_file, 'r') as f:
+        lines = f.read().strip().split('\n')
+
+    N, L, T, K = map(int, lines[0].split())
+    A = list(map(int, lines[1].split()))
+    C = []
+    for i in range(L):
+        C.append(list(map(int, lines[2 + i].split())))
+
+    # Read output
+    try:
+        with open(output_file, 'r') as f:
+            out_lines = f.read().strip().split('\n')
+    except Exception as e:
+        print(f"wrong answer: cannot read output file: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # Filter out comments and blank lines
+    actions = []
+    for line in out_lines:
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        actions.append(line)
+
+    if len(actions) < T:
+        print(f"wrong answer: expected {T} actions, got {len(actions)}", file=sys.stderr)
+        sys.exit(1)
+
+    # Simulate the game
+    B = [[1] * N for _ in range(L)]  # Machine counts
+    P = [[0] * N for _ in range(L)]  # Machine powers
+    apples = K
+
+    for t in range(T):
+        action = actions[t].strip()
+
+        if action == '-1':
+            pass  # Do nothing
+        else:
+            parts = action.split()
+            if len(parts) != 2:
+                print(f"wrong answer: invalid action format at turn {t}: {action}", file=sys.stderr)
+                sys.exit(1)
+
+            try:
+                i, j = int(parts[0]), int(parts[1])
+            except ValueError:
+                print(f"wrong answer: invalid action at turn {t}: {action}", file=sys.stderr)
+                sys.exit(1)
+
+            if not (0 <= i < L and 0 <= j < N):
+                print(f"wrong answer: invalid machine at turn {t}: ({i}, {j})", file=sys.stderr)
+                sys.exit(1)
+
+            cost = C[i][j] * (P[i][j] + 1)
+            if apples < cost:
+                print(f"wrong answer: not enough apples at turn {t}: have {apples}, need {cost}", file=sys.stderr)
+                sys.exit(1)
+
+            apples -= cost
+            P[i][j] += 1
+
+        # Production phase - Level 0
+        for j in range(N):
+            apples += A[j] * B[0][j] * P[0][j]
+
+        # Production phase - Level 1+
+        for i in range(1, L):
+            for j in range(N):
+                B[i-1][j] += B[i][j] * P[i][j]
+
+    # Calculate score: round(10^5 * log2(S))
+    if apples <= 0:
+        score = 0
+    else:
+        score = round(1e5 * math.log2(apples))
+
+    print(f"Score = {score}", file=sys.stderr)
+    sys.exit(0)
+
+if __name__ == "__main__":
+    main()

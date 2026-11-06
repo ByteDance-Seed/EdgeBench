@@ -1,0 +1,17 @@
+---
+source: cas-cli/src/ui/components/snapshot_tests.rs
+expression: tf.output()
+---
+--- CAS Doctor ---
+
+Store
+Database: /home/user/.cas/store.db
+Size: 2.4 MB
+[OK] Store connected
+
+Search Index
+Entries: 142
+[OK] Index healthy
+
+--------------------------------------------------------------------------------
+[INFO] All systems operational

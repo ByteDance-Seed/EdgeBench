@@ -1,0 +1,237 @@
+\chapter{Improving the exponents}
+
+The arguments here are due to Jyun-Jie Liao.
+
+\begin{definition}[New definition of $\eta$]\label{eta-def-new}\leanok  $\eta$ is a real parameter with $\eta > 0$.
+\end{definition}
+
+Previously in \Cref{eta-def} we had set $\eta=1/9$.  To implement
+this chapter, one should refactor the previous arguments so that $\eta$ is
+now free to be a positive number, though the specific hypothesis $\eta=1/9$
+would now need to be added to \Cref{de-prop}.
+
+Let $X^0_1, X^0_2$ be $G$-valued random variables, and let $X_1, X_2$ be $\tau$-minimizers as defined in \Cref{tau-min-def}.
+
+For the next two lemmas, let $(T_1,T_2,T_3)$ be a $G^3$-valued random variable such that $T_1+T_2+T_3=0$ holds identically. Let $\delta$ be the quantity in \eqref{delta-t1t2t3-def}.
+
+We have the following variant of \Cref{construct-good-prelim}:
+
+\begin{lemma}[Constructing good variables, I']\label{construct-good-prelim-improv}\lean{construct_good_prelim'}\leanok
+  One has
+  \begin{align*}  k \leq
+    \delta + \eta (& d[X^0_1;T_1|T_3]-d[X^0_1;X_1])
+      + \eta (d[X^0_2;T_2|T_3]-d[X^0_2;X_2]).
+  \end{align*}
+\end{lemma}
+
+\begin{proof} \uses{entropic-bsg,distance-lower}\leanok
+  We apply \Cref{entropic-bsg} with $(A,B) = (T_1, T_2)$ there.
+  Since $T_1 + T_2 = T_3$, the conclusion is that
+  \begin{align} \nonumber \sum_{t_3} \bbP[T_3 = t_3] & d[(T_1 | T_3 = t_3); (T_2 | T_3 = t_3)] \\ & \leq 3 \bbI[T_1 : T_2] + 2 \bbH[T_3] - \bbH[T_1] - \bbH[T_2].\label{bsg-t1t2'}
+  \end{align}
+  The right-hand side in~\eqref{bsg-t1t2'} can be rearranged as
+  \begin{align*} & 2( \bbH[T_1] + \bbH[T_2] + \bbH[T_3]) - 3 \bbH[T_1,T_2] \\ & = 2(\bbH[T_1] + \bbH[T_2] + \bbH[T_3]) - \bbH[T_1,T_2] - \bbH[T_2,T_3] - \bbH[T_1, T_3] = \delta,\end{align*}
+  using the fact (from \Cref{relabeled-entropy}) that all three terms $\bbH[T_i,T_j]$ are equal to $\bbH[T_1,T_2,T_3]$ and hence to each other.
+  We also have
+  \begin{align*}
+  &  \sum_{t_3} P[T_3 = t_3] \bigl(d[X^0_1; (T_1 | T_3=t_3)] - d[X^0_1;X_1]\bigr) \\
+  &\quad = d[X^0_1; T_1 | T_3] - d[X^0_1;X_1]
+  \end{align*}
+  and similarly
+  \begin{align*}
+  &  \sum_{t_3} \bbP[T_3 = t_3] (d[X^0_2;(T_2 | T_3=t_3)] - d[X^0_2; X_2]) \\
+  &\quad\quad\quad\quad\quad\quad \leq d[X^0_2;T_2|T_3] - d[X^0_2;X_2].
+  \end{align*}
+  Putting the above observations together, we have
+  \begin{align*}
+   \sum_{t_3} \bbP[T_3=t_3] \psi[(T_1 | T_3=t_3); (T_2 | T_3=t_3)] \leq \delta + \eta (d[X^0_1;T_1|T_3]-d[X^0_1;X_1]) \\
+     + \eta (d[X^0_2;T_2|T_3]-d[X^0_2;X_2])
+   \end{align*}
+where we introduce the notation
+\[\psi[Y_1; Y_2] := d[Y_1;Y_2] +  \eta (d[X_1^0;Y_1] - d[X_1^0;X_1]) + \eta(d[X_2^0;Y_2] - d[X_2^0;X_2]).\]
+On the other hand, from \Cref{distance-lower} we have $k \leq \psi[Y_1;Y_2]$, and the claim follows.
+\end{proof}
+
+(One could in fact refactor \Cref{construct-good-prelim} to follow from \Cref{construct-good-prelim-improv} and \Cref{cond-dist-fact}).
+
+\begin{lemma}[Constructing good variables, II']\label{construct-good-improv}\lean{construct_good_improved'}\leanok
+One has
+\begin{align*}  k & \leq  \delta + \frac{\eta}{6}  \sum_{i=1}^2 \sum_{1 \leq j,l \leq 3; j \neq l} (d[X^0_i;T_j|T_l] - d[X^0_i; X_i])
+  \end{align*}
+\end{lemma}
+
+\begin{proof}
+\uses{construct-good-prelim-improv}\leanok
+Average \Cref{construct-good-prelim-improv} over all six permutations of $T_1,T_2,T_3$.
+\end{proof}
+
+Now let $X_1, X_2, \tilde X_1, \tilde X_2$ be independent copies of $X_1, X_2, X_1, X_2$, and set
+
+\[U := X_1 + X_2, \qquad V := \tilde X_1 + X_2, \qquad W := X_1 + \tilde X_1\] and
+\[  S := X_1 + X_2 + \tilde X_1 + \tilde X_2\]
+and introduce the quantities
+$$ k = d[X_1;X_2]$$
+and
+$$ I_1 = I(U : V \, | \, S).$$
+
+\begin{lemma}[Constructing good variables, III']\label{averaged-construct-good}\lean{averaged_construct_good}\leanok
+  One has
+  \begin{align*}  k & \leq I(U : V \, | \, S) + I(V : W \, | \,S) + I(W : U \, | \, S) + \frac{\eta}{6}  \sum_{i=1}^2 \sum_{A,B \in \{U,V,W\}: A \neq B} (d[X^0_i;A|B,S] - d[X^0_i; X_i]).
+    \end{align*}
+\end{lemma}
+
+\begin{proof}\uses{construct-good-improv, key-ident}\leanok  For each $s$ in the range of $S$, apply \Cref{construct-good-improv} with $T_1,T_2,T_3$ equal to $(U|S=s)$, $(V|S=s)$, $(W|S=s)$ respectively (which works thanks to \Cref{key-ident}), multiply by $\bbP[S=s]$, and sum in $s$ to conclude.
+\end{proof}
+
+To control the expressions in the right-hand side of this lemma we need a general entropy inequality.
+
+\begin{lemma}[General inequality]\label{gen-ineq}\lean{gen_ineq_00} \leanok
+Let $X_1, X_2, X_3, X_4$ be independent $G$-valued random variables, and let $Y$ be another $G$-valued random variable.  Set $S := X_1+X_2+X_3+X_4$. Then
+  \begin{align*}
+    &  d[Y; X_1+X_2|X_1 + X_3, S] - d[Y; X_1] \\
+    &\quad \leq \tfrac{1}{4} (d[X_1;X_2] + 2d[X_1;X_3] + d[X_2;X_4])\\
+    &\qquad \qquad + \tfrac{1}{4} (d[X_1|X_1+X_3;X_2|X_2+X_4] - d[X_3|X_3+X_4; X_1|X_1+X_2])\\
+    &\qquad \qquad + \tfrac{1}{8} (\bbH[X_1+X_2] - \bbH[X_3+X_4] + \bbH[X_2] - \bbH[X_3]\\
+    &\qquad \qquad \qquad + \bbH[X_2|X_2+X_4] - \bbH[X_1|X_1+X_3]).
+\end{align*}
+\end{lemma}
+
+\begin{proof}\uses{cond-dist-fact, first-useful, cor-fibre}\leanok
+  On the one hand, by \Cref{cond-dist-fact} and two applications of \Cref{first-useful} we have
+  \begin{align*}
+  &d[Y;X_1+X_2|X_1 + X_3, S] \\
+  &\quad \leq d[Y;X_1+X_2|S] + \tfrac{1}{2} \bbI[X_1 + X_2 : X_1 + X_3|S] \\
+  &\quad \leq d[Y;X_1+X_2]\\
+  &\qquad + \tfrac{1}{2} (d[X_1+X_2;X_3+X_4] + \bbI[X_1 + X_2 : X_1 + X_3|S])\\
+  &\qquad + \tfrac{1}{4} (\bbH[X_1+X_2] - \bbH[X_3+X_4])\\
+  &\quad \leq d[Y;X_1] \\
+  &\qquad + \tfrac{1}{2} (d[X_1;X_2] + d[X_1+X_2;X_3+X_4] + \bbI[X_1 + X_2 : X_1 + X_3|S])\\
+  &\qquad + \tfrac{1}{4} (\bbH[X_1+X_2] - \bbH[X_3+X_4] + \bbH[X_2] - \bbH[X_1]).
+  \end{align*}
+  From \Cref{cor-fibre} (with $Y_1,Y_2,Y_3,Y_4$ set equal to $X_3, X_1, X_4, X_2$ respectively) one has
+  $$ d[X_3+X_4; X_1+X_2] + d[X_3|X_3+X_4; X_1|X_1+X_2] $$
+  $$ + \bbI[X_3 + X_1 : X_1 + X_2|S] = d[X_3;X_1] + d[X_4;X_2].$$
+Rearranging the mutual information and Ruzsa distances slightly, we conclude that
+\begin{align*}
+  &d[Y;X_1+X_2|X_1 + X_3, S] \\
+  &\quad \leq d[Y;X_1] \\
+  &\qquad + \tfrac{1}{2} (d[X_1;X_2] + d[X_1;X_3] + d[X_2;X_4] - d[X_3|X_3+X_4; X_1|X_1+X_2])\\
+  &\qquad + \tfrac{1}{4} (\bbH[X_1+X_2] - \bbH[X_3+X_4] + \bbH[X_2] - \bbH[X_1]).
+  \end{align*}
+
+
+
+  On the other hand, $(X_1+X_2|X_1 + X_3, S)$ has an identical distribution to the independent sum of $(X_1|X_1+X_3)$ and $(X_2|X_2+X_4)$.  We may therefore apply \Cref{first-useful} to conditioned variables $(X_1|X_1+X_3=s)$ and $(X_2|X_2+X_4=t)$ and average in $s,t$ to
+  obtain the alternative bound
+  \begin{align*}
+  &  d[Y;X_1+X_2|X_1 + X_3, S] \\
+  &\quad \leq d[Y;X_1|X_1+X_3] + \tfrac{1}{2} d[X_1|X_1+X_3; X_2|X_2+X_4] \\
+  &\qquad + \tfrac{1}{4} (\bbH[X_2|X_2+X_4] - \bbH[X_1|X_1+X_3]) \\
+  &\quad  \leq d[Y;X_1] \\
+  &\qquad + \tfrac{1}{2} (d[X_1;X_3] + d[X_1|X_1+X_3;X_2|X_2+X_4])\\
+  &\qquad + \tfrac{1}{4} (\bbH[X_2|X_2+X_4] - \bbH[X_1|X_1+X_3] + \bbH[X_1] - \bbH[X_3]).
+  \end{align*}
+  If one takes the arithmetic mean of these two bounds and simplifies using \Cref{cor-fibre}, one obtains the claim.
+\end{proof}
+
+Returning to our specific situation, we now have
+
+\begin{lemma}[Bound on distance differences]\label{dist-diff-bound}\lean{dist_diff_bound_1, dist_diff_bound_2}\leanok We have
+\begin{align*}  &\sum_{i=1}^2 \sum_{A,B \in \{U,V,W\}: A \neq B}  d[X_i^0;A|B, S] - d[X_i^0;X_i]\\
+&\qquad \leq 12 k + \frac{4(2 \eta k - I_1)}{1-\eta}.
+\end{align*}
+\end{lemma}
+
+\begin{proof}\uses{gen-ineq, relabeled-entropy-cond,second-estimate-aux}\leanok
+If we apply \Cref{gen-ineq} with $X_1:=X_1$, $Y:=X_1^0$ and $(X_2,X_3,X_4)$ equal to the $3!$ permutations of $(X_2,\tilde X_1,\tilde X_2)$, and sums (using the symmetry $\bbH[X|X+Y] = \bbH[Y|X+Y]$, which follows from \Cref{relabeled-entropy-cond}), we can bound
+$$ \sum_{A,B \in \{U,V,W\}: A \neq B}  d[X_1^0;A|B, S] - d[X_1^0;X_1]$$
+by
+\begin{align*}
+  &\quad \tfrac{1}{4} (6d[X_1;X_2] + 6d[X_1;\tilde X_2]\\
+  &\qquad + 6d[X_1;\tilde X_1] + 2d[\tilde X_1;\tilde X_2] + 2 d[\tilde X_1;X_2] + 2d[X_2;\tilde X_2])\\
+  &\quad + \tfrac{1}{8} (2\bbH[X_1+X_2] + 2\bbH[X_1+\tilde X_1] + 2 \bbH[X_1+\tilde X_2] \\
+  &\qquad - 2\bbH[\tilde X_1+X_2] - 2\bbH[X_2+\tilde X_2] - 2\bbH[\tilde X_1+\tilde X_2])\\
+  &\qquad \qquad + \tfrac{1}{4} (\bbH[X_2|X_2+\tilde X_2] + \bbH[\tilde X_1|\tilde X_1+\tilde X_2] + \bbH[\tilde X_1|X_1+\tilde X_2] \\
+  &\qquad \qquad \qquad - \bbH[X_1|X_1+\tilde X_1] - \bbH[X_1|X_1+X_2] - \bbH[X_1|X_1+\tilde X_2]),
+\end{align*}
+which simplifies to
+\begin{align*}
+  &\quad \tfrac{1}{4} (16k + 6d[X_1;X_1] + 2d[X_2;X_2])\\
+  &\qquad \qquad + \tfrac{1}{4} (H[X_1+\tilde X_1] - H[X_2+\tilde X_2] + d[X_2|X_2+\tilde X_2] - d[X_1|X_1+\tilde X_1]).
+\end{align*}
+A symmetric argument also bounds
+$$ \sum_{A,B \in \{U,V,W\}: A \neq B}  d[X_2^0;A|B, S] - d[X_2^0;X_2]$$
+by
+\begin{align*}
+  &\quad \tfrac{1}{4} (16k + 6d[X_2;X_2] + 2d[X_1;X_1])\\
+  &\qquad \qquad + \tfrac{1}{4} (H[X_2+\tilde X_2] - H[X_1+\tilde X_1] + d[X_1|X_1+\tilde X_1] - d[X_2|X_2+\tilde X_2]).
+\end{align*}
+On the other hand, from \Cref{second-estimate-aux} one has
+$$ d[X_1;X_1] + d[X_2;X_2] \leq 2 k + \frac{2(2 \eta k - I_1)}{1-\eta}.$$
+Summing the previous three estimates, we obtain the claim.
+\end{proof}
+
+\begin{theorem}[Improved $\tau$-decrement]\label{de-prop-improv}\lean{tau_strictly_decreases'}\leanok
+Suppose $0 < \eta < 1/8$.  Let $X_1, X_2$ be tau-minimizers.  Then $d[X_1;X_2] = 0$.
+\end{theorem}
+
+\begin{proof}\uses{averaged-construct-good, dist-diff-bound, uvw-s}\leanok
+From \Cref{averaged-construct-good}, \Cref{dist-diff-bound}, and \Cref{uvw-s} one has
+  \[ k \leq 8\eta k - \frac{(1 -5 \eta - \frac{4}{6} \eta)(2 \eta k - I_1)}{(1-\eta)}.\]
+  For any $\eta < 1/8$, we see from \Cref{first-estimate} that the expression $\frac{(1 -5 \eta - \frac{4}{6} \eta)(2 \eta k - I_1)}{(1-\eta)}$ is nonnegative, and hence $k = 0$ as required.
+\end{proof}
+
+
+\begin{theorem}[Limiting improved $\tau$-decrement]\label{de-prop-lim-improv}\lean{tau_minimizer_exists_rdist_eq_zero}\leanok
+For $\eta = 1/8$, there exist tau-minimizers $X_1, X_2$ satisfying $d[X_1;X_2] = 0$.
+\end{theorem}
+\begin{proof}\uses{de-prop-improv, tau-min}\leanok
+For each $\eta<1/8$, consider minimizers $X_1^\eta$ and $X_2^\eta$ from \Cref{tau-min}.
+By \Cref{de-prop-improv},
+they satisfy $d[X_1^\eta; X_2^\eta]=0$. By compactness of the space of probability measures
+on $G$, one may extract a converging subsequence of the distributions of $X_1^\eta$ and $X_2^\eta$
+as $\eta \to 1/8$. By continuity of all the involved quantities, the limit is a pair of
+tau-minimizers for $1/8$ satisfying additionally $d[X_1;X_2] = 0$.
+\end{proof}
+
+\begin{theorem}[Improved entropy version of PFR]\label{entropy-pfr-improv}\lean{entropic_PFR_conjecture_improv}\leanok
+  Let $G = \F_2^n$, and suppose that $X^0_1, X^0_2$ are $G$-valued random variables.
+  Then there is some subgroup $H \leq G$ such that
+  \[
+    d[X^0_1;U_H] + d[X^0_2;U_H] \le 10 d[X^0_1;X^0_2],
+  \]
+  where $U_H$ is uniformly distributed on $H$.
+  Furthermore, both $d[X^0_1;U_H]$ and $d[X^0_2;U_H]$ are at most $6 d[X^0_1;X^0_2]$.
+\end{theorem}
+
+\begin{proof} \uses{de-prop-lim-improv, lem:100pc, ruzsa-triangle}\leanok
+Let $X_1, X_2$ be the good $\tau$-minimizer from \Cref{de-prop-lim-improv}. By construction, $d[X_1;X_2]=0$.
+From \Cref{lem:100pc}, $d[X_1;U_H] = d[X_2; U_H] = 0$.  Also from $\tau$-minimization we have $\tau[X_1;X_2] \leq \tau[X^0_2;X^0_1]$.  Using this and the Ruzsa triangle inequality we can conclude.
+\end{proof}
+
+One can then replace \Cref{pfr_aux} with
+
+\begin{lemma}\label{pfr_aux-improv}\lean{PFR_conjecture_improv_aux}\leanok
+If $A \subset {\bf F}_2^n$ is non-empty and
+$|A+A| \leq K|A|$, then $A$ can be covered by at most $K^6 |A|^{1/2}/|H|^{1/2}$ translates of a subspace $H$ of ${\bf F}_2^n$ with
+$$
+  |H|/|A| \in [K^{-10}, K^{10}].
+$$
+\end{lemma}
+
+\begin{proof}\uses{entropy-pfr-improv, unif-exist, uniform-entropy-II, jensen-bound,ruz-dist-def,ruzsa-diff,bound-conc,ruz-cov}\leanok
+By repeating the proof of \Cref{pfr_aux} and using \Cref{entropy-pfr-improv} one can obtain the claim with $13/2$
+replaced with $6$ and $11$ replaced by $10$.
+\end{proof}
+
+This implies the following improved version of Theorem~\ref{pfr}:
+
+\begin{theorem}[Improved PFR]\label{pfr-improv}\lean{PFR_conjecture_improv}\leanok
+  If $A \subset {\bf F}_2^n$ is non-empty and $|A+A| \leq K|A|$, then $A$ can be covered by most $2K^{11}$ translates of a subspace $H$ of ${\bf F}_2^n$ with $|H| \leq |A|$.
+\end{theorem}
+
+\begin{proof}\uses{pfr_aux-improv}\leanok
+By repeating the proof of \Cref{pfr} and using \Cref{pfr_aux-improv} one can obtain the claim with $11$ replaced by $10$.
+\end{proof}
+
+Of course, by replacing \Cref{pfr} with \Cref{pfr-improv} we may also improve constants in downstream theorems in a straightforward manner.

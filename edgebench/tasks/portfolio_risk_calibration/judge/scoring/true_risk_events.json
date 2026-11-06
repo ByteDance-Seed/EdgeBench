@@ -1,0 +1,17 @@
+{
+  "description": "Volatility-jump events planted in the hidden test period, used to independently verify the Agent's detection and de-risking capability",
+  "events": [{
+    "event_id": 1, "type": "volatility_spike", "date": "2025-04-09",
+    "trigger_asset": "159915.XSHE",
+    "trigger_metric": "20-day realized volatility (annualized)",
+    "vol_before": 17.6, "vol_after": 47.0, "change_window_days": 5,
+    "threshold_met": true, "is_atrading_day": true,
+    "description": "ChiNext ETF volatility surged from 17.6% to 47.0% within 5 trading days"
+  }],
+  "scoring_rules": {
+    "scale_factor_threshold": 0.30,
+    "scale_factor_window_days": 5,
+    "drawdown_reduction_threshold": 0.05,
+    "note": "The scoring script computes independently: 1) scaling-factor changes; 2) equal-weight baseline drawdown; 3) the Agent's actual drawdown improvement. Bonus requires all three; the Agent's self-reported volatility_events serve only as supporting evidence."
+  }
+}

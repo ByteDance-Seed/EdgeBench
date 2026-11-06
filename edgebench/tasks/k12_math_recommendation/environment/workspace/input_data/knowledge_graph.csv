@@ -1,0 +1,51 @@
+kp_id,kp_name,chapter,prerequisite_kp_ids
+1,Basic concepts and operations of sets,Compulsory 1: Sets & Functions,
+2,Domain and range of functions,Compulsory 1: Sets & Functions,
+3,Monotonicity of functions,Compulsory 1: Sets & Functions,2
+4,Parity of functions,Compulsory 1: Sets & Functions,2
+5,Properties of exponential functions,Compulsory 1: Sets & Functions,2
+6,Properties of logarithmic functions,Compulsory 1: Sets & Functions,5
+7,Properties of power functions,Compulsory 1: Sets & Functions,2
+8,Function graph transformations,Compulsory 1: Sets & Functions,2
+9,Function zeros and equation roots,Compulsory 1: Sets & Functions,2;3
+10,Inverse function concept,Compulsory 1: Sets & Functions,2
+11,Spatial solid structures,Compulsory 2: Geometry,
+12,Three-view identification,Compulsory 2: Geometry,
+13,Point-line-plane positional relationships,Compulsory 2: Geometry,
+14,Line-plane parallelism,Compulsory 2: Geometry,13
+15,Line-plane perpendicularity,Compulsory 2: Geometry,13
+16,Dihedral angles,Compulsory 2: Geometry,14;15
+17,Line equations,Compulsory 2: Geometry,11
+18,Circles and equations,Compulsory 2: Geometry,17
+19,Line-circle positional relationships,Compulsory 2: Geometry,17;18
+20,Spatial rectangular coordinate system,Compulsory 2: Geometry,17
+21,Arbitrary angles and radian measure,Compulsory 3&4: Trigonometry & Sequences,
+22,Definition of trigonometric functions,Compulsory 3&4: Trigonometry & Sequences,21
+23,Same-angle trigonometric identities,Compulsory 3&4: Trigonometry & Sequences,22
+24,Trigonometric reduction formulas,Compulsory 3&4: Trigonometry & Sequences,22
+25,Trig function graph properties,Compulsory 3&4: Trigonometry & Sequences,22
+26,Sum and difference formulas,Compulsory 3&4: Trigonometry & Sequences,24
+27,Double-angle and half-angle formulas,Compulsory 3&4: Trigonometry & Sequences,26
+28,Sequence concepts and general terms,Compulsory 3&4: Trigonometry & Sequences,
+29,Arithmetic sequences,Compulsory 3&4: Trigonometry & Sequences,28
+30,Geometric sequences,Compulsory 3&4: Trigonometry & Sequences,28
+31,Law of sines,Compulsory 5: Solving Triangles & Inequalities,22
+32,Law of cosines,Compulsory 5: Solving Triangles & Inequalities,22
+33,Comprehensive triangle solving,Compulsory 5: Solving Triangles & Inequalities,31;32
+34,Quadratic inequalities,Compulsory 5: Solving Triangles & Inequalities,
+35,Rational inequalities,Compulsory 5: Solving Triangles & Inequalities,34
+36,Absolute value inequalities,Compulsory 5: Solving Triangles & Inequalities,34
+37,AM-GM inequality,Compulsory 5: Solving Triangles & Inequalities,34
+38,Linear programming,Compulsory 5: Solving Triangles & Inequalities,34
+39,Vector concepts,Compulsory 5: Solving Triangles & Inequalities,
+40,Plane vector operations,Compulsory 5: Solving Triangles & Inequalities,39
+41,Definition and geometric meaning of derivatives,"Elective: Derivatives, Statistics & Probability",
+42,Derivatives of basic elementary functions,"Elective: Derivatives, Statistics & Probability",41
+43,Derivative operation rules,"Elective: Derivatives, Statistics & Probability",42
+44,Derivatives and monotonicity,"Elective: Derivatives, Statistics & Probability",42
+45,"Derivatives, extrema and absolute values","Elective: Derivatives, Statistics & Probability",44
+46,Definite integrals,"Elective: Derivatives, Statistics & Probability",42
+47,Classical probability,"Elective: Derivatives, Statistics & Probability",
+48,Geometric probability,"Elective: Derivatives, Statistics & Probability",47
+49,Conditional probability,"Elective: Derivatives, Statistics & Probability",47
+50,Normal distribution,"Elective: Derivatives, Statistics & Probability",47

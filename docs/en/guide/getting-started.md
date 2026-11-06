@@ -1,9 +1,9 @@
 # Getting Started
 
-This guide runs one SForge task end to end using the default **Docker backend**: install SForge, fetch task definitions, pull pre-built task images, start the judge server, run an agent, and inspect the result.
+This guide runs one EdgeBench task end to end on the default **Docker backend**: install SForge, get the task images, run an agent, and look at the result.
 
 ::: tip Scale
-The Docker backend is meant for a small number of tasks. Running many tasks concurrently on one host (roughly 20+) will exhaust even a high-end server — use the [Kubernetes backend](/en/configuration/container-backends) for full-suite runs, with the [official leaderboard settings](/en/examples/all-tasks-k8s).
+The Docker backend is meant for a small number of tasks. Running many tasks concurrently on one host (roughly 20+) will exhaust even a high-end server. Use the [Kubernetes backend](/en/configuration/container-backends) for full-suite runs, with the [official leaderboard settings](/en/examples/all-tasks-k8s).
 :::
 
 ::: warning Cost
@@ -12,85 +12,57 @@ Frontier-model runs are expensive: one task over the official 12-hour budget can
 
 ## Prerequisites
 
-- **Linux**: SForge currently targets Linux hosts.
+- **Linux** (x86_64). SForge currently targets Linux hosts.
 
   ::: warning
-  The default Docker backend needs direct access to the host Docker daemon; running inside a container introduces Docker-in-Docker issues.
+  The Docker backend needs direct access to the host Docker daemon; running SForge inside a container introduces Docker-in-Docker issues.
   :::
 
-- **Docker Engine**: required to pull task images and run work/judge containers. The Docker daemon must be running; verify it with:
+- **Docker Engine**, running. Check with:
 
   ```bash
   docker run hello-world
   ```
 
-- **Python >= 3.10**.
+- **Python 3.11–3.13**.
 
 ## Install SForge
 
-Install the released package:
-
-```bash
-pip install sforge
-```
-
-To use the [E2B backend](/en/configuration/container-backends#e2b-backend), include the `e2b` extra: `pip install "sforge[e2b]"`.
-
-Or install from source:
+The tasks live in the repository, so install from a clone:
 
 ```bash
 git clone https://github.com/ByteDance-Seed/EdgeBench.git
-cd SForge
-pip install -e .
+cd EdgeBench
+pip install -e .            # add the e2b extra for the E2B backend: pip install -e ".[e2b]"
 ```
 
-Check that the CLI is available:
-
-```bash
-sforge --help
-```
-
-## Run Ad Placement Optimization
-
-[Ad Placement Optimization](https://huggingface.co/datasets/ByteDance-Seed/EdgeBench/blob/main/ad_placement_optimization.json) is a C++ optimization task in EdgeBench, used here as a small end-to-end example.
-
-### 1. Fetch Task Definitions
-
-```bash
-sforge fetch-tasks edgebench
-```
-
-This downloads the default `edgebench` task definitions into `./tasks`. You can confirm that tasks are visible with:
+Run the commands below from the repository root: SForge reads EdgeBench from `edgebench/` (another benchmark: `-b <dir>` or `SFORGE_BENCHMARK`). List its tasks with:
 
 ```bash
 sforge list
 ```
 
-### 2. Pull Images
+## Run Ad Placement Optimization
+
+[Ad Placement Optimization](https://github.com/ByteDance-Seed/EdgeBench/tree/main/edgebench/tasks/ad_placement_optimization) is a C++ optimization task, used here as a small end-to-end example.
+
+### 1. Get the images
+
+Pull the pre-built work and judge images:
 
 ```bash
-sforge pull --task ad_placement_optimization --registry seededge
+sforge pull --task ad_placement_optimization
 ```
 
-This pulls the pre-built base, work, and judge images for the task. Image names are derived from the benchmark name, role, task/base key, and content hash, for example:
-
-- `<benchmark>.base.cpp:<hash>`
-- `<benchmark>.work.ad_placement_optimization:<hash>`
-- `<benchmark>.judge.ad_placement_optimization:<hash>`
-
-### 3. Start the Judge Server
-
-Open a second terminal:
+Images are tagged by a hash of the task directory, for example `edgebench.work.ad_placement_optimization:7b2f533ff7d4`, so the pulled images always match your checkout. If you changed the task, or prefer not to download, build them instead:
 
 ```bash
-sforge serve
+sforge build --task ad_placement_optimization
 ```
 
-The judge server listens on `0.0.0.0:8080` by default.
+See [Pre-built Images](/en/features/prebuilt-images) for where the images come from.
 
-### 4. Run an Agent
-
-In the first terminal:
+### 2. Run an agent
 
 ```bash
 SFORGE_AGENT_API_KEY="sk-ant-xxxx" \
@@ -100,19 +72,23 @@ sforge run --task ad_placement_optimization --agent claude-code \
   --run-id ad-placement-001
 ```
 
-The agent works inside the work container, submits code to the judge server, receives test feedback, and iterates until timeout or completion.
+`sforge run` starts its own judge server in the same process. The agent works inside the work container, submits code with `sforge-submit`, gets a score and feedback, and keeps improving until the timeout. Its model requests go through the judge server, which holds the real API key; the key never enters the container.
 
 ## View Results
 
-Start the web UI to monitor runs in real time:
+Start the run viewer:
 
 ```bash
-sforge visualizer
+sforge viewer
 ```
 
-Then open `http://127.0.0.1:8000/`.
+Then open `http://127.0.0.1:8000/` for score curves, submissions and token usage. To read the agent's own transcript in its UI:
 
-Run outputs are also written under `logs/runs/<run-id>/<task-id>/` if you prefer inspecting files manually:
+```bash
+sforge replay --run-id ad-placement-001 --task ad_placement_optimization
+```
+
+Run outputs are files under `logs/runs/<run-id>/<task-id>/`:
 
 ```bash
 tail -f logs/runs/ad-placement-001/ad_placement_optimization/agent_output.txt
@@ -121,7 +97,7 @@ cat logs/runs/ad-placement-001/ad_placement_optimization/final_result.json
 
 ## Common Next Steps
 
-- Need a different agent or model? See [Supported Agents](./agents).
-- Need API keys, mirrors, proxy variables, or resource limits? See [Environment Variables](/en/configuration/environment-variables) and [Network Setup](/en/configuration/network-setup).
-- Need the full command and flag list? See [CLI Commands](/en/reference/cli).
-- Developing a new benchmark or task? See the [Developer section](/en/tasks/integration-guide).
+- A different agent or model: [Supported Agents](./agents).
+- API keys, proxies, resource limits: [Environment Variables](/en/configuration/environment-variables) and [Network Setup](/en/configuration/network-setup).
+- Every command and flag: [CLI Commands](/en/reference/cli).
+- Fixing or adding a task: [Task Format](/en/tasks/task-format).

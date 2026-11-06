@@ -1,0 +1,84 @@
+\chapter{The Fibring lemma}
+
+\begin{proposition}[General fibring identity]\label{fibring-ident}
+  \lean{rdist_of_indep_eq_sum_fibre, rdist_le_sum_fibre}\leanok
+  Let $\pi : H \to H'$ be a homomorphism additive groups, and let $Z_1,Z_2$ be $H$-valued random variables. Then we have
+  \[
+    d[Z_1; Z_2] \geq d[\pi(Z_1);\pi(Z_2)] + d[Z_1|\pi(Z_1); Z_2 |\pi(Z_2)].
+  \]
+  Moreover, if $Z_1,Z_2$ are taken to be independent, then the difference between the two sides is
+$$I( Z_1 - Z_2 : (\pi(Z_1), \pi(Z_2))  |  \pi(Z_1 - Z_2) ).$$
+\end{proposition}
+
+
+\begin{proof}\uses{ruz-copy, independent-exist, submodularity,conditional-mutual-alt,chain-rule,relabeled-entropy, cond-dist-alt}\leanok
+  Let $Z_1,Z_2$ be independent throughout (this is possible by \Cref{ruz-copy} and \Cref{independent-exist}).  By \Cref{cond-dist-alt}, We have
+  \begin{align*}
+    & d[Z_1  |\pi(Z_1); Z_2 |\pi(Z_2)] \\
+    & = \bbH[Z_1 - Z_2 | \pi(Z_1),\pi(Z_2)] - \tfrac{1}{2} \bbH[Z_1 | \pi(Z_1)] - \tfrac{1}{2} \bbH[Z_2 | \pi(Z_2)] \\
+    & \leq  \bbH[Z_1 - Z_2 | \pi(Z_1+Z_2)]  - \tfrac{1}{2} \bbH[Z_1 | \pi(Z_1)] - \tfrac{1}{2}H[Z_2 | \pi(Z_2)] \\
+    & = d[Z_1;Z_2] - d[\pi(Z_1);\pi(Z_2)].
+  \end{align*}
+  In the middle step, we used \Cref{submodularity}, and in the last step we used the fact that
+  \[\bbH[Z_1 - Z_2 |  \pi(Z_1-Z_2)] = \bbH[Z_1 - Z_2] - \bbH[\pi(Z_1-Z_2)]\]
+  (thanks to \Cref{chain-rule} and \Cref{relabeled-entropy}) and that
+  \[\bbH[Z_i| \pi(Z_i)] = \bbH[Z_i] - \bbH[\pi(Z_i)]\] (since $Z_i$ determines $\pi(Z_i)$).
+  This gives the claimed inequality. The difference between the two sides is precisely
+  \[\bbH[Z_1 - Z_2  | \pi(Z_1 - Z_2)] - \bbH[Z_1 - Z_2  | \pi(Z_1),\pi(Z_2)].\]
+  To rewrite this in terms of (conditional) mutual information, we use the identity
+  \[\bbH[A|B] - \bbH[A | B,C] = \bbI[A : C | B],\]
+  (which follows \Cref{conditional-mutual-alt})
+  taking
+  $A := Z_1 - Z_2$, $B := \pi(Z_1 - Z_2)$ and $C := (\pi(Z_1),\pi(Z_{2}))$, and noting that in this case $\bbH[A | B,C] = \bbH[A | C]$ since $C$ uniquely determines $B$ (this may require another helper lemma about entropy).
+  This completes the proof.
+\end{proof}
+
+
+\begin{corollary}\label{fibring-ineq}
+ \lean{rdist_of_hom_le} \leanok
+If $\pi:G\to H$ is a homomorphism of additive groups and $X,Y$ are $G$-valued random variables then
+\[d[X;Y]\geq d[\pi(X);\pi(Y)].\]
+\end{corollary}
+
+\begin{proof}
+\uses{fibring-ident, ruzsa-nonneg}\leanok
+By \Cref{fibring-ident} and the nonnegativity of conditional Ruzsa distance (from \Cref{ruzsa-nonneg}) we have
+\[d[X;Y]\geq d[\pi(X);\pi(Y)]+d[X\mid \pi(X);Y\mid \pi(Y)].\]
+The inequality follows from $d[X\mid \pi(X);Y\mid \pi(Y)]\geq 0$ (\Cref{ruzsa-nonneg}).
+\end{proof}
+
+
+\begin{corollary}[Specific fibring identity]\label{cor-fibre}
+  \lean{sum_of_rdist_eq}\leanok
+  Let $Y_1,Y_2,Y_3$ and $Y_4$ be independent $G$-valued random variables.
+  Then
+\begin{align*}
+  & d[Y_1+Y_3; Y_2+Y_4] + d[Y_1|Y_1+Y_3; Y_2|Y_2+Y_4] \\
+  &\qquad + \bbI[Y_1+Y_2 : Y_2 + Y_4 | Y_1+Y_2+Y_3+Y_4] = d[Y_1; Y_2] + d[Y_3; Y_4].
+\end{align*}
+\end{corollary}
+
+\begin{proof}
+  \uses{fibring-ident, add-entropy, relabeled-entropy-cond}\leanok
+  We apply \Cref{fibring-ident} with $H := G \times G$, $H' := G$, $\pi$ the addition homomorphism $\pi(x,y) := x+y$, and with the random variables $Z_1 := (Y_1,Y_3)$ and $Z_2 := (Y_2,Y_4)$.  Then by independence (\Cref{add-entropy})
+\[
+  d[Z_1; Z_2] = d[Y_1; Y_2] + d[Y_3; Y_4]
+\]
+while by definition
+\[
+  d[\pi(Z_1); \pi(Z_2)] = d[Y_1+Y_3; Y_2+Y_4].
+\]
+Furthermore,
+\[
+  d[Z_1|\pi(Z_1); Z_2|\pi(Z_2)] = d[Y_1|Y_1+Y_3;Y_2|Y_2+Y_4],
+\]
+since $Z_1=(Y_1,Y_3)$ and $Y_1$ are linked by an invertible affine transformation once $\pi(Z_1)=Y_1+Y_3$ is fixed, and similarly for $Z_2$ and $Y_2$.  (This has to do with \Cref{relabeled-entropy-cond})
+Finally, we have
+\begin{align*}
+  &\bbI[Z_1 + Z_2 : (\pi(Z_1),\pi(Z_2)) \,|\, \pi(Z_1) + \pi(Z_2)] \\
+  &\ = \bbI[(Y_1+Y_2, Y_3+Y_4) : (Y_1+Y_3, Y_2+Y_4) \,|\, Y_1+Y_2+Y_3+Y_4] \\
+  &\ = \bbI[Y_1+Y_2 : Y_2+Y_4 \,|\, Y_1+Y_2+Y_3+Y_4]
+\end{align*}
+where in the last line we used the fact that $(Y_1+Y_2, Y_1+Y_2+Y_3+Y_4)$ uniquely determine $Y_3+Y_4$ and similarly
+$(Y_2+Y_4, Y_1+Y_2+Y_3+Y_4)$ uniquely determine $Y_1+Y_3$.  (This requires another helper lemma about entropy.)
+\end{proof}

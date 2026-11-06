@@ -1,0 +1,45 @@
+[package]
+name = "cas-factory"
+version = "0.1.0"
+edition = "2024"
+description = "Factory orchestration for CAS multi-agent coordination"
+license = "MIT"
+
+[dependencies]
+# Core CAS dependencies
+cas-mux = { path = "../cas-mux" }
+cas-pty = { path = "../cas-pty" }
+cas-store = { path = "../cas-store" }
+cas-recording = { path = "../cas-recording" }
+cas-factory-protocol = { path = "../cas-factory-protocol" }
+cas-types = { path = "../cas-types" }
+
+# Async runtime
+tokio = { version = "1", features = ["full", "sync"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Logging
+tracing = "0.1"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# System paths
+dirs = "6"
+
+# Parallel processing
+rayon = "1.10"
+
+# Terminal utilities
+crossterm = "0.29"
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile = "3.15"

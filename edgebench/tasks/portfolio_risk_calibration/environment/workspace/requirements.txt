@@ -1,0 +1,56 @@
+# ============================================
+# Dependency Configuration File
+# Local verification environment: Python 3.11 (verified on 3.11.5)
+# ============================================
+
+# ============================================
+# Required (strategy runtime core)
+# ============================================
+
+# Numerical computation, array operations, covariance matrix optimization
+# Used in: all strategy code, risk calibration, VaR calculation
+# Locally verified version: numpy 2.1.2
+numpy>=1.24.0,<3.0.0
+
+# Data processing, DataFrame operations, time series
+# Used in: all strategy code, data loading, backtest engine
+# Locally verified version: pandas 3.0.2
+pandas>=2.0.0,<4.0.0
+
+# Statistical tests, distribution fitting, optimization solvers
+# Used in: risk calibration module (VaR estimation), covariance matrix positive-definiteness guarantee
+# Locally verified version: scipy 1.15.3
+scipy>=1.10.0,<2.0.0
+
+# Statistical analysis, OLS regression, ADF test, cointegration test
+# Used in: risk calibration module (VaR estimation)
+# Locally verified version: statsmodels 0.14.6
+statsmodels>=0.14.0,<1.0.0
+
+# ============================================
+# Optional (not directly used by strategy code, but available for extended analysis)
+# ============================================
+
+# Plotting (NAV curves, drawdown curves, risk scaling factor trends)
+# Used in: strategy analysis report visualization
+# Without this library, NAV curve and drawdown curve charts cannot be generated
+# Locally verified version: matplotlib 3.10.8
+matplotlib>=3.7.0,<4.0.0
+
+# Heatmaps, statistical visualization
+# Used in: strategy analysis report visualization
+# Without this library, parameter heatmaps cannot be generated
+# Locally verified version: seaborn 0.13.2
+seaborn>=0.12.0,<1.0.0
+
+# Convex optimization solver
+# Used in: portfolio optimizer
+# Without this library, simplified optimization methods can be used as alternatives
+# Locally verified version: cvxpy 1.8.2
+cvxpy>=1.3.0,<2.0.0
+
+# Machine learning (factor models, dimensionality reduction, clustering)
+# Used in: strategy extended analysis
+# Without this library, factor model and dimensionality reduction features are unavailable
+# Locally verified version: scikit-learn 1.8.0
+scikit-learn>=1.3.0,<2.0.0

@@ -15,28 +15,20 @@
 """Script generators for agent execution.
 
 Produces bash scripts that run inside the work container:
-- sforge-submit: submits current code to judge server via HTTP, prints results,
-  updates shared state file (display-only cache)
+- sforge-submit: submits current code to judge server via HTTP and prints
+  the score and feedback. The judge server's history is the only record.
 
 Agent-specific scripts (stop hooks, settings files) live in the corresponding
 agent modules under ``sforge.harness.agent``.
-
-State file `/tmp/sforge_state.json` (display-only, not used for final scoring):
-  {
-    "best_pass_rate":  float,
-    "best_score":      float|null,
-    "best_round":      str,   # "agent-N" or "auto-N"
-    "submissions": [
-      {"kind": "agent"|"auto", "round": str, "at": int, "pass_rate": float, "score": float|null}
-    ]
-  }
 """
 
 from __future__ import annotations
 
+import shlex
 
-def generate_submit_script() -> str:
-    """Generate the sforge-submit bash script.
+
+def generate_submit_script(cwd: str, submit_paths: list[str], submit_exclude: list[str]) -> str:
+    """Generate the sforge-submit bash script for one task.
 
     Submits via POST to the token-based endpoint and polls for results.
     The server manages task_id, run_id, and round counters.
@@ -45,12 +37,17 @@ def generate_submit_script() -> str:
       --details, -d    submit and show detailed per-test results
       --list, -l       list all previous submissions (no new submission)
     """
-    return _generate_submit_script()
+    paths = " ".join(shlex.quote(p) for p in submit_paths)
+    excludes = " ".join(shlex.quote(f"--exclude={e}") for e in submit_exclude)
+    return (
+        _SUBMIT_SCRIPT.replace("@PATCH_DIR@", shlex.quote(cwd))
+        .replace("@SUBMIT_PATHS@", paths)
+        .replace("@EXCLUDE_FLAGS@", excludes)
+    )
 
 
-def _generate_submit_script() -> str:
-    """Generate sforge-submit: token-based POST + poll until result is ready."""
-    return r"""#!/bin/bash
+# sforge-submit: token-based POST + poll until result is ready.
+_SUBMIT_SCRIPT = r"""#!/bin/bash
 set -e
 
 LIST_MODE=0
@@ -63,11 +60,11 @@ for arg in "$@"; do
             echo "Usage: sforge-submit [OPTIONS]"
             echo ""
             echo "Submit current code to the judge server for evaluation."
-            echo "Results include score, pass rate, and a summary of findings."
+            echo "Results include the score and a summary of findings."
             echo ""
             echo "Options:"
             echo "  --list, -l      List all previous submissions and scores for this run"
-            echo "  --details, -d   Submit and show detailed per-test results (triggers a new submission)"
+            echo "  --details, -d   Submit and show detailed results (triggers a new submission)"
             echo "  -h, --help      Show this help message"
             exit 0
             ;;
@@ -81,8 +78,7 @@ done
 
 JUDGE_URL="${SFORGE_JUDGE_URL}"
 TOKEN="${SFORGE_TOKEN}"
-PATCH_DIR="${SFORGE_PATCH_DIR:-$(pwd)}"
-STATE_FILE="/tmp/sforge_state.json"
+PATCH_DIR=@PATCH_DIR@
 
 if [ -z "$JUDGE_URL" ]; then
     echo "ERROR: SFORGE_JUDGE_URL not set" >&2
@@ -99,29 +95,24 @@ if [ "$LIST_MODE" -eq 1 ]; then
         echo "ERROR: No response from judge server" >&2
         exit 1
     fi
-    BEST_RATE=$(echo "$HIST" | jq -r '.best_pass_rate // 0')
     BEST_SCORE=$(echo "$HIST" | jq -r '.best_score // "N/A"')
     COUNT=$(echo "$HIST" | jq -r '.entries | length')
     echo ""
     echo "========================================"
     echo "  Submission History"
     echo "  Total submissions: $COUNT"
-    echo "  Best pass rate: $(jq -n --argjson r "$BEST_RATE" '$r * 100 | . * 10 | floor / 10')%"
-    if [ "$BEST_SCORE" != "N/A" ] && [ "$BEST_SCORE" != "null" ]; then
-        echo "  Best score: $BEST_SCORE"
-    fi
+    echo "  Best score: $BEST_SCORE"
     echo "========================================"
     echo ""
     if [ "$COUNT" -gt 0 ]; then
-        printf "  %-14s %-10s %-8s %-12s %-10s %s\n" "ROUND" "STATUS" "VALID" "PASS_RATE" "SCORE" "SUMMARY"
-        printf "  %-14s %-10s %-8s %-12s %-10s %s\n" "-----" "------" "-----" "---------" "-----" "-------"
+        printf "  %-14s %-10s %-8s %-14s %s\n" "ROUND" "STATUS" "VALID" "SCORE" "SUMMARY"
+        printf "  %-14s %-10s %-8s %-14s %s\n" "-----" "------" "-----" "-----" "-------"
         echo "$HIST" | jq -r '.entries[] | select(.type == "submission") |
             "  " +
             ((.round // "-") | . + " " * ([14 - length, 0] | max)) + " " +
             ((.status // "-") | . + " " * ([10 - length, 0] | max)) + " " +
-            (if .valid == false then "no" else "yes" end | . + " " * ([8 - length, 0] | max)) + " " +
-            (if .pass_rate != null then (.pass_rate * 100 * 10 | floor / 10 | tostring + "%") else "-" end | . + " " * ([12 - length, 0] | max)) + " " +
-            (if .score != null then (.score | tostring) else "-" end | . + " " * ([10 - length, 0] | max)) + " " +
+            (if .valid == true then "yes" elif .valid == false then "no" else "-" end | . + " " * ([8 - length, 0] | max)) + " " +
+            (if .score != null then (.score | tostring) else "-" end | . + " " * ([14 - length, 0] | max)) + " " +
             ((.summary // "-") | if length > 40 then .[:37] + "..." else . end)'
     fi
     echo ""
@@ -132,18 +123,14 @@ fi
 
 cd "$PATCH_DIR"
 ARCHIVE_FILE=$(mktemp --suffix=.tar.gz)
-TAR_PATHS="${SFORGE_SUBMIT_PATHS:-.}"
-if [ -n "${SFORGE_SUBMIT_PATHS:-}" ]; then
-    EXISTING_PATHS=""
-    for p in $SFORGE_SUBMIT_PATHS; do
-        [ -e "$p" ] && EXISTING_PATHS="$EXISTING_PATHS $p"
-    done
-    TAR_PATHS="${EXISTING_PATHS# }"
-fi
-if [ -z "$TAR_PATHS" ]; then
+TAR_PATHS=()
+for p in @SUBMIT_PATHS@; do
+    [ -e "$p" ] && TAR_PATHS+=("$p")
+done
+if [ ${#TAR_PATHS[@]} -eq 0 ]; then
     tar czf "$ARCHIVE_FILE" --files-from /dev/null
 else
-    tar czf "$ARCHIVE_FILE" --exclude='.git' ${SFORGE_SUBMIT_EXCLUDE_FLAGS:-} $TAR_PATHS
+    tar czf "$ARCHIVE_FILE" --exclude='.git' @EXCLUDE_FLAGS@ "${TAR_PATHS[@]}"
 fi
 ARCHIVE_SIZE=$(wc -c < "$ARCHIVE_FILE")
 
@@ -157,11 +144,12 @@ echo ""
 
 # ── Submit + poll ──
 
-HTTP_CODE=$(curl -s -o /tmp/_submit_resp.json -w '%{http_code}' -m 120 -X POST "$JUDGE_URL/api/v1/submit" \
+RESP_FILE=$(mktemp)
+HTTP_CODE=$(curl -s -o "$RESP_FILE" -w '%{http_code}' -m 120 -X POST "$JUDGE_URL/api/v1/submit" \
     -F "token=$TOKEN" \
     -F "archive=@$ARCHIVE_FILE")
 rm -f "$ARCHIVE_FILE"
-SUBMIT_RESP=$(cat /tmp/_submit_resp.json)
+SUBMIT_RESP=$(cat "$RESP_FILE"); rm -f "$RESP_FILE"
 
 if [ "$HTTP_CODE" = "429" ]; then
     DETAIL=$(echo "$SUBMIT_RESP" | jq -r '.detail // empty')
@@ -208,43 +196,16 @@ if [ "$STATUS" != "completed" ] && [ "$STATUS" != "error" ]; then
     exit 1
 fi
 
-# ── Parse + update display cache + print ──
+# ── Print ──
 
-TS=$(date +%s)
 ERROR_MSG=$(echo "$RESULT" | jq -r '.error // empty')
-
-if [ -n "$ERROR_MSG" ]; then
-    CURRENT_RATE=0
-    CURRENT_SCORE="null"
-    PASSED=0
-    TOTAL=0
-    FAILED=0
-else
+if [ -z "$ERROR_MSG" ]; then
     REPORT=$(echo "$RESULT" | jq -r '.report')
-    PASSED=$(echo "$REPORT" | jq -r '.passed')
-    TOTAL=$(echo "$REPORT" | jq -r '.total_tests')
-    FAILED=$(echo "$REPORT" | jq -r '.failed')
-    CURRENT_RATE=$(echo "$REPORT" | jq -r '.pass_rate')
     CURRENT_SCORE=$(echo "$REPORT" | jq -r '.score // null')
-    VALID=$(echo "$REPORT" | jq -r '.valid // true')
+    VALID=$(echo "$REPORT" | jq -r '.valid // false')
     SUMMARY=$(echo "$REPORT" | jq -r '.summary // empty')
+    ERROR_MSG=$(echo "$REPORT" | jq -r '.error // empty')
 fi
-
-# Update local state file (display-only cache — not used for final scoring)
-if [ ! -f "$STATE_FILE" ]; then
-    echo '{"best_pass_rate": 0, "best_score": null, "best_round": "", "submissions": []}' > "$STATE_FILE"
-fi
-TMP=$(mktemp)
-jq --arg round "${ROUND_ID:-unknown}" \
-   --argjson ts "$TS" \
-   --argjson rate "$CURRENT_RATE" \
-   --argjson score "$CURRENT_SCORE" \
-   '
-   .submissions += [{kind: "agent", round: $round, at: $ts, pass_rate: $rate, score: $score}]
-   | if $rate > (.best_pass_rate // 0) then
-       .best_pass_rate = $rate | .best_round = $round | .best_score = $score
-     else . end
-   ' "$STATE_FILE" > "$TMP" && mv "$TMP" "$STATE_FILE"
 
 if [ -n "$ERROR_MSG" ]; then
     echo "========================================"
@@ -256,16 +217,9 @@ else
     echo "  ${ROUND_ID:-submission} Results"
     echo "========================================"
     if [ "$VALID" = "false" ]; then
-        echo "  Valid:       no"
+        echo "  Valid:       no (this submission does not count)"
     fi
-    if [ "$CURRENT_SCORE" != "null" ]; then
-        echo "  Score:       $CURRENT_SCORE"
-    fi
-    if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
-        PASS_PCT=$(jq -n --argjson r "$CURRENT_RATE" '$r * 100 | . * 10 | floor / 10')
-        echo "  Pass rate:   ${PASS_PCT}%"
-        echo "  Passed:      $PASSED/$TOTAL"
-    fi
+    echo "  Score:       $CURRENT_SCORE"
     if [ -n "$SUMMARY" ]; then
         echo ""
         echo "  Summary:"
@@ -279,23 +233,13 @@ else
         echo "$REPORT" | jq -r '.metrics | to_entries[] | "    \(.key): \(.value)"'
     fi
     echo ""
-    # Show failed items (from details if available, else from test_details)
-    DETAIL_FAILURES=$(echo "$REPORT" | jq -r '[.details[]? | select(.status != "PASSED")] | length')
+    # Show failed checks reported by the grader, if any
+    DETAIL_FAILURES=$(echo "$REPORT" | jq -r '[.details[]? | select(.status != null and .status != "PASSED")] | length')
     if [ "$DETAIL_FAILURES" -gt 0 ] 2>/dev/null; then
         echo "  Failed checks:"
-        echo "$REPORT" | jq -r '.details[] | select(.status != "PASSED") | .name' | head -20 | while read -r t; do echo "    - $t"; done
+        echo "$REPORT" | jq -r '.details[] | select(.status != null and .status != "PASSED") | .name' | head -20 | while read -r t; do echo "    - $t"; done
         if [ "$DETAIL_FAILURES" -gt 20 ] 2>/dev/null; then
             echo "    ... and $((DETAIL_FAILURES - 20)) more"
-        fi
-    else
-        FAILED_TESTS=$(echo "$REPORT" | jq -r '.test_details[]? | select(.status != "PASSED") | .name')
-        if [ -n "$FAILED_TESTS" ]; then
-            echo "  Failed tests:"
-            echo "$FAILED_TESTS" | head -20 | while read -r t; do echo "    - $t"; done
-        else
-            if [ "$TOTAL" -gt 0 ] 2>/dev/null; then
-                echo "  All tests passed!"
-            fi
         fi
     fi
     # Show full details if --details flag
@@ -364,8 +308,8 @@ def generate_evolve_prompt(
         "### How to Test Your Code\n\n"
         "- Run `sforge-submit` to submit your current code for evaluation. "
         "It will package the files, send them to the judge server, and return "
-        "results showing score, pass rate, and a summary of findings.\n"
-        "- Run `sforge-submit --details` to submit and see detailed per-test results.\n"
+        "your score and a summary of findings.\n"
+        "- Run `sforge-submit --details` to submit and see the detailed feedback.\n"
         "- Run `sforge-submit --list` to view all previous submissions and "
         "their scores for this run.\n\n"
         "You should use these regularly to check your progress and identify issues.\n"
@@ -375,15 +319,15 @@ def generate_evolve_prompt(
         "## Iterative Evaluation Mode\n\n"
         "You are working with iterative test feedback. "
         "After implementing code, you can submit your work for evaluation at any "
-        "time to see which tests pass and which fail, then iterate based on the results.\n\n"
+        "time to see your score and the grader's feedback, then iterate based on the results.\n\n"
         f"{how_to_test}"
         f"{submit_files_note}"
         f"{budget_note}"
         f"{network_note}\n"
         "### Strategy\n\n"
         "- **Implement incrementally**: Complete one module/project at a time\n"
-        "- **Read test feedback carefully**: Failed test names often hint at what's broken\n"
-        "- **Iterate**: Fix failing tests based on the feedback, then submit again\n\n"
+        "- **Read the feedback carefully**: failed checks often hint at what's broken\n"
+        "- **Iterate**: fix issues based on the feedback, then submit again\n\n"
         "### Scoring\n\n"
         "- Your **best score** across all submissions is your final score\n"
         "- You don't lose points for failed attempts — experimentation is encouraged\n\n"

@@ -1,0 +1,25 @@
+[package]
+name = "cas-factory-protocol"
+version = "0.1.0"
+edition = "2024"
+description = "Protocol types for CAS Factory client-server communication"
+license = "MIT"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+rmp-serde = "1.3"
+thiserror = "2.0"
+tokio-tungstenite = "0.28"
+futures-util = "0.3"
+tokio = { version = "1", features = ["io-util"] }
+lz4_flex = "0.12"
+tracing = "0.1"
+
+[dev-dependencies]
+serde_json = "1.0"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
+criterion = "0.6"
+
+[[bench]]
+name = "compression_bench"
+harness = false

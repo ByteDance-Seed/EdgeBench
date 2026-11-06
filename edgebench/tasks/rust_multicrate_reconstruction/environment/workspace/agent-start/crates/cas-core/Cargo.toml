@@ -1,0 +1,26 @@
+[package]
+name = "cas-core"
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Core business logic for CAS"
+license = "MIT"
+
+[dependencies]
+cas-types = { path = "../cas-types" }
+cas-store = { path = "../cas-store" }
+thiserror = "2.0"
+rusqlite = { version = "0.38", features = ["bundled", "backup"] }
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+toml = "0.9"
+# Search module dependencies
+tantivy = "0.25"
+regex = "1.11"
+# Hooks module dependencies
+glob = "0.3"
+
+[dev-dependencies]
+tempfile = "3.14"

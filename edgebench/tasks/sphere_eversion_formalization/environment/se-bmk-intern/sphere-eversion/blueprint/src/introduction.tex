@@ -1,0 +1,277 @@
+\chapter*{Introduction}
+\label{cha:intro}
+
+This project had two goals. First we wanted to check whether a proof
+assistant can do differential topology. Many people still think that
+formal mathematics are mostly suitable for algebra, combinatorics, or
+foundational studies. So we chose one of the most famous examples
+of geometric topology theorems associated to tricky geometric intuition:
+the existence of sphere eversions. Note however that we won't focus on
+any of the many videos of explicit sphere eversions. We will prove a
+general theorem which immediately implies the existence of sphere
+eversions.
+
+The second goal of this project was to experiment using a formalization
+blueprint that evolves with the project until we get a proof that has
+very closely related formal and informal presentations. A full proof (by
+normal pen and paper standards) was written before the formalization
+effort began. This proof evolved a lot during the formalization. In
+particular, the chapter on the global theory required a lot of work
+during the formalization in order to ensure that its technical lemmas
+are both fully correct and actually sufficient for our purposes.
+
+In this introduction, we will describe the mathematical context of this
+project, the main definitions and statements, and outline the proof
+strategy.
+
+Gromov observed that it's often fruitful to distinguish two kinds of geometric
+construction problems. He says that a geometric construction problem satisfies
+the $h$-principle if the only obstructions to the existence of a solution come
+from algebraic topology. In this case, the construction is called flexible,
+otherwise it is called rigid. This definition is purposely vague. We
+will see a rather general way to give it a precise meaning, but one must keep
+in mind that such a precise meaning will fail to encompass a number of
+situations that can be illuminated by the $h$-principle dichotomy point of view.
+
+The easiest example of a flexible construction problem which is not totally
+trivial and is algebraically obstructed is the deformation of immersions
+of circles into planes. Let $f_0$ and $f_1$ be two maps from $𝕊^1$ to $ℝ^2$
+that are immersions. Since $𝕊^1$ has dimension one, this mean that both
+derivatives $f_0'$ and $f_1'$ are nowhere vanishing maps from $𝕊^1$ to
+$ℝ^2$. The geometric object we want to construct is a (smooth) homotopy
+of immersions from $f_0$ to $f_1$, ie a smooth map $F \co 𝕊^1 × [0, 1] → ℝ^2$
+such that $\rst{F}{𝕊^1 × \{0\}} = f_0$, $\rst{F}{𝕊^1 × \{1\}} = f_1$, and
+each $f_p := \rst{F}{𝕊^1 × \{p\}}$ is an immersion. If such a homotopy
+exists then, $(t, p) ↦ f_p'(t)$ is a homotopy from $f_0'$ to $f_1'$ among
+maps from $𝕊^1$ to $ℝ^2 ∖ \{0\}$. Such maps have a well defined winding
+number $w(f'_i) ∈ ℤ$ around the origin, the degree of the normalized map
+$f'_i/‖f'_i‖ \co 𝕊^1 → 𝕊^1$. So $w(f_0') = w(f_1')$ is a necessary condition
+for the existence of $F$, which comes from algebraic topology.  The
+Whitney--Graustein theorem states that this necessary condition is also
+sufficient. Hence this geometric construction problem is flexible.  One
+can give a direct proof of this result, but it also
+follows from general results proved in this project (although we
+haven't formalized this consequence of our work).
+
+An important lesson from the above example is that algebraic topology
+can give us more than a necessary condition. Indeed the (one-dimensional)
+Hopf degree theorem ensures that, provided $w(f'_0) = w(f'_1)$, there
+exists a homotopy $g_p$ of nowhere vanishing maps relating $f'_0$ and
+$f'_1$. We also know from the topology of $ℝ^2$ that $f_0$ and $f_1$ are
+homotopic, say using the straight-line homotopy
+$p ↦ f_p = (1-p)f_0 + pf_0$. But there is no a priori relation
+between $g_p$ and the derivative of $f_p$ for $p ∉ \{0, 1\}$.
+So we can restate the crucial part of the
+Whitney--Graustein theorem as: there is a homotopy of immersion from
+$f_0$ to $f_1$ as soon as there is (a homotopy from $f_0$ to $f_1$) and
+a homotopy from $f_0'$ to $f_1'$ among nowhere vanishing maps. The
+parenthesis in the previous sentence indicated that this condition is
+always satisfied, but it is important to keep in mind for
+generalizations. Gromov says that such a homotopy of uncoupled pairs
+$(f, g)$ is a formal solution of the original problem.
+
+One can generalize this discussion of uncoupled maps replacing a
+map and its derivative for maps from a manifold $M$
+to a manifold $N$. The so called $1$-jet space $J^1(M, N)$ is the
+space of triples $(m, n, φ)$ with $m ∈ M$, $n ∈ N$, and
+$φ ∈ \Hom(T_mM, T_nN)$, the space of linear maps from $T_mM$ to $T_nN$.
+One can define a smooth manifold structure on $J^1(M, N)$, of dimension
+$\dim(M) + \dim(N) + \dim(M)\dim(N)$ which fibers over $M$, $N$ and
+their product $J^0(M, N) := M × N$. Beware that the notation $(m, n, φ)$
+does not mean that $J^1(M, N)$ is a product of three manifolds, the space
+where $φ$ lives depends on $m$ and $n$.
+Any smooth map $f \co M → N$ gives rise to a section $j^1f$ of
+$J^1(M, N) → M$ defined by $j^1f(m) = (m, f(m), T_m f)$. Such a section is
+called a \emph{holonomic section} of $J^1(M, N)$.
+In the Whitney--Graustein example, we use the canonical trivialization of
+$T𝕊^1$ and $Tℝ^2$ to represent $j^1f$ has a pair of maps $(f, f')$. The
+role played by $(f, g)$ in this example is played in general by sections
+of $J^1(M, N) → M$ which are not necessarily holonomic.
+
+One can generalize this discussion to $J^r(M, N)$ which remembers
+derivatives of maps up to order $r$ for some given $r ≥ 0$. One can also
+consider sections of an arbitrary bundle $E → M$ instead of functions
+from $M$ to $N$, which are sections of the trivial bundle $M × N → N$.
+But the case of $J^1(M, N)$ is sufficient for our purposes.
+
+\begin{definition-intro}
+  A first order differential relation $\Rel$ for maps from $M$ to
+  $N$ is a subset of $J^1(M, N)$. A solution of $\Rel$ is a function
+  $f \co M \to N$ such that $j^1f(m)$ is in $\Rel$ for all $m$.
+  A \emph{formal solution} of $\Rel$ is a non-necessarily holonomic
+  section of $J^1(M, N) → M$ which takes value in $\Rel$.
+
+  The partial differential relation $\Rel$ satisfies the $h$-principle
+  if any formal solution $σ$ of $\Rel$ is homotopic, among formal
+  solutions, to some holonomic one $j^1f$.
+\end{definition-intro}
+
+For instance, an immersion of $M$ into $N$ is a solution of
+\[
+\Rel = \{(m, n, φ) ∈ J^1(M, N) \;|\; φ \text{ is injective}\}.
+\]
+As we saw with
+the Whitney--Graustein problem, we are not only interested to individual
+solutions, but also in families of solutions. In differential
+topology, a smooth family of maps between manifolds $X$ and $Y$ is a smooth map
+$h \co P × X → Y$ seen as the collection of maps $h_p \co x ↦ h(p, x)$. Here $P$
+stands for ``parameter space''. A smooth family of sections of $E → X$ is a
+smooth family of maps $σ \co P × X → E$ such that each $σ_p$ is a section.
+
+In such a case it is important that we start with a family of formal solutions
+that is holonomic for some values of the parameter and we don't modify it for
+those parameters. In the curve example $P = [0, 1]$, the formal solution is
+holonomic for parameters $0$ and $1$, and we want to keep the start and end
+curves. In this work we don't use manifolds with boundary when it is not
+necessary so we rather use $ℝ$ as a parameter space.
+
+More generally it can also happen that a family of formal solutions
+$σ : P × M → J^1(M, N)$ has the property that $σ_p$ is holonomic at $m ∈ M$ for
+some values of $p$ and $m$ and we want to preserve $σ$ near the corresponding
+set in $P × M$. This leads to the following definition.
+
+
+\begin{definition-intro}
+  A partial differential relation $\Rel ⊂ J^1(M, N)$ satisfies the relative and
+  parametric $h$-principle if every family of formal solutions
+  $σ \co M × P → J^1(M, N)$ which are holonomic for $(p, m)$ near some closed
+  set $C ⊂ P × M$, is homotopic to a family of holonomic sections, and this
+  homotopy can be chosen constant near $C$.
+\end{definition-intro}
+
+One can also insist on the deformed solution to be $C^0$-close to the original
+one. In this case one talks about a $C^0$-dense $h$-principle.
+
+Using this vocabulary, we can state the Smale-Hirsch immersion theorem as saying
+that the relation of immersions satisfies all forms of the $h$-principle provided
+the dimension of the target manifold is larger than the dimension of the source.
+
+This theorem covers the Whitney--Graustein theorem (in its second
+form, assuming the existence of a homotopy between derivatives). But there are
+much less intuitive applications. The most famous one is the existence of
+sphere eversions: one can ``turn $𝕊^2$ inside-out among immersions of $𝕊^2$ into
+$ℝ^3$).
+
+\begin{corollary-intro}[Smale 1958]
+	There is a homotopy of immersion of $𝕊^2$ into $ℝ^3$ from the inclusion map to
+	the antipodal map $a \co q ↦ -q$.
+\end{corollary-intro}
+
+The reason why this is turning the sphere inside-out is that $a$ extends as
+a map from $ℝ^3 ∖ \{0\} → ℝ^3 ∖ \{0\}$ by
+\[
+	\hat{a} \co q ↦ -\frac{1}{‖q‖^2}q
+\]
+which exchanges the interior and exterior of $𝕊^2$. More abstractly, one can say
+the normal bundle of $𝕊^2$ is trivial, hence one can extend $a$ to a tubular
+neighborhood of $𝕊^2$ as an orientation preserving map. Since $a$ is orientation
+reversing, any such extension will be reversing co-orientation.
+
+\begin{proof}[Proof of the sphere eversion corollary]
+	We denote by $ι$ the inclusion of $𝕊^2$ into $ℝ^3$.
+	We set $j_t = (1-t)ι	+ ta$. This is a homotopy from $ι$ to $a$ (but not an
+	immersion for $t=1/2$).
+  We need to check there is no obstruction to building a homotopy of formal
+  solutions above those maps. One could show that the relevant homotopy group
+  (replacing $π_1(𝕊^1)$ from the Whitney--Graustein example) is
+  $\pi_2(\SO_3(ℝ))$. This group is trivial, hence there is no obstruction. But
+  actually we can write an explicit homotopy here, without computing
+  $\pi_2(\SO_3(ℝ))$.  Using the canonical trivialization of the tangent
+	bundle of $ℝ^3$, we can set, for $(q, v) ∈ T𝕊^2$,
+	$G_t(q, v) = \mathrm{Rot}_{Oq}^{πt}(v)$, the rotation around axis $Oq$ with
+	angle $πt$. The family $σ \co t ↦ (j_t, G_t)$ is a homotopy of formal immersions
+	relating $j^1ι$ to $j^1a$. The above theorem ensures this family is homotopic,
+	relative to $t = 0$ and $t = 1$, to a family of holonomic formal immersions,
+	ie a family $t ↦ j^1f_t$ with $f_0 = ι$, $f_1 = a$, and each $f_t$ is an
+	immersion.
+\end{proof}
+
+The Smale-Hirsch theorem and its above corollary follows from a more general theorem:
+the $h$-principle for open and ample first order differential relations (see
+below). We will prove this theorem using a technique which is even more
+general: convex integration. For instance this technique also underlies the
+constructions of paradoxical isometric embeddings, which could be a nice
+follow-up project.
+
+We'll end this introduction by describing the key construction of convex
+integration, since it is very nice and elementary. Convex integration
+was invented by Gromov around 1970, inspired in particular by the
+$C^1$ isometric embedding work of Nash and the original proof of
+flexibility of immersions. This term is pretty vague however, and there
+are several different implementations. The newest one, and by far the
+most efficient one, is Mélanie Theillière's corrugation process from
+2018. And this is what we will use.
+
+Let $f$ be a map from $ℝ^n$ to $ℝ^m$. Say we want to turn $f$ into a
+solution of some partial differential relation. For instance if we are
+interested in immersions, we want to make sure its differential is everywhere
+injective. We will ensure this by tackling each partial derivative in turn. In
+the immersion example, we first make sure $∂_1f(x) := ∂f(x)/∂x_1$ is non-zero
+for all $x$. Then we make sure $∂_2f(x)$ is not colinear to $∂_1f(x)$. Then we
+make sure $∂_3f(x)$ is not in the plane spanned by the two previous
+derivatives, etc\dots\ until all $n$ partial derivatives are everywhere
+linearly independent.
+
+In general, what happens is that, for each number $j$ between $1$ and
+$n$, we wish $∂_jf(x)$ could live in some open subset
+$Ω_x ⊂ ℝ^m$. Assume there is a smooth family of loops $γ \co ℝ^n × 𝕊^1 → ℝ^m$ such
+that each $γ_x$ takes values in $Ω_x$, and has average value
+$\int_{𝕊^1} γ_x = ∂_j f(x)$. Obviously such loops
+can exist only if $∂_jf(x)$ is in the convex hull of $Ω_x$,
+and we will see this condition is
+almost sufficient. In the immersion case, this convex hull condition
+will always be met because, from the above description, we see that
+$Ω_x$ will always be the complement of a linear subspace with
+codimension at least two.
+
+For some large positive $N$, we replace $f$ by the new map
+\[
+  x ↦ f(x) + \frac1N  ∫_0^{Nx_j} \left[γ_x(s) - ∂_jf(x)\right]ds.
+\]
+
+A wonderfully easy exercise shows that, provided $N$ is large enough,
+we have achieved $∂_j f(x) ∈ Ω_x$, almost without modifying
+derivatives $∂_i f(x)$ for $i ≠ j$, and almost without moving
+$f(x)$. See \ref{prop:theilliere} for a precise statement.
+This technique is called convex integration
+since we are taking an integral under the assumption that
+$∂_jf(x)$ is in the convex hull of $Ω_x$.
+
+In addition, if we assume that $γ_x$ is constant (necessarily with value
+$∂_j f(x)$) for $x$ near some subset $K$ where
+$∂_j f(x)$ was already good, then nothing changed on $K$ since the
+integrand vanishes there. It is also easy to damp out this modification
+by multiplying the integral by a cut-off function. So this is a very
+local construction, and it isn't obvious how the absence of homotopical
+obstruction, embodied by the existence of a formal solution, should
+enter the discussion. The answer is that is essentially provides a way
+to coherently choose base points for the $γ_x$ loops.
+
+Now that we've seen how convex hulls enter the discussion we can provide one
+last definition and state the actual main theorem that we formalized.
+
+\begin{definition-intro}
+  A relation $\Rel ⊂ J^1(M, N)$ is ample if, for every $(x, y, φ) ∈ \Rel$ and
+  every hyperplane $H ⊂ T_xM$, the convex hull of the connected component of $φ$ in
+  \[
+    \left\{ψ ∈ \Hom(T_xM, T_yN) \;|\; \rst{ψ}{H} = \rst{φ}{H} \text{ and } (x, y, ψ) ∈ \Rel\right\}
+  \]
+  is the whole set of $ψ$ such that $\rst{ψ}{H} = \rst{φ}{H}$.
+\end{definition-intro}
+
+We can now state our goal in its full glory.
+
+\begin{theorem-intro}[Gromov]
+  For any manifolds $M$ and $N$, any relation $\Rel ⊂ J^1(M, N)$ that is open
+  and ample satisfies the full $h$-principle (relative, parametric and $C^0$-dense).
+\end{theorem-intro}
+
+\Cref{chap:loops} provides the loops supply. \Cref{chap:local} then
+discusses the local theory, including the key construction above,
+and \cref{chap:global} finally moves to manifolds, and proves the main
+theorem and its sphere eversion corollary.
+\Cref{chap:local_eversion} explains how the first two chapters are already
+enough to derive Smale's theorem, although in a slightly less natural way than
+using the manifold case. This served as an intermediate target in the
+formalization, and can be used for elementary teaching since it does not
+require any theory of manifolds.

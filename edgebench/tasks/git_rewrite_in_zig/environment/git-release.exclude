@@ -1,0 +1,18 @@
+# Paths of the git-2.47.0 release tarball that are absent from both v1 trees
+# (git-src and git-test-suite). The first group is the repo's top-level dotfiles,
+# the second the files that exist only in the release tarball (not in git's tree),
+# the last an empty submodule placeholder directory.
+.cirrus.yml
+.clang-format
+.editorconfig
+.gitattributes
+.github
+.gitignore
+.gitlab-ci.yml
+.gitmodules
+.mailmap
+.tsan-suppressions
+configure
+version
+git-gui/version
+sha1collisiondetection

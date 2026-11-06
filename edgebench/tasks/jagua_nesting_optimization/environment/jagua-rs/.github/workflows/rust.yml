@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - '**.rs'
+      - '**.toml'
+      - '**.yml'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - '**.rs'
+      - '**.toml'
+      - '**.yml'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  jagua-rs-ci:
+    name: jagua-rs CI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: fmt
+        run: cargo fmt --all -- --check
+      - name: clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: build all features
+        run: cargo build --all-targets --all-features
+      - name: build no features
+        run: cargo build --all-targets --no-default-features
+      - name: test
+        run: cargo test --verbose
+      - name: run README example
+        run: cargo run --package lbf --profile release -- -p spp -i assets/swim.json -c assets/config_lbf.json -s solutions

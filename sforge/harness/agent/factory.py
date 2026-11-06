@@ -19,8 +19,8 @@ from __future__ import annotations
 from sforge.harness.agent.base import Agent
 from sforge.harness.config import SForgeConfig
 
-from sforge.harness.agent.claude_code import ClaudeCode2_1_214Agent, ClaudeCodeAgent
-from sforge.harness.agent.codex import Codex0_145_0Agent, CodexAgent
+from sforge.harness.agent.claude_code import ClaudeCodeAgent
+from sforge.harness.agent.codex import CodexAgent
 from sforge.harness.agent.opencode import OpenCodeAgent
 
 # ---------------------------------------------------------------------------
@@ -29,9 +29,7 @@ from sforge.harness.agent.opencode import OpenCodeAgent
 
 _REGISTRY: dict[str, type[Agent]] = {
     "claude-code": ClaudeCodeAgent,
-    "claude-code-2.1.214": ClaudeCode2_1_214Agent,
     "codex": CodexAgent,
-    "codex-0.145.0": Codex0_145_0Agent,
     "opencode": OpenCodeAgent,
 }
 
@@ -59,7 +57,7 @@ def list_agent_classes() -> list[type[Agent]]:
 # ---------------------------------------------------------------------------
 
 
-def create_agent(name: str, config: SForgeConfig) -> Agent:
-    """Create an :class:`Agent` instance for the named agent."""
-    cls = get_agent_class(name)
-    return cls(config)
+def create_agent(spec: str, config: SForgeConfig) -> Agent:
+    """Create an agent from ``name`` or ``name@version`` (e.g. ``codex@0.145.0``)."""
+    name, _, version = spec.partition("@")
+    return get_agent_class(name)(config, version or None)

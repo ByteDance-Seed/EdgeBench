@@ -1,0 +1,41 @@
+[package]
+name = "cas-tui-test"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "TUI testing framework with PTY-based terminal app runner"
+license = "MIT"
+
+[dependencies]
+portable-pty = "0.9"
+regex = "1"
+thiserror = "2.0"
+tokio = { version = "1.42", features = ["sync", "time", "io-util", "rt"] }
+vte = "0.15"
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+libc = "0.2"
+
+[[bin]]
+name = "test_tui"
+path = "src/bin/test_tui.rs"
+
+[[test]]
+name = "tui_e2e_test"
+path = "tests/tui_e2e_test.rs"
+required-features = ["test-tui"]
+
+[dependencies.ratatui]
+version = "0.30"
+optional = true
+
+[dependencies.crossterm]
+version = "0.29"
+optional = true
+
+[features]
+test-tui = ["ratatui", "crossterm"]
+
+[dev-dependencies]
+tempfile = "3.14"
+tokio = { version = "1.42", features = ["rt-multi-thread", "macros"] }

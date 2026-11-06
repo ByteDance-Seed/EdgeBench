@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sforge"
-version = "1.1.0"
+version = "2.0.0"
 description = "SForge: Evaluation harness for frontier agents"
 readme = "README.md"
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.11,<3.14"
 license = { text = "Apache-2.0" }
 authors = [{ name = "ByteDance Seed" }]
 keywords = ["evaluation", "benchmark", "code-agent", "llm"]
@@ -26,9 +26,9 @@ dependencies = [
     "uvicorn[standard]",
     "jinja2",
     "requests",
+    "httpx",
     "pyyaml>=6.0",
     "typing_extensions>=4.0",
-    "huggingface-hub>=0.20",
 ]
 
 [project.optional-dependencies]

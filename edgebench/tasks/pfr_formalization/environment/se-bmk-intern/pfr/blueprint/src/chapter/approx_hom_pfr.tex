@@ -1,0 +1,124 @@
+\chapter{Approximate homomorphism version of PFR}
+
+\begin{definition}[Additive energy]
+  \label{energy-def}
+  \lean{Finset.addEnergy'}
+  \leanok
+  If $G$ is a group, and $A$ is a finite subset of $G$, the \emph{additive energy} $E(A)$ of $A$
+  is the number of quadruples $(a_1,a_2,a_3,a_4) \in A^4$ such that $a_1+a_2 = a_3+a_4$.
+\end{definition}
+
+\begin{lemma}[Cauchy--Schwarz bound]
+  \label{cs-bound}
+  \uses{energy-def}
+  \lean{Finset.card_sq_le_card_mul_addEnergy'}
+  \leanok
+
+  If $G$ is a group, $A,B$ are finite subsets of $G$, then
+  $$E(A) \geq \frac{|\{ (a,a') \in A \times A: a+a' \in B \}|^2}{|B|}.$$
+\end{lemma}
+\begin{proof}
+  \leanok
+
+  If $B$ is empty then the claim is trivial (with the Lean convention $0/0$),
+  so without loss of generality $B$ is non-empty.  We can rewrite
+  $$ |\{ (a,a') \in A \times A: a+a' \in B \}| = \sum_{b \in B} r(b)$$
+  where $r: G \to \N$ is the counting function
+  $$ r(b) := |\{ (a,a') \in A \times A: a+a' = b \}|.$$
+  From double counting we have
+  $$ \sum_{b \in G} r(b)^2 = E(A).$$
+  The claim now follows from the Cauchy--Schwarz inequality
+  $$ (\sum_{b \in B} r(b))^2 \leq |B| \sum_{b \in B} r(b)^2.$$
+\end{proof}
+
+\begin{lemma}[Balog--Szemer\'edi--Gowers lemma]
+  \label{bsg}
+  \lean{BSG}
+  \uses{energy-def}
+  \leanok
+
+  Let $G$ be an abelian group, and let $A$ be a finite non-empty set
+  with $E(A) \geq |A|^3 / K$ for some $K \geq 1$.
+  Then there is a subset $A'$ of $A$ with $|A'| \geq |A| / (C_1 K^{C_2})$ and
+  $|A'-A'| \leq C_3 K^{C_4} |A|$, where (provisionally)
+  $$C_1 = 2^4, C_2 = 1, C_3 = 2^{10}, C_4 = 5.$$
+\end{lemma}
+\begin{proof}
+  \leanok
+
+  See \url{https://terrytao.files.wordpress.com/2024/01/simplebsg.pdf}.
+\end{proof}
+
+\begin{theorem}[Approximate homomorphism form of PFR]\label{approx-hom-pfr}\lean{approx_hom_pfr}\leanok Let $G,G'$ be finite abelian $2$-groups.
+  Let $f: G \to G'$ be a function, and suppose that there are at least $|G|^2 / K$ pairs $(x,y) \in G^2$ such that
+$$ f(x+y) = f(x) + f(y).$$
+Then there exists a homomorphism $\phi: G \to G'$ and a constant $c \in G'$
+such that $f(x) = \phi(x)+c$ for at least $|G| / (2 ^ {144} * K ^ {122})$
+values of $x \in G$.
+\end{theorem}
+
+\begin{proof}\uses{goursat, cs-bound, bsg, pfr_aux-improv}\leanok Consider the graph $A \subset G \times G'$ defined by
+$$ A := \{ (x,f(x)): x \in G \}.$$
+Clearly, $|A| = |G|$.  By hypothesis, we have $a+a' \in A$ for at least
+$|A|^2/K$ pairs $(a,a') \in A^2$. By \Cref{cs-bound}, this implies that $E(A)
+\geq |A|^3/K^2$.  Applying \Cref{bsg}, we conclude that there exists a subset
+$A' \subset A$ with $|A'| \geq |A|/C_1 K^{2C_2}$ and $|A'+A'| \leq C_1C_3
+K^{2(C_2+C_4)} |A'|$. Applying \Cref{pfr-9-aux'}, we may find a subspace $H
+\subset G \times G'$ such that $|H| / |A'| \in [L^{-8}, L^{8}]$ and a subset
+$c$ of cardinality at most $L^5 |A'|^{1/2} / |H|^{1/2}$ such that $A'
+\subseteq c + H$, where $L =  C_1C_3 K^{2(C_2+C_4)}$. If we let $H_0,H_1$ be
+as in \Cref{goursat}, this implies on taking projections the projection of
+$A'$ to $G$ is covered by at most $|c|$ translates of $H_0$.  This implies
+that
+$$ |c| |H_0| \geq |A'|;$$
+since $|H_0| |H_1| = |H|$, we conclude that
+$$ |H_1| \leq |c| |H|/|A'|.$$
+
+By hypothesis, $A'$ is covered by at most $|c|$ translates of $H$, and hence
+by at most $|c| |H_1|$ translates of $\{ (x,\phi(x)): x \in G \}$.  As $\phi$
+is a homomorphism, each such translate can be written in the form $\{
+(x,\phi(x)+c): x \in G \}$ for some $c \in G'$. The number of translates is
+bounded by
+$$
+|c|^2 \frac{|H|}{|A'|} \leq \left(L^5 \frac{|A'|^{1/2}}{|H|^{1/2}}\right)^2 \frac{|H|}{|A'|} = L^{10}.
+$$
+
+By the pigeonhole principle, one of these translates must then contain at
+least $|A'|/L^{10} \geq |G| / (C_1C_3 K^{2(C_2+C_4)})^{10} (C_1 K^{2C_2})$
+elements of $A'$ (and hence of $A$), and the claim follows.
+\end{proof}
+
+With a bit more effort, we can remove the constant term $c$, at the cost of reducing the set of agreement slightly.  We need some preliminary lemmas.
+
+\begin{lemma}[Duality]\label{gdual}\lean{card_of_dual}\leanok Let $G$ be a finite abelian $2$-group.  Then the finite abelian $2$-group $\mathrm{Hom}(G,\Z/2\Z)$ of homomorphisms from $G$ to $\Z/2\Z$ has the same order as $G$.
+\end{lemma}
+
+\begin{proof}\leanok By the classification of finite abelian groups, $G$ is isomorphic to $(\Z/2\Z)^n$.  Then $\mathrm{Hom}(G,\Z/2\Z)$ is isomorphic to $(\Z/2\Z)^n$ as well, and hence has the same order.
+\end{proof}
+
+\begin{lemma}[Counting]\label{gcount}\lean{card_of_dual_constrained}\leanok Let $G$ be a finite abelian $2$-group, and let $x \in G$ be non-zero.  Then there are $|G|/2$ homomorphisms $\phi: G \to \Z/2\Z$ such that $\phi(x) = 1$.
+\end{lemma}
+
+\begin{proof}\uses{gdual} \leanok The map $\phi \mapsto \phi(x)$ is a homomorphism from $\mathrm{Hom}(G,\Z/2\Z)$ to $\Z/2\Z$, and by Lemma \ref{gdual} the kernel has order equal to the order of $G / \{0,x\}$, which is $|G|/2$.  Then the preimage of $1$ must also be of order $|G|/2$.
+\end{proof}
+
+\begin{lemma}[Slicing]\label{gslice}\lean{card_of_slice}\leanok  Let $G$ be a finite abelian $2$-group, and let $A$ be a subset of $G$.  Then there exists a homomorphism $\phi: G \to \Z/2\Z$ such that $|A \cap \phi^{-1}(1)| \geq (|A|-1)/2$.
+\end{lemma}
+
+\begin{proof}\uses{gdual, gcount}\leanok  We have
+  $$ \sum_{\phi \in \mathrm{Hom}(G,\Z/2\Z)} |A \cap \phi^{-1}(1)| = \sum_{x \in A} |\{ \phi \in \mathrm{Hom}(G,\Z/2\Z): \phi(x) = 1 \}|$$
+  $$ \geq (|A|-1) |G|/2$$
+  thanks to Lemma \ref{gcount}. The claim now follows from Lemma \ref{gdual} and the pigeonhole principle.
+\end{proof}
+
+\begin{corollary}[Approximate homomorphism form of PFR, no constant term]\label{approx-hom-pfr-no-const}\lean{approx_hom_pfr'}\leanok Let $G,G'$ be finite abelian $2$-groups.
+  Let $f: G \to G'$ be a function, and suppose that there are at least $|G|^2 / K$ pairs $(x,y) \in G^2$ such that
+$$ f(x+y) = f(x) + f(y).$$
+Then there exists a homomorphism $\phi'': G \to G'$
+such that $f(x) = \phi''(x)$ for at least $(|G| / (2 ^ {172} * K ^ {146}) - 1)/2$ values of $x \in G$.
+\end{corollary}
+
+\begin{proof}\uses{approx-hom-pfr, gslice}\leanok By Theorem \ref{approx-hom-pfr}, there exists a homomorphism $\phi: G \to G'$ and a constant $c \in G'$ such that the set $A := \{ x \in G: f(x) = \phi(x) + c\}$ has cardinality at least $|G| / (2 ^ {172} * K ^ {146})$.  By Lemma \ref{gslice}, there exists a homomorphism $\phi': G \to \Z/2\Z$ such that
+$$ |A \cap \phi'^{-1}(1)| \geq (|A|-1)/2 \geq |G| / (2 ^ {173} * K ^ {146}).$$
+Then the claim follows by taking $\phi'' = \phi + \phi' \bullet c$ (where we view $G'$ as a $\Z/2\Z$-module).
+\end{proof}

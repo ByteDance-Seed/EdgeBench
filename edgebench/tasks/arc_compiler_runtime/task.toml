@@ -1,0 +1,36 @@
+schema_version = 0
+id = "arc_compiler_runtime"
+name = "Arc Compiler Runtime"
+category = "Systems & Software Engineering"
+language = "Python"        # v1 tasks.jsonl value (base image); the submission itself is JavaScript run by Node 20
+description = "Implement a complete TypeScript compiler pipeline (lexer, parser, type checker, code generator) for a novel programming language defined by specification documents."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python"            # bases/python (python:3.11 + git curl jq build-essential); nodejs/npm (Debian) + npm ci added by the task
+platform = "linux/amd64"
+cwd = "/home/workspace/arc-compiler-runtime-implementation/agent-start"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["compiler/src/"]
+exclude = ["compiler/dist/", "tests/", "node_modules/", ".git/", ".github/", ".DS_Store", "*.map"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 1500
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# score_hidden.sh runs 21 hidden suites one after another, each under `timeout 90`; eval_hidden.py
+# gives the whole scorer 1400 s.
+
+[score]
+direction = "maximize"
+# raw score = score_hidden.sh SCORE = 100 * WEIGHTED_PASSED / WEIGHTED_TOTAL (2970), two decimals;
+# v1 rescale was linear 0..100, so score_0_100 == raw score.
+rescale = { kind = "linear", lower = 0.0, upper = 100.0 }

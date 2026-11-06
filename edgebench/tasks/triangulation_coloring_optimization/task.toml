@@ -1,0 +1,35 @@
+schema_version = 0
+id = "triangulation_coloring_optimization"
+name = "Triangulation Coloring Optimization"
+category = "Combinatorial Optimization"
+language = "Python"
+description = "Minimize a cost function over a triangulation by jointly recoloring vertices and flipping edges, where the dominant term is a quadratic penalty on monochromatic (``ugly'') triangles."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python310"
+platform = "linux/amd64"
+cwd = "/home/workspace/triangulation_coloring"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["solution.py"]
+exclude = []
+
+[judge]
+cmd = "python3 /judge/grade.py"
+timeout_sec = 1200
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# eval_triangulation_coloring.py runs the 10 cases 8 at a time, each `python3 solution.py` under a
+# 30 s wall-clock timeout. Scores of time-limited (anytime) solutions depend on host CPU speed and
+# load; see NOTES.md.
+
+[score]
+direction = "minimize"
+rescale = { kind = "piecewise_log_min", baseline = 6102378.0, rank30 = 3372655.0, rank1 = 200033.0, super_anchor = 100016.5 }

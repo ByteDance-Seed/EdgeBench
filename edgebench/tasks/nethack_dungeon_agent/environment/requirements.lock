@@ -1,0 +1,20 @@
+# Python packages of the v1 images (pip freeze of the published judge/work images).
+# v1 setup: pip install --no-cache-dir 'setuptools<70' wheel   -> setuptools 69.5.1 (wheel 0.45.1 already in the base)
+#           pip install --no-cache-dir 'nle==1.2.0'           -> nle + its dependency closure below
+# Wheels from public PyPI; pip checks every sha256 (--require-hashes).
+cloudpickle==3.1.2 \
+    --hash=sha256:9acb47f6afd73f60dc1df93bb801b472f05ff42fa6c84167d25cb206be1fbf4a  # cloudpickle-3.1.2-py3-none-any.whl
+Farama-Notifications==0.0.6 \
+    --hash=sha256:f84839188efa1ce5bb361c2a84881b2dc2c0d0d7fb661ff00421820170930935  # farama_notifications-0.0.6-py3-none-any.whl
+gymnasium==1.0.0 \
+    --hash=sha256:b6f40e1e24c5bd419361e1a5b86a9117d2499baecc3a660d44dfff4c465393ad  # gymnasium-1.0.0-py3-none-any.whl
+nle==1.2.0 \
+    --hash=sha256:5bbc7bc2fc3b4f2769c25acab99603146222e3b2fd3a82a514a6d8542c985170  # nle-1.2.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+numpy==2.2.6 \
+    --hash=sha256:fc7b73d02efb0e18c000e9ad8b83480dfcd5dfd11065997ed4c6747470ae8915  # numpy-2.2.6-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+pybind11==3.0.4 \
+    --hash=sha256:961720ee652da51d531b7b2451a6bd2bc042b0106e6d9baa48ecb7d58034ce63  # pybind11-3.0.4-py3-none-any.whl
+setuptools==69.5.1 \
+    --hash=sha256:c636ac361bc47580504644275c9ad802c50415c7522212252c033bd15f301f32  # setuptools-69.5.1-py3-none-any.whl
+typing_extensions==4.15.0 \
+    --hash=sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548  # typing_extensions-4.15.0-py3-none-any.whl

@@ -1,0 +1,44 @@
+schema_version = 0
+id = "git_rewrite_in_zig"
+name = "Git Rewrite In Zig"
+category = "Systems & Software Engineering"
+language = "C++"          # v1 tasks.jsonl value, kept verbatim (the agent writes Zig)
+description = "Reimplement git as a drop-in Zig binary producing identical CLI output, exit codes, and repository state as the C reference implementation. The C source is available for reading but cannot be compiled."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "cpp"               # bases/cpp; Zig 0.14.0 (sha256-pinned) + task apt packages added by environment/setup.sh
+platform = "linux/amd64"
+cwd = "/home/workspace/zig-port"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["."]
+exclude = [
+  ".git",
+  "zig-cache",
+  "zig-out",
+  ".zig-cache",
+  "zig-port/zig-cache",
+  "zig-port/zig-out",
+  "zig-port/.zig-cache",
+]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 7200
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# test.sh builds git's test helpers with make -j$(nproc) and runs every t[0-9]*.sh with xargs -P
+# $(nproc), each under `timeout 120`, so the result can depend on the host's core count and load
+# (see NOTES.md).
+
+[score]
+direction = "maximize"
+# raw score = compute_reward.py round(total_passed / 29075, 6) (TOTAL_SCORE); v1 rescale linear 0..1.
+rescale = { kind = "linear", lower = 0.0, upper = 1.0 }

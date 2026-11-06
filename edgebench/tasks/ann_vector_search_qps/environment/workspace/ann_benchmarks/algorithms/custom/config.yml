@@ -1,0 +1,10 @@
+float:
+  euclidean:
+    custom:
+      docker-tag: ann-benchmarks-custom
+      module: ann_benchmarks.algorithms.custom
+      constructor: Custom
+      base-args: ["@metric"]
+      run-groups:
+        default:
+          args: []

@@ -1,0 +1,766 @@
+\chapter{Global theory of open and ample relations}
+\label{chap:global}
+
+\section{Preliminaries}
+
+\subsection{Localisation data}%
+\label{sub:localisation_data}
+
+In order to conveniently globalize the theory of the previous chapter, we'll
+need a number of constructions and lemmas. By definition, manifolds are covered
+by open sets that are diffeomorphic to open sets of vector spaces. But for us it is
+slightly more convenient to work with smooth open embeddings of whole vector spaces.
+Here a smooth open embedding from a manifold $X$ to a manifold $Y$ is a smooth map
+$φ : X → Y$ which is open and for which there is some smooth $ψ : φ(X) → X$ such that
+$ψ ∘ φ = \Id_X$ (hence also and $φ ∘ ψ = \Id_{φ(X)}$).
+Remember that a family of sets $V_i$ in a topological space $X$ is locally finite if
+every point of $X$ has a neighborhood that intersects only finitely many $V_i$.
+Note that in this whole text, every manifold is paracompact by definition. In
+particular their topology are metrizable and we will arbitrarily fix a
+compatible distance function on every manifold.
+
+\begin{definition}
+  \label{def:update}
+  \lean{OpenSmoothEmbedding.update}
+  \leanok
+  Given smooth open embeddings $φ : X → M$ and $ψ : Y → N$, the update of a map
+  $f : M → N$, using a map $g : X → Y$
+  is the map from $M$ to $N$ sending $m$ to $ψ ∘ g ∘ φ⁻¹(m)$ if
+  $m ∈ φ(X)$ and $f(m)$ otherwise.
+\end{definition}
+
+\begin{lemma}
+  \label{lem:smooth_updating}
+  \uses{def:update}
+  \lean{OpenSmoothEmbedding.contMDiff_update}
+  \leanok
+  Let $φ : P × X → M$ and $ψ : P × Y → N$ be families of smooth open embeddings.
+  Let $K$ be a set in $X$ whose image in $M$ is closed. Let $f : P × M → N$
+  and $g : P × X → Y$ be
+  smooth families of maps. If for each $p$ and for every $x$ not in $K$,
+  $f_p(φ(x)) = ψ(g_p(x))$ then the family of maps $f_p$ updated using $g_p$ is
+  smooth from $P × M$ to $N$.
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  Note that $P × M = (P × φ(X)) ∪ (P × φ(K)^c)$. Both
+  those sets are open and the updated maps coincide with
+  $(p, m) ↦ ψ ∘ g_p ∘ φ⁻¹(m)$ on the first one and $f$ on the second one.
+\end{proof}
+
+\begin{lemma}
+  \label{lem:dist_updating}
+  \uses{def:update}
+  \lean{OpenSmoothEmbedding.dist_update}
+  \leanok
+  Let $φ : X → M$ and $ψ : Y → N$ be smooth open embeddings.
+  Let $K_X$ and $K_P$ be compact sets in $X$ and $P$.
+  Let $f : P × M → N$ be a continuous family of
+  maps such that, for each $p$, $f_p(φ(X)) ⊂ ψ(Y)$.
+  For every continuous function $ε : M → ℝ_{> 0}$, there is some positive
+  number $η$ such that, for every map $g : P × X → Y$ and every $(p, p', x)$ in
+  $K_P × K_P × K_X$, $d(g_{p'}(x), ψ⁻¹∘f_p∘φ(x)) < η$ implies
+  $d(f'_{p'}(φ(x)), f_p(φ(x))) < ε(φ(x))$ where $f'$ is obtained by updating $f$
+  using $g$.
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  Let $ε$ be a positive continuous function on $M$. Since $K_X$ is compact, we get
+  a positive number $ε₀$ such that $ε(m) ≥ ε₀$ for each $m$ in $K_X$. We denote by
+  $K₁$ the closed $1$-thickening of the image of $K_P × K_X$ under
+  $(p, x) ↦ ψ⁻¹∘f_p∘φ(x)$. This is a compact set
+  so $ψ$ is uniformly continuous on $K₁$ and we get a positive $τ$ such that
+  for all $x$ and $y$ in $K₁$, $d(x, y) < τ ⇒ d(ψ(x), ψ(y)) < ε₀$.
+
+  We now prove that $η = \min(τ, 1)$ is suitable. Fix $(p, p', x)$ in
+  $K_P × K_P × K_X$ such that $d(g_{p'}(x), ψ⁻¹∘f_p∘φ(x)) < η$.
+  In particular $d(g_{p'}(x), ψ⁻¹∘f_p∘φ(x)) < 1$ hence $g_{p'}(x)$ is in $K₁$. Since
+  $ψ⁻¹∘f_p∘φ(x)$ is also in $K₁$ and $d(g_{p'}(x), ψ⁻¹∘f∘φ(x)) < τ$, we get
+  $d(ψ∘ g_{p'}(x), ψ ∘ ψ⁻¹∘f_p∘φ(x)) < ε₀$. This precisely means that
+  $d(f'_{p'}(φ(x)), f_p(φ(x)) < ε₀$. Since $(p, p', x)$ is in $K_P × K_P × K_X$,
+  this is less than $ε(m)$.
+\end{proof}
+
+In order to handle in a uniform way compact and non-compact manifolds, we will
+index sequences by the family of sets $\IT{N}$ defined for each natural number
+$N$ by:
+  \[
+    \IT{N} =
+    \begin{cases}
+      ℕ \text{ if $N = 0$}\\
+      \{0, \dots, N - 1\} \text{otherwise}
+    \end{cases}
+  \]
+
+\begin{lemma}
+  \label{lem:nice_atlas}
+  \lean{nice_atlas}
+  \uses{def:index_type}
+  \leanok
+  Let $M$ be a manifold modelled on the normed space $E$ and $(V_j)_{j ∈ J}$
+  a cover of $M$ by open sets. There exists some natural number $N$ and
+  a family of smooth open embeddings $φ : \IT{N} × E → M$ such that
+  \begin{itemize}
+    \item for each $i$ there is some $j$ such that $φ_i(E) \subseteq V_j$,
+    \item $i ↦ φ_i(E)$ is a locally-finite collection of sets in $M$,
+    \item $⋃_i φ_i(B_E(0, 1)) = M$ where $B_E(0, 1)$ is the open unit ball in $E$.
+  \end{itemize}
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  The proof is a standard compact-exhaustion argument.
+  Let $K_0, K_1, K_2, \ldots $ be a compact exhaustion of $M$ and define:
+  \begin{align*}
+    C_n &= K_{n+2} \smallsetminus K_{n+1}^o,\\
+    U_n &= K_{n+3}^o \smallsetminus K_n.
+  \end{align*}
+  Thus:
+  \begin{itemize}
+    \item $C_n$ is compact,
+    \item $U_n$ is open,
+    \item $C_n \subseteq U_n$,
+    \item $\bigcup_n C_n = M$,
+    \item $U_n \cap U_m = \emptyset$ if $|n - m| > 2$.
+  \end{itemize}
+  For any $y \in E$ and $r > 0$, fix a smooth diffeomorphism $f_{y,r} : E \simeq B_E(y, r)$ such
+  that $f_{y,r}(0) = y$.
+  For each $n$ and $x \in C_n$, let $\psi_x$  be a smooth chart mapping an open
+  neighbourhood of $x$ to an open set of the model space $E$.
+  Writing $y = \psi_x (x) \in E$, let:
+  \begin{align*}
+    B_{n, x} &= \psi_x^{-1} (B_E(y, r)),\\
+    W_{n, x} &= \psi_x^{-1} (f_{y,r} (B_E (0, 1))),\\
+  \end{align*}
+  for some $r > 0$ (which may depend on $n$, $x$) sufficiently small that:
+  \begin{itemize}
+    \item $B_E(y, r)$ lies in the target of the chart $\psi_x$,
+    \item $B_{n,x}$ is contained in $U_n$,
+    \item $B_{n,x}$ is contained in $V_j$ for some $j$.
+  \end{itemize}
+  Note that $x \in W_{n,x}$. For each $n$, choose a finite subcovering of $C_n$ by
+  $W_{n, x_1}, \ldots, W_{n, x_{l_n}}$ and define $\iota \subseteq ℕ \times M$ by:
+  \begin{align*}
+    \iota = \bigcup_n \{ (n, x_1), \ldots, (n, x_{l_n}) \} .
+  \end{align*}
+  Note that $\iota$ is countable and furthermore:
+  \begin{itemize}
+    \item for each $i \in \iota$, there is some $j$ such that $B_i \subseteq V_j$,
+    \item $(B_i)_{i \in \iota}$ is locally-finite
+    (indeed more is true: $B_i$ meets only finitely-many $B_{i'}$ for $i, i' \in \iota$
+    since $B_{m, x} \cap B_{n, x'} = \emptyset$ if $|n - m| > 2$),
+    \item $(W_i)_{i \in \iota}$ covers $M$.
+  \end{itemize}
+  Given $i = (n, x_j) \in \iota$, the required map $\phi_i : E \to M$ is just:
+  \begin{align*}
+    E \simeq B_E(y_j, r) \simeq B_{n,j} \subseteq M.
+  \end{align*}
+  Since $ι$ is countable, it is in bijection with some $\IT{N}$.
+\end{proof}
+
+\begin{definition}
+  \label{def:localisation_data}
+  \uses{def:index_type}
+  \lean{LocalisationData}
+  \leanok
+  Let $f : M → N$ be a continuous map between manifolds. A localisation data
+  for $f$ is a tuple $(E, F, N, ι, φ, ψ, j)$ where $E$ and $F$ are normed
+  vector spaces, $N$ is a natural number, $ι$ is a set, $φ : \IT{N} × E → M$
+  and $ψ : ι × F → N$  are families of smooth open embeddings, and
+  $j : \IT{N} → ι$ such that:
+  \begin{itemize}
+    \item
+      $⋃_i φ_i(B_E) = M$ where $B_E$ is the open unit ball in $E$,
+      \item
+      $⋃_i ψ_i(B_F) = N$ where $B_F$ is the open unit ball in $F$,
+    \item
+      $∀ i, f(φ_i(E)) ⊂ ψ_{j(i)}(B_F)$ where $B_F$ is the open unit ball in $F$,
+    \item
+      $i \mapsto ψ_i(F)$ is locally finite.
+  \end{itemize}
+  Such a tuple will be denoted by $(φ, ψ, j)$ for brevity.
+\end{definition}
+
+\begin{lemma}
+  \label{lem:ex_localisation}
+  \uses{def:localisation_data}
+  \lean{stdLocalisationData}
+  \leanok
+  Any continuous map between manifolds has some localisation data.
+\end{lemma}
+
+\begin{proof}
+  \uses{lem:nice_atlas}
+  \leanok
+  The preceding lemma (applied to the trivial cover of $N$ by itself) gives a
+  family of $ψ : ι' × F → N$ of open smooth embeddings that the images of
+  $B_F$ cover $N$. We then apply this lemma again to the cover of $M$ given by all
+  $f⁻¹(ψ_j(B_F))$.
+\end{proof}
+
+The general idea will be to apply the results of the previous chapters to
+all the $ψ_{j(i)}⁻¹ ∘ f ∘ φ_i : E → F$ for some maps $f$. However we must be
+careful that doing this for some $i$ does not ruin the setup for the next $i$.
+This is easier to control using a distance function on the target manifold as
+in \Cref{lem:localisation_stability} below. First we need a general lemma about
+a single metric space (actually the formalized statement is stronger, it assumes
+only closed sets instead of compact ones, but here we explain the easier proof
+which is sufficient for our purposes).
+
+\begin{lemma}
+  \label{lem:stability_cover}
+  \lean{Metric.exists_continuous_real_forall_closedBall_subset}
+  \leanok
+  In a metric space $X$, let $U : ι → \set{X}$ be a
+  family of open subsets of $X$ and let $K : ι → \set{X}$ be a locally-finite
+  family of closed subsets such that $K_i ⊂ U_i$ for all $i$. There exists a continuous
+  function $δ : X → ℝ_{> 0}$ such that:
+  \[
+    ∀ x\, x',\; ∀ i, \left[x ∈ K_i \text{ and } d(x, x') < δ(x)\right] ⇒ x' ∈ U_i.
+  \]
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  We first note that, for any given $i$, compactness of $K$ and openness of
+  $V_i$ give a positive number $δ_i$ such that the $δ_i$-neighborhood of $K_i$
+  is contained in $V_i$. We now prove that solutions exist locally. Let $x$ be
+  any point in $X$. From the local finiteness assumption, we get a neighborhood
+  $U$ of $x$ such that $\{i | U ∩ V_i ≠ ∅\}$ is finite. The constant function
+  with value the minimum of the corresponding $δ_i$ is a solution on $U$. Since
+  the condition we put on $δ$ is convex, we can glue those local solutions using
+  \Cref{lem:exists_cont_diff_of_convex}.
+\end{proof}
+
+\begin{lemma}
+  \label{lem:localisation_stability}
+  \lean{localisation_stability}
+  \leanok
+  \uses{def:localisation_data}
+  Let $f : M → N$ be a continuous map between manifolds, and let
+  $(φ, ψ, i)$ be some localisation data for $f$. There exists a continuous
+  positive function $ε : M → ℝ_{>0}$ such that:
+  \[
+    ∀ g : M → N, \big[∀ m,\; d(f(m), g(m)) < ε(m)\big] ⇒ ∀ i,\; g(φ_i(E)) ⊂ ψ_{j(i)}(F).
+  \]
+\end{lemma}
+Note that, in the preceding lemma, the conclusion $g(φ_i(E)) ⊂ ψ_{j(i)}(F)$ is
+weaker than the condition $f(φ_i(E)) ⊂ ψ_{j(i)}(B_F)$ that appears in the
+definition of localisation data.
+
+The condition $∀ m,\; d(g(m), f(m)) < ε(m)$ will be abbreviated $d(g, f) < ε$.
+
+\begin{proof}
+  \leanok
+  \uses{lem:stability_cover}
+  The preceding lemma applied to the family of open sets $ψ_j(F)$ and the
+  family of compact sets $ψ_j(\overline{B_F})$ give a positive continuous
+  function $δ : N → ℝ$ such that $ε = δ ∘ f$ is suitable. Indeed, assume
+  $g : M → N$ satisfies $d(g, f) < ε$ and fix some $i$ and some $m ∈ φ_i(E)$.
+  We know $f(m) ∈ ψ_{j(i)}(\overline{B_F})$ and our assumption on $g$ gives
+  $d(g(m), f(m)) < δ(f(m))$. So the property of $δ$ ensures $g(m) ∈ ψ_{j(i)}(F)$.
+\end{proof}
+
+
+\subsection{Jets spaces}
+
+We now need to introduce the bundles that will replace the jet spaces
+$E × F × \Hom(E, F)$ from the previous chapter. We need a couple of
+fiber bundles constructions.
+
+\begin{definition}
+\label{def:pull_back_bundle}
+\leanok
+\lean{Bundle.Pullback}
+For every bundle $p : E → B$ and every map $f \co B' → B$,
+the pull-back bundle $f^*E → B'$ is defined by
+$f^*E = \{(b', e) ∈ B' × E \;|\; p(e) = f(b')\}$ with
+the obvious projection to $B'$.
+\end{definition}
+
+\begin{definition}
+\label{def:hom_bundle}
+\leanok
+\lean{Bundle.ContinuousLinearMap.vectorBundle}
+Let $E → B$ and $F → B$ be two vector bundles over some smooth manifold
+$B$. The bundle $\Hom(E, F) → B$ is the set of linear maps from
+$E_b$ to $F_b$ for some $b$ in $B$, with the obvious projection map.
+\end{definition}
+
+Set-theoretically, one can define $\Hom(E, F)$ as the set of subsets
+$S$ of $E × F$ such that there exists $b$ such that $S ⊂ E_b × F_b$
+and $S$ is the graph of a linear map. But the type theory formalization
+will use other tricks here. The facts that really matter are listed in
+\cref{lem:one_jet_extension_prop} below.
+
+\begin{definition}
+\label{def:one_jet_space}
+\leanok
+\lean{OneJetBundle}
+\uses{def:pull_back_bundle, def:hom_bundle}
+Let $M$ and $N$ be smooth manifolds. Denote by
+$p_1$ and $p_2$ the projections of $M × N$ to
+$M$ and $N$ respectively.
+
+The space $J^1(M, N)$ of $1$-jets of maps from $M$ to $N$ is
+$Hom(p_1^*TM, p_2^*TN)$
+\end{definition}
+
+We will use notations like $(m, n, φ)$ to denote an element
+of $J^1(M, N)$,
+but one should keep in mind that $J^1(M, N)$ is not a product,
+since $φ$ lives in $\Hom(T_mM, T_nN)$ which depends on $m$ and $n$.
+
+
+\begin{definition}
+\label{def:one_jet_extension}
+\uses{def:one_jet_space}
+\leanok
+\lean{oneJetExt}
+The $1$-jet of a smooth map $f \co M → N$ is the map from
+$m$ to $J^1(M, N)$ defined by $j^1f(m) = (m, f(m), T_mf)$.
+\end{definition}
+
+The composition of a section $\F \co M → J^1(M, N)$ with the projection
+onto $N$ will sometimes be denoted by $\bs \F \co M → N$ and called the
+base map of $\F$. For any $m$, $\F(m)_φ$ will denote the component of $\F(m)$
+living in $\Hom(T_mM, T_{\bs\F(m)}N)$.
+
+\begin{lemma}
+\label{lem:one_jet_extension_prop}
+\lean{ContMDiff.oneJetExt}
+\leanok
+\uses{def:one_jet_extension}
+For every smooth map $f \co M → N$,
+\begin{enumerate}
+  \item
+    \label{lem:one_jet_smooth}\uses{def:one_jet_space, def:one_jet_extension}
+    $j^1f$ is smooth
+  \item
+    \label{lem:one_jet_section}\uses{def:one_jet_space, def:one_jet_extension}
+    $j^1f$ is a section of $J^1(M, N) → M$
+\end{enumerate}
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  Points 2 and 3 are obvious by construction.
+
+  To show that $j^1f$ is smooth, suppose that $M$ is modelled over $E$ with charts
+  $C_x : M \to E$ and coordinate change functions
+  $C_{x,x'}=C_{x'}C_x^{-1} : E \to E$ and similarly let $C'_y$ be charts for $N$.
+  By construction of the 1-jet bundle, we need to check that for each $x_0$ the map
+  $$x\mapsto TC'_{f(x),f(x_0)}\circ T(C'_{f(x)}fC_x^{-1})\circ
+    T_{C_{x_0}(x)}(C_{x_0,x}): M \to L(E,E)$$
+  is smooth at $x_0$ (we occasionally omit the point where the tangent maps are taken).
+  For $x$ close to $x_0$ the coordinate changes are smooth, so we can write
+  \begin{align*}
+  TC'_{f(x),f(x_0)}\circ T(C'_{f(x)}fC_x^{-1})\circ T(C_{x_0,x})
+  &= T_{C_{x_0}(x)}(C'_{f(x),f(x_0)}C'_{f(x)}fC_x^{-1}C_{x_0,x})\\
+  &= T_{C_{x_0}(x)}(C'_{f(x_0)}fC_{x_0})
+  \end{align*}
+  This is smooth since $C'_{f(x_0)}fC_{x_0}$ is smooth.
+\end{proof}
+
+\begin{definition}
+\label{def:holonomic_section}
+\leanok
+\lean{OneJetSec.IsHolonomicAt, OneJetSec.isHolonomicAt_iff}
+\uses{def:one_jet_space}
+A section $\F$ of $J^1(M, N) → M$ is called holonomic if it is the
+$1$--jet of its base map.
+Equivalently, $\F$ is holonomic if there exists
+$f \co M → N$ such that $\F = j^1f$, since such a map is
+necessarily $\bs \F$.
+\end{definition}
+
+\section{First order differential relations}
+
+\begin{definition}
+  \label{def:rel}
+  \leanok
+  \lean{RelMfld}
+  \uses{def:one_jet_space}
+  A first order differential relation for maps from $M$ to $N$ is a
+  subset $\Rel$ of $J^1(M, N)$.
+\end{definition}
+
+\begin{definition}
+  \label{def:formal_sol}
+  \leanok
+  \lean{FormalSol}
+  \uses{def:rel, def:one_jet_extension}
+  A formal solution of a differential relation $\Rel ⊂ J^1(M, N)$ is a
+  section of $J^1(M, N) → M$ taking values in $\Rel$.
+\end{definition}
+
+
+\begin{definition}
+  \label{def:htpy_formal_sol}
+  \leanok
+  \lean{HtpyFormalSol}
+  \uses{def:formal_sol}
+  A homotopy of formal solutions of $\Rel$ is a smooth family of sections
+  $\F : ℝ × M → J^1(M, N)$ such that each $m ↦ \F(t, m)$ is a formal solution.
+\end{definition}
+
+The next definition will be used in cases where $X$ and $Y$ are vector spaces,
+in order to relate the global theory to the local one.
+
+\begin{definition}
+  \label{def:transfer_map}
+  \leanok % TODO check onejetsec!
+  \lean{OpenSmoothEmbedding.transfer, OneJetSec.localize, RelMfld.localize}
+  \uses{def:one_jet_space}
+  Given manifolds $M$, $X$, $N$ and $Y$ and smooth open embeddings $g : Y → N$
+  and $h : X → M$ we get a transfer map $ψ_{g, h} : J^1(X, Y) → J^1(M, N)$
+  defined by
+  \[
+    ψ_{g, h}(x, y, φ) = (h(x), g(y), T_yg ∘ φ ∘ (T_xh)⁻¹)
+  \]
+  and an operator on sections which sends $\F : M → J^1(M, N)$ to
+  $Ψ_{g, h}\F : X → J^1(X, Y)$ defined when $\bs\F(h(X)) ⊂ g(Y)$ by
+  \[
+    Ψ_{g, h}\F(x) = (x, g⁻¹ ∘ \bs\F ∘ h(x), (T_{g⁻¹ ∘ \bs\F ∘ h(x)}g)⁻¹ ∘ \F(h(x))_φ ∘ T_xh).
+  \]
+  Given a relation $\Rel ⊂ J^1(M, N)$, the induced relation in $J^1(X, Y)$
+  is $ψ_{g, h}⁻¹\Rel$.
+\end{definition}
+
+The following is a localization lemma needed to take advantage of all the work
+from the previous chapter.
+
+\begin{lemma}
+  \label{lem:transfer}
+  \leanok
+  \lean{OneJetSec.localize, isHolonomicAt_localize_iff, OneJetSec.localize_mem_iff}
+  \uses{def:transfer_map, def:holonomic_section, def:formal_sol}
+  In the situation of the previous definition, given a section $\F : M → J^1(M, N)$:
+  \begin{itemize}
+    \item $Ψ_{g, h}(\F)$ is a smooth section of $J^1(X, Y)$.
+    \item $\F$ is holonomic on $s ⊂ h(X) ∩ \bs\F⁻¹(g(Y))$ if and only if $Ψ_{g, h}(\F)$
+      is holonomic on $h⁻¹(s)$.
+    \item $\F$ is a formal solution of $\Rel$ on $h(X) ∩ \bs\F⁻¹(g(Y)$ if and only if $Ψ_{g, h}(\F)$
+      is a formal solution of the induced relation $Ψ_{g, h}⁻¹\Rel$.
+  \end{itemize}
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  \uses{lem:one_jet_extension_prop}
+  The first point is clear by composition. In order to prove the second point
+  while keeping notations under control, we set
+  $f(x) = g⁻¹ ∘ \bs\F ∘ h$. Using this notation
+  $Ψ_{g, h}\F(x) = (x, f(x), (T_{f(x)}g)⁻¹ ∘ \F(h(x))_φ ∘ T_xh)$. We have
+  \begin{align*}
+    T_x f &= T_{\bs\F ∘ h(x)}(g⁻¹) ∘ T_{h(x)}\bs\F ∘ T_x h\\
+          &= \left(T_{f(x)}g\right)⁻¹ ∘ T_{h(x)}\bs\F ∘ T_x h
+  \end{align*}
+  hence $Ψ_{g, h}\F$ is holonomic at $x$ if and only if
+  $\left(T_{f(x)}g\right)⁻¹ ∘ \F(h(x))_φ ∘ T_xh = \left(T_{f(x)}g\right)⁻¹ ∘ T_{h(x)}\bs\F ∘ T_x h$
+  and this is equivalent to $\F(h(x))_φ = T_{h(x)}\bs\F$ which is the holonomy condition for
+  $\F$ at $h(x)$.
+
+  The third point is a direct consequence of the easy formula $ψ_{g, h} ∘ Ψ_{g, h}(\F) = F ∘ h$.
+\end{proof}
+
+\begin{definition}
+  \label{def:h-princ}
+  \leanok
+  \lean{RelMfld.SatisfiesHPrinciple, RelMfld.SatisfiesHPrincipleWith}
+  \uses{def:htpy_formal_sol}
+  A first order differential relation $\Rel ⊂ J^1(M, N)$ satisfies the
+  $h$-principle if every formal solution of $\Rel$ is homotopic to a
+  holonomic one.
+  It satisfies the parametric $h$-principle if, for every manifold $P$
+  and every closed set $C$ in $P × M$, every family $\F : P × M → J^1(M, N)$ of formal
+  solutions which are holonomic for $(p, m)$ near $C$
+  is homotopic to a family of holonomic ones relative to $C$.
+\end{definition}
+
+
+\subsection*{Parametricity for free}
+
+In many cases, relative parametric $h$-principles can be deduced from relative
+non-parametric ones with a larger source manifold.
+Let $X$, $P$ and $Y$ be manifolds, with $P$ seen a parameter space.
+Denote by $Ψ$ the map from $J^1(X × P, Y)$ to $J^1(X, Y)$ sending $(x, p, y, ψ)$ to
+$(x, y, ψ ∘ ι_{x, p})$ where $ι_{x, p} : T_xX → T_xX × T_pP$ sends $v$ to $(v, 0)$.
+
+To any family of sections $F_p : x ↦ (f_p(x), φ_{p, x})$ of $J^1(X, Y)$, we
+associate the section $\bar F$ of $J^1(X × P, Y)$ sending $(x, p)$ to
+$\bar F(x, p) := (f_p(x), φ_{p, x} ⊕ ∂f/∂p(x, p))$.
+
+\begin{lemma}
+  \label{lem:param_trick}
+  \uses{def:holonomic_section, def:formal_sol}
+  \leanok
+  \lean{FamilyOneJetSec.isHolonomicAt_uncurry, FamilyOneJetSec.uncurry_mem_relativize}
+  In the above setup, we have:
+  \begin{itemize}
+    \item
+      $\bar F$ is holonomic at $(x, p)$ if and only if $F_p$ is holonomic
+      at $x$.
+    \item
+      $F$ is a family of formal solutions of some $\Rel ⊂ J^1(X, Y)$ if and
+      only if $\bar F$ is a formal solution of $\Rel^P := Ψ^{-1}(\Rel)$.
+  \end{itemize}
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  For the first part, the derivative of $\bar F$ is $∂f/∂x(x, p) ⊕ ∂f/∂p(x, p)$, which is equal to
+  $\bar F_φ$ iff $∂f/∂x(x, p) = f_φ$.
+
+  The second part follows from $Ψ ∘ \bar F(x,p)=F_p(x)$.
+\end{proof}
+
+\begin{lemma}
+  \label{lem:param_for_free}
+  \uses{def:h-princ}
+  \leanok
+  \lean{RelMfld.SatisfiesHPrinciple.satisfiesHPrincipleWith}
+  Let $\Rel$ be a first order differential relation for maps from $M$ to
+  $N$.
+  If, for every manifold with boundary $P$, $\Rel^P$ satisfies the
+  $h$-principle then $\Rel$ satisfies the parametric $h$-principle.
+  Likewise, the $C^0$-dense and relative $h$-principle for all
+  $\Rel^P$ imply the parametric $C^0$-dense and relative $h$-principle for
+  $\Rel$.
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  \uses{lem:param_trick}
+  By \cref{lem:param_trick} we can turn a formal solution of $\Rel$ into a formal solution of
+  $\Rel^P$, so we get a homotopy to a holonomic formal solution. We can turn this homotopy back to
+  a homotopy of the original formal solution.
+\end{proof}
+
+
+\section{The $h$-principle for open and ample differential relations}
+\label{sec:general_theory}
+
+In this chapter, $X$ and $Y$ are smooth manifolds and $\Rel$ is a first order
+differential relation on maps from $X$ to $Y$: $\Rel ⊂ J^1(X, Y)$.
+For any $σ = (x, y, φ)$ in $\Rel$ and any dual pair
+$(λ, v) ∈ T^*_xX × T_xX$,
+we set:
+\[
+    \Rel_{σ, λ, v} =
+     \Conn_{φ(v)}\left\{w ∈ T_yY \;;\;
+       \big(x,\; y,\; φ + (w - φ(v))⊗λ\big) ∈ \Rel\right\}
+\]
+where $\Conn_a A$ is the connected component of $A$ containing $a$. In order to
+decipher this definition, it suffices to notice that $φ + (w - φ(v))⊗λ$ is the
+unique linear map from $T_xX$ to $T_yY$ which coincides with $φ$ on $\ker λ$
+and sends $v$ to $w$. In particular, $w = φ(v)$ gives back $φ$.
+
+Of course we will want to deal with more than one point, so we will consider a
+vector field $V$ and a $1$--form $λ$ such that $λ(V) = 1$ on some subset $U$ of
+$X$, a formal solution $F$ (defined at least on $U$), and get the corresponding
+$\Rel_{F, λ, v}$ over $U$.
+
+One easily checks that $\Rel_{σ, κ^{-1}λ, κv} = κ\Rel_{σ, λ, v}$ hence the above
+definition only depends on $\ker λ$ and the direction $ℝV$.
+
+\begin{definition}
+  \label{def:ample_relation}
+  \uses{def:one_jet_space, def:ample_subset}
+  \leanok
+  \lean{RelMfld.Ample}
+  A relation $\Rel$ is ample if, for every $σ = (x, y, φ)$ in $\Rel$ and every
+  $(λ, v)$, the slice $\Rel_{σ, λ, v}$ is ample in $T_yY$.
+\end{definition}
+
+\begin{lemma}
+  \label{lem:ample_iff_loc}
+  \uses{def:ample_relation, def:transfer_map}
+  \leanok
+  \lean{RelMfld.Ample.localize}
+  Given manifolds $W$, $X$, $Y$ and $Z$ and smooth open embeddings $g : Z → Y$
+  and $h : W → X$, the relation induced (in the sense of \Cref{def:transfer_map})
+  in $J^1(W, Z)$ by an ample relation in $J^1(X, Y)$ is ample.
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  By definition, the relation induced by $\Rel$ is
+  $ψ_{g, h}⁻¹\Rel$ where
+  $ψ_{g, h}(w, z, φ) = (h(w), g(z), T_zg ∘ φ ∘ (T_wh)⁻¹)$.
+  Fix $σ =(w, z, φ) ∈ ψ_{g, h}⁻¹\Rel$
+  and a dual pair $(λ, v)$ on $T_wW$. We set $G = T_z g$ and $H = T_w h$. Both
+  those maps are linear isomorphisms. We compute the slice corresponding to $(σ, λ, v)$:
+  \begin{align*}
+    ψ_{g, h}⁻¹\Rel(σ, λ, v)
+    &= \Conn_{φv}\left\{u ∈ T_wW \;\left|\; (w, z, φ + (u - φv)⊗λ) ∈ ψ_{g, h}⁻¹\Rel \right.\right\}\\
+    &= \Conn_{φv}\left\{u ∈ T_wW \;\left|\; (h(w), g(z), G ∘ (φ + (u - φv)⊗λ)∘ H⁻¹) ∈ \Rel \right.\right\}\\
+%    &= \left\{u ∈ T_wW \;\left|\; (h(w), g(z), G ∘ φ ∘ H⁻¹ + (Gu - G ∘ φ ∘ H⁻¹ ∘ Hv)⊗(λ ∘ H⁻¹)) ∈ \Rel \right.\right\}\\
+%    &= \left\{u ∈ T_wW \;\left|\; (h(w), g(z), G ∘ φ ∘ H⁻¹ + (Gu - G ∘ φ ∘ H⁻¹ ∘ Hv)⊗(λ ∘ H⁻¹)) ∈ \Rel \right.\right\}\\
+%    &= \left\{u ∈ T_wW \;\left|\; Gu ∈ \Rel((h(w), g(z), G ∘ φ ∘ H⁻¹), λ ∘ H⁻¹, Gu) \right.\right\}\\
+    &= G⁻¹\Rel(ψ_{g, h}σ, λ ∘ H⁻¹, Hv).
+  \end{align*}
+  Hence the slice $ψ_{g, h}⁻¹\Rel(σ, λ, v)$ is the image of a slice of $\Rel$
+  under a linear isomorphism, hence ample.
+\end{proof}
+
+\begin{lemma}
+  \label{lem:open_ample_immersion}
+  \uses{def:ample_relation}
+  \leanok
+  \lean{immersionRel_open_ample}
+  The relation of immersions of $M$ into $N$ in positive codimension is open
+  and ample.
+\end{lemma}
+
+\begin{proof}
+  \proves{lem:open_ample_immersion}
+  \uses{lem:ample_codim_two}
+  \lean{immersionRel_open_ample}
+  \leanok
+  For every $σ = (x, y, φ)$ in the immersion relation $\Rel$,
+  and for every dual pair $(π, v)$, the slice
+  $\Rel(σ, π, v)$ is the set of $w$ which do not belong to
+  the image of $\ker π$ under $φ$.
+  Since $\dim M > \dim N$, this image has codimension at least $2$ in
+  $T_yN$, and \cref{lem:ample_codim_two} concludes.
+\end{proof}
+
+\begin{theorem}[Gromov]
+  \label{thm:open_ample}
+  % \uses{def:h-princ} % causes transitive arrow in depgraph
+  \leanok
+  \lean{RelMfld.Ample.satisfiesHPrincipleWith}
+  For any manifolds $X$ and $Y$, any relation $\Rel ⊂ J^1(X, Y)$ that is open
+  and ample satisfies the full $h$-principle (relative, parametric and $C^0$-dense).
+\end{theorem}
+
+We first explain how to get rid of parameters, using the
+relation $\Rel^P$ for families of solutions parametrized by $P$.
+
+\begin{lemma}
+    \label{lem:ample_parameter}
+    \uses{def:ample_relation}
+    \lean{RelMfld.Ample.relativize}
+    \leanok
+    If $\Rel$ is ample then, for any parameter space $P$, $\Rel^P$ is also ample.
+\end{lemma}
+
+\begin{proof}
+  \leanok
+  We fix $σ = (x, y, ψ)$ in $\Rel^P$.
+  For any $λ = (λ_X, λ_P) ∈ T^*_xX × T^*_pP$ and $v = (v_X, v_P) ∈ T_xX × T_pP$
+  such that $λ(v) = 1$, we need to prove that $\Conv\Rel^P_{σ, λ, v} = T_yY$.
+  Unfolding the definitions gives:
+  \[
+  \Rel^P_{σ, λ, v} = \Conn_{φ(v)}\left\{w ∈ T_yY \;;\;
+      \big(x,\; y,\; ψ ∘ ι_{x, p} + (w - ψ(v))⊗λ_X\big) ∈ \Rel\right\}.
+  \]
+  A degenerate but easy case is when $λ_X = 0$. Then the condition on $w$
+  becomes $ψ ∘ ι_{x, p} ∈ \Rel$, which is true by definition of $\Rel^P$, so
+  $\Rel^P_{σ, λ, v} = T_yY$.
+
+  We now assume $λ_X$ is not zero and choose $u ∈ T_xX$ such that $λ_X(u) = 1$.
+  We then have $\Rel^P_{σ, λ, v} = \Rel_{Ψσ, λ_X, u} + ψ(v) - ψ∘ι_{x, p}(u)$.
+  Because $\Rel$ is ample and taking convex hull commutes with translation, we
+  get that $\Conv\Rel^P_{σ, λ, v} = T_yY$.
+\end{proof}
+
+\begin{proof}[Proof of Theorem~\ref{thm:open_ample}]
+  \leanok
+  \proves{thm:open_ample}
+  \uses{lem:param_for_free, lem:ample_parameter, lem:transfer,
+  lem:ex_localisation, lem:localisation_stability,
+  lem:smooth_updating, lem:dist_updating, lem:inductive_htpy_construction,
+  lem:ample_iff_loc, lem:h_principle_open_ample_loc}
+  Lemmas~\ref{lem:param_for_free} and~\ref{lem:ample_parameter} prove we can
+  assume there are no parameters. So we start with a single formal solution $F₀$
+  of $\Rel$, which is holonomic near some closed subset $A ⊂ X$. We also
+  fix a positive continuous function $δ$ on $X$ and we want to build a homotopy
+  of formal solutions starting at $F₀$ relative to $A$ with base map staying at
+  distance at most $δ$ from the base map of $F₀$ and ending at a holonomic
+  solution.
+
+  We apply \cref{lem:ex_localisation}  to get some
+  localisation data $(φ \co \IT{N} × E → \set{X}, ψ \co ι × E' → \set{Y}, j)$ for
+  $\bs F₀ : X → Y$. \Cref{lem:localisation_stability} then provides a continuous
+  function $ε : X → ℝ_{> 0}$ such that every function $g$ with $d(\bs F₀, g) < ε$
+  sends each $φ_i(E)$ into $ψ_{j(i)}(E')$. We denote by $τ$ the positive
+  continuous function $\min(δ, ε)$.
+
+  We then use the inductive construction of homotopies provided by
+  \Cref{lem:inductive_htpy_construction} starting with $F₀$ and
+  using the following local predicates. On maps $F$ from $X$ to $J¹(X, Y)$ we
+  use the background predicate $P₀$ asserting that $F$ is a smooth section of
+  $J¹(X, Y) → X$ that takes values in $R$, coincides with $F₀$ near $A$ and
+  satisfies $d(\bs F, \bs F₀) < τ$. The background
+  predicate for maps from $ℝ × X$ to $J¹(X, Y)$ is simply smoothness and the
+  target local predicate $P₁$ on maps from $X$ to $J¹(X, Y)$ is being holonomic.
+  We use the family of sets $U \co i ↦ φ_i(E)$ and $K \co i ↦ φ_i(\bar{B}_E)$.
+
+  In order to check the induction assumption from
+  \Cref{lem:inductive_htpy_construction}, we fix some
+  $i$ in $\IT{N}$, and some formal solution $F$ which coincides with $F₀$ near
+  $A$ and such that $d(\bs F₀, \bs F) < τ$. We assume that $F$ is holonomic near
+  $\bigcup_{j < i} K_j$. We need to build a smooth homotopy of formal solutions
+  starting at $F$ which coincide with $F₀$ near $A$, coincide with $F$ outside
+  $U_i$, have base map at distance less than $τ$ from $\bs F₀$ and end at a
+  formal solution which is holonomic near $\bigcup_{j ≤ i} K_j$. In addition this
+  homotopy must be time-independent for time near $(-∞, 0]$ and $[1, +∞)$.
+
+  Of course this homotopy comes from the local $h$-principle we proved in
+  \Cref{lem:h_principle_open_ample_loc}. The first key observation allowing to
+  apply that lemma is that $d(\bs F, \bs F₀) < τ ≤ ε$ hence $\bs F$ sends
+  sends $φ_i(E)$ into $ψ_{j(i)}(E')$.
+
+  \Cref{def:transfer_map} then turns $F$ into a section $\F$ of $J¹(E, E')$.
+  According to \Cref{lem:transfer}, $\F$ is a formal solution of
+  the relation $\Rel_i$ induced by $\Rel$ in $J¹(E, E')$ via $φ_i$ and
+  $ψ_{j(i)}$, $\F$ is relative to $φ_i⁻¹(A)$
+  and $\F$ is holonomic near $φ_i⁻¹(A ∪ \bigcup_{j < i} φ_j(\bar B_E))$.
+
+  The homotopy $H$ will be constructed by updating $F$ using some
+  homotopy $\HH$ of sections of $J¹(E, E')$ with support in the closed ball $2B_E$
+  and time independent for $t$ near $(-∞, 0] ∪ [1, +∞)$ (here by support we mean
+  the closure of the set of points where $\HH_t$ differs from $\F$).
+  In order to ensure
+  $d(\bs F₀, \bs H_t) < τ$ for all $t$, it suffices to ensure that, for each
+  $x ∈ φ_i(2\bar{B}_E)$ and $t ∈ [0, 1]$,
+  $d(\bs H_t(x), \bs F(x)) < τ(x) - d(\bs F(x), \bs F₀(x))$.
+  The latter will hold as soon as, for all $e$ and $t$,
+  $‖\bs \HH_t(e) - \bs \F(e)‖ < η$ for some positive $η$ given by
+  \Cref{lem:dist_updating} (applied to $P = ℝ$, $M$ and $N$).
+\end{proof}
+
+\begin{theorem}[Smale 1958]
+  \label{thm:sphere_eversion}
+  \lean{sphere_eversion}\leanok
+	There is a homotopy of immersions of $𝕊^2$ into $ℝ^3$ from the inclusion map to
+	the antipodal map $a : q ↦ -q$.
+\end{theorem}
+
+\begin{proof}
+  \leanok
+  \uses{thm:open_ample, lem:open_ample_immersion}
+	We denote by $ι$ the inclusion of $𝕊^2$ into $ℝ^3$.
+	We set $j_t = (1-t)ι	+ ta$.
+  This is a homotopy from $ι$ to $a$ (but not an immersion for $t=1/2$).
+  Using the canonical trivialization of the tangent
+	bundle of $ℝ^3$, we can set, for $(q, v) ∈ T𝕊^2$,
+	$G_t(q, v) = \mathrm{Rot}_{Oq}^{πt}(v)$, the rotation around axis $Oq$ with
+	angle $πt$.
+  The family $σ : t ↦ (j_t, G_t)$ is a homotopy of formal immersions
+  relating $j^1ι$ to $j^1a$.
+  It is homotopic by reparametrization to a homotopy of formal immersions
+  relating $j^1ι$ to $j^1a$ which are holonomic for $t$ near the
+  $0$ and $1$.
+
+  The above theorem ensures this family is homotopic,
+	relative to $t = 0$ and $t = 1$, to a family of holonomic formal immersions,
+	ie a family $t ↦ j^1f_t$ with $f_0 = ι$, $f_1 = a$, and each $f_t$ is an
+	immersion.
+\end{proof}
+
+% vim: set expandtab sw=2 tabstop=2 tw=80:

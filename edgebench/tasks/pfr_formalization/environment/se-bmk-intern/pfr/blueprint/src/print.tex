@@ -1,0 +1,40 @@
+% This file makes a printable version of the blueprint
+
+\documentclass[a4paper]{report}
+
+\usepackage[textwidth=14cm]{geometry}
+\usepackage{xfrac}
+\usepackage{polyglossia}
+\setdefaultlanguage{english}
+
+\usepackage{amsmath,amssymb}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\usepackage{tikz-cd}
+
+\usepackage{mathtools}
+\usepackage[warnings-off={mathtools-colon,mathtools-overbracket}]{unicode-math}
+\usepackage{fontspec}
+\setmathfont{latinmodern-math.otf}
+\setmathfont[range=\varnothing]{Asana-Math.otf}
+\setmathfont[range=\pitchfork]{Asana-Math.otf}
+\setmathfont[range=\intprod]{Asana-Math.otf}
+\setmathfont[range=\int]{latinmodern-math.otf}
+
+\usepackage[nameinlink, capitalize]{cleveref}
+
+\usepackage{amsthm}
+\usepackage{etexcmds}
+\usepackage{thmtools}
+
+\input{preamble/common}
+\input{preamble/print}
+
+\title{PFR Blueprint}
+\author{Terence Tao}
+
+\begin{document}
+\maketitle
+\input{chapter/main}
+\end{document}

@@ -1,0 +1,18 @@
+[package]
+name = "swscale-candidate"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "swscale_candidate"
+crate-type = ["cdylib"]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+
+# Uncomment to use nightly portable SIMD:
+# [features]
+# default = []
+# nightly-simd = []

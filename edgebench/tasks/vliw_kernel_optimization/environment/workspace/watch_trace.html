@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en-us">
+    <link rel="shortcut icon" href="data:image/x-icon;," type="image/x-icon" />
+
+    <body>
+        <style>
+            pre {
+                border: 1px solid #eee;
+                margin: 10px 0;
+                font-family: monospace;
+                font-size: 10px;
+                min-height: 100px;
+            }
+
+            body > * {
+                margin: 20px;
+            }
+
+            #btn_fetch {
+                font-size: 14px;
+            }
+        </style>
+
+        <select id="source" size="4">
+            <option selected>/trace.json</option>
+        </select>
+
+        <br />
+
+        <button type="button" id="btn_fetch">Open Perfetto</button>
+
+        <br />
+
+        <pre id="logs" cols="80" rows="20"></pre>
+
+        <script type="text/javascript">
+            // const ORIGIN = 'http://localhost:8000/perfetto/';
+            const ORIGIN = "https://ui.perfetto.dev";
+
+            const logs = document.getElementById("logs");
+            const btnFetch = document.getElementById("btn_fetch");
+
+            async function getMtime() {
+                const mtime_resp = await fetch("/mtime");
+                const mtime = await mtime_resp.text();
+                return mtime;
+            }
+
+            async function fetchAndOpen(traceUrl) {
+                logs.innerText += `Fetching trace from ${traceUrl}...\n`;
+                const mtime = await getMtime();
+                const resp = await fetch(traceUrl);
+                // Error checcking is left as an exercise to the reader.
+                const blob = await resp.blob();
+                const arrayBuffer = await blob.arrayBuffer();
+                logs.innerText += `fetch() complete, now passing to ui.perfetto.dev\n`;
+                openTrace(arrayBuffer, traceUrl, mtime);
+            }
+
+            async function repoll(win, traceUrl, mtime) {
+                const newMtime = await getMtime();
+                console.log(newMtime, mtime);
+                if (newMtime !== mtime) {
+                    logs.innerText += `Trace updated, fetching new version...\n`;
+                    const resp = await fetch(traceUrl);
+                    const blob = await resp.blob();
+                    const arrayBuffer = await blob.arrayBuffer();
+                    logs.innerText += `New trace fetched, opening...\n`;
+                    sendTrace(win, arrayBuffer, traceUrl);
+                }
+
+                setTimeout(() => repoll(win, traceUrl, newMtime), 500);
+            }
+
+            function sendTrace(win, arrayBuffer, traceUrl) {
+                const reopenUrl = new URL(location.href);
+                reopenUrl.hash = `#reopen=${traceUrl}`;
+                logs.innerText += `Sending trace to UI\n`;
+                win.postMessage(
+                    {
+                        perfetto: {
+                            buffer: arrayBuffer,
+                            title: "trace.json",
+                            url: reopenUrl.toString(),
+                            keepApiOpen: true,
+                        },
+                    },
+                    ORIGIN,
+                );
+            }
+
+            function openTrace(arrayBuffer, traceUrl, mtime) {
+                const win = window.open(ORIGIN);
+                if (!win) {
+                    btnFetch.style.background = "#f3ca63";
+                    btnFetch.onclick = () => openTrace(arrayBuffer);
+                    logs.innerText += `Popups blocked, you need to manually click the button`;
+                    btnFetch.innerText =
+                        "Popups blocked, click here to open the trace file";
+                    return;
+                }
+
+                const timer = setInterval(
+                    () => win.postMessage("PING", ORIGIN),
+                    50,
+                );
+
+                const onMessageHandler = (evt) => {
+                    if (evt.data !== "PONG") return;
+
+                    // We got a PONG, the UI is ready.
+                    window.clearInterval(timer);
+                    window.removeEventListener("message", onMessageHandler);
+
+                    sendTrace(win, arrayBuffer, traceUrl);
+                    setTimeout(() => repoll(win, traceUrl, mtime), 500);
+                };
+
+                window.addEventListener("message", onMessageHandler);
+            }
+
+            // This is triggered when following the link from the Perfetto UI's sidebar.
+            if (location.hash.startsWith("#reopen=")) {
+                const traceUrl = location.hash.substr(8);
+                fetchAndOpen(traceUrl);
+            }
+
+            btnFetch.onclick = () =>
+                fetchAndOpen(document.getElementById("source").value);
+        </script>
+    </body>
+</html>

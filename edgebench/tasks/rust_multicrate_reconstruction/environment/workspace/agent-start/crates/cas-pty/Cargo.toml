@@ -1,0 +1,31 @@
+[package]
+name = "cas-pty"
+version = "0.1.0"
+edition = "2024"
+description = "PTY management for CAS factory mode"
+license = "MIT"
+
+[dependencies]
+# PTY management
+portable-pty = "0.9"
+
+# Async runtime
+tokio = { version = "1", features = ["sync", "io-util", "time", "net"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+
+# Error handling
+thiserror = "2"
+
+# Home directory detection
+dirs = "6"
+
+# UUID generation for session IDs
+uuid = { version = "1", features = ["v4"] }
+
+# JSON parsing for RPC mode
+serde_json = "1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

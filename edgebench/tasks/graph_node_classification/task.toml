@@ -1,0 +1,40 @@
+schema_version = 0
+id = "graph_node_classification"
+name = "Graph Node Classification"
+category = "Scientific Problems & ML"
+language = "Python"
+description = "Implement graph neural networks from scratch using only base PyTorch for semi-supervised node classification on an unseen graph under CPU-only constraints."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python"            # bases/python (python:3.11 + git curl jq build-essential); torch 2.2.2+cpu added by the task (no numpy, as in v1)
+platform = "linux/amd64"
+cwd = "/home/workspace/045_graph_node_classification"
+internet = false
+cpus = 4
+memory = "16g"
+# v1 (published task JSON) set no work cpu/memory limits.
+
+[submission]
+paths = ["solution/solution.py"]
+exclude = ["tests/", "**/__pycache__/**", "**/*.pyc"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 1800
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# runner.py evaluates the 10 official splits with 4 worker processes (torch/BLAS threads capped at
+# 1 each). The score contains a wall-clock term (-0.01 * ln(solve seconds) per split), so it
+# varies slightly with host load, and training inside solve() may be nondeterministic.
+
+[score]
+direction = "maximize"
+# raw score = v1 structured_json score = mean final_score over 10 splits (about 0..1); v1 rescale linear 0..1.
+rescale = { kind = "linear", lower = 0.0, upper = 1.0 }
+
+[[blobs]]                  # judge <cwd>/data/ (Squirrel graph + 10 Geom-GCN splits incl. test labels, 46 files, 626 MB unpacked); see NOTES.md
+path = "judge/blobs/squirrel_data.tar.gz"
+sha256 = "40d81c6ae2208cb2ecda7fed583a50a9fcafa332c52b312313f90fdc5b782ae8"

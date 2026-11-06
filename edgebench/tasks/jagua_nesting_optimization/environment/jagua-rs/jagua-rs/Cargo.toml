@@ -1,0 +1,41 @@
+[package]
+name = "jagua-rs"
+version = "0.7.2"
+edition = "2024"
+license = "MPL-2.0"
+repository = "https://github.com/JeroenGar/jagua-rs"
+authors = ["Jeroen Gardeyn"]
+description = "A fast and fearless Collision Detection Engine for 2D irregular Cutting and Packing problems"
+readme = "../README.md"
+keywords = ["nesting", "packing", "strip", "bin", "irregular"]
+homepage = "https://github.com/JeroenGar/jagua-rs"
+
+[dependencies]
+ndarray = {workspace = true}
+rand_distr = {workspace = true}
+getrandom = { workspace = true }
+serde = {workspace = true}
+ordered-float = { workspace = true }
+log = {workspace = true}
+slotmap = {workspace = true}
+float-cmp = {workspace = true}
+itertools = {workspace = true}
+svg = {workspace = true}
+anyhow = {workspace = true}
+document-features = {workspace = true}
+rayon = { workspace = true }
+geo-types = { workspace = true }
+geo-buffer = { workspace = true }
+web-time = { workspace = true }
+
+[features]
+## Enables support for the Strip Packing Problem
+spp = []
+## Enables support for the Bin Packing Problem
+bpp = []
+## Enables support for the Multi Strip Packing Problem
+mspp = []
+
+[package.metadata.docs.rs]
+all-features = true
+# rustdoc-args = ["--cfg", "docsrs"]

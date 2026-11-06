@@ -1,0 +1,455 @@
+In this chapter, we construct the ambient environment inside which our model will reside.
+To do this, we will set up various pieces of abstract machinery that will help us later.
+Some mathematical background not already in mathlib will be included in \cref{c:auxiliary}.
+
+\section{Conventions}
+\begin{itemize}
+  \item We are working in Lean's type theory, so cardinals and ordinals are quotients of a large type.
+  In particular, cardinals are not just specific ordinals, and types cannot be ordinals.
+  \item We write \( \#\tau \) for the cardinality of a type \( \tau \).
+  \item If \( \tau \) is a type endowed with a well-order \( < \), we write \( \ot(\tau) \) for the order type of \( \tau \) with this well-ordering.
+  \item The initial ordinal corresponding to a cardinal \( c \) is denoted \( \ord(c) \).
+  The cofinality of an ordinal \( o \) is \( \cof(o) \), and this is a cardinal.
+  \item The symmetric difference of two sets is denoted \( s \symmdiff t \coloneq (s \setminus t) \cup (t \setminus s) \).
+  Note that \( (s \symmdiff t) \cup (s \cap t) = s \cup t \), and the union on the left-hand side is disjoint.
+  \item We use \( f[s] \) for the direct image \( \{ f(x) \mid x \in s \} \). We write \( f^{-1}[s] \) for the inverse image \( \{ x \mid f(x) \in s \} \), and \( f^{-1}(x) \) for the fibre \( \{ y \mid f(y) = x \} \).
+  \item For any type \( \alpha \), we write \( \Part \alpha \) for the type \( \sum_{p : \Prop} (p \to \alpha) \).
+\end{itemize}
+
+\section{Model parameters}
+\begin{definition}[model parameters]
+  \label{def:Params}
+  \lean{ConNF.Params}
+  \leanok
+  A collection of \emph{model parameters} is a tuple \( (\lambda, {<_\lambda}, \kappa, \mu) \) such that
+  \begin{itemize}
+    \item \( {<} = {<_\lambda} \) is a well-order on \( \lambda \), and under this ordering, \( \lambda \) has no maximal element (so \( \ot(\lambda) \) is a limit ordinal);
+    \item \( \#\kappa \) is uncountable and regular;
+    \item \( \#\mu \) is a strong limit, and satisfies
+    \[ \#\kappa < \#\mu;\quad \#\kappa \leq \cof(\ord(\#\mu));\quad \ot(\lambda) \leq \ord(\cof(\ord(\#\mu))) \]
+    so in particular, \( \ot(\lambda) \leq \ord(\#\mu) \).
+    Note that the inequalities in \( \kappa \) are inequalities of cardinals; the inequality in \( \lambda \) is an inequality of ordinals.
+  \end{itemize}
+  Given a collection of model parameters, we define
+  \begin{itemize}
+    \item canonical well-orders on \( \kappa \) and \( \mu \) such that \( \ot(\kappa) = \ord(\#\kappa) \) and \( \ot(\mu) = \ord(\#\mu) \); and
+    \item a canonical left-cancellative additive monoid on \( \kappa \), obtained by passing through the equivalence \( \kappa \simeq \{ o : \Ord \mid o < \ord(\#\kappa) \} \).
+  \end{itemize}
+\end{definition}
+\begin{proposition}
+  \uses{def:Params}
+  \label{prop:Params.minimal}
+  \lean{ConNF.minimalParams,ConNF.inaccessibleParams}
+  \leanok
+  The tuple \( (\mathbb N, {<_{\mathbb N}}, \aleph_1, \beth_{\omega_1}) \) is a collection of model parameters, where the symbols \( \aleph_1 \) and \( \beth_{\omega_1} \) represent particular types of that cardinality.
+\end{proposition}
+\begin{proof}
+  \leanok
+  Direct.
+\end{proof}
+\begin{definition}[type index]
+  \label{def:TypeIndex}
+  \uses{def:Params}
+  \lean{ConNF.TypeIndex}
+  \leanok
+  The type of \emph{type indices} is \( \lambda^\bot \coloneq \texttt{WithBot}(\lambda) \): the collection of \emph{proper type indices} \( \lambda \) together with a designated symbol \( \bot \) which is smaller than all proper type indices.
+  Note that \( \ot(\lambda^\bot) = \ot(\lambda) \), and hence that for each \( \alpha : \lambda^\bot \),
+  \[ \#\{ \beta : \lambda^\bot \mid \beta < \alpha \} \leq \#\{ \beta : \lambda^\bot \mid \beta \leq \alpha \} < \cof(\ord(\#\mu)) \]
+\end{definition}
+\begin{definition}[small]
+  \label{def:Small}
+  \uses{def:Params}
+  \lean{ConNF.Small}
+  \leanok
+  A set \( s : \Set(\tau) \) is called \emph{small} if \( \#s < \#\kappa \).
+  Smallness is stable under subset, intersection, small-indexed unions, symmetric difference, direct image, injective preimage, and many other operations (each of which should be its own lemma when formalised).
+  Sets \( s, t : \Set(\tau) \) are called \emph{near} if \( s \symmdiff t \) is small; in this case, we write \( s \near t \).
+  Nearness is an equivalence relation.
+  If \( s \near t \) and \( u \) is small, then \( s \near (t \mathbin{\diamond} u) \), where \( \diamond \) is one of \( \cup, \cap, \setminus, \symmdiff \).
+\end{definition}
+\begin{definition}[litter]
+  \label{def:Litter}
+  \uses{def:Params}
+  \lean{ConNF.Litter}
+  \leanok
+  A \emph{litter} is a triple \( L = (\nu, \beta, \gamma) : \mu \times \lambda^\bot \times \lambda \) where \( \beta \neq \gamma \).
+  The type of all litters is denoted \( \Litter \), and \( \#\Litter = \#\mu \).
+\end{definition}
+\begin{definition}[atom]
+  \label{def:Atom}
+  \uses{def:Litter}
+  \lean{ConNF.Atom}
+  \leanok
+  An \emph{atom} is a pair \( a = (L, i) : \Litter \times \kappa \).\footnote{This should be formalised as a structure, not as a definition. We should not use the projections of atoms unless absolutely necessary.}
+  The type of all atoms is denoted \( \Atom \), and \( \#\Atom = \#\mu \).
+  We write \( (-)^\circ : \Atom \to \Litter \) for the operation \( (L, i) \mapsto L \).\footnote{This must be a notation typeclass.}
+  We write \( \LS(L) \coloneq \{ a \mid a^\circ = L \} \) for the \emph{litter set} of \( L \).\footnote{Maybe revise this name?}
+\end{definition}
+\begin{definition}[near-litter]
+  \label{def:NearLitter}
+  \uses{def:Litter,def:Atom}
+  \lean{ConNF.NearLitter}
+  \leanok
+  A \emph{near-litter} is a pair \( N = (L, s) : \Litter \times \Set \Atom \) such that \( s \near \LS(L) \).\footnote{Like with atoms, this should be a structure. We should create an actual constructor, rather than using the \( \langle - \rangle \) syntax.}
+  We write \( (-)^\circ : \NearLitter \to \Litter \) for the operation \( (L, s) \mapsto L \).
+  We write \( a \in N \) for \( a \in s \), where \( N = (L, s) \).
+  Near-litters satisfy extensionality: there is at most one choice of \( L \) for each \( s \).
+  Each near-litter has size \( \#\kappa \) when treated as a set of atoms.
+  The type of all near-litters is denoted \( \NearLitter \), and \( \#\NearLitter = \#\mu \) (there are \( \#\mu \) litters, and \( \#\mu \) small sets of atoms by \cref{prop:card_subset_card_lt_cof}; the latter observation should be its own lemma).
+
+  We have \( M \near N \) if and only if \( M^\circ = N^\circ \).
+  If \( M^\circ = N^\circ \), then \( M \symmdiff N \) is small and \( M \cap N \) has size \( \#\kappa \).
+  If \( M^\circ \neq N^\circ \), then \( M \cap N \) has size \( \#\kappa \) and \( M \cap N \) is small.
+\end{definition}
+\begin{definition}[base permutation]
+  \label{def:BasePerm}
+  \uses{def:Atom,def:Litter,def:NearLitter}
+  \lean{ConNF.BasePerm}
+  \leanok
+  A \emph{base permutation} is a pair \( \pi = (\pi^\Atom, \pi^\Litter) \), where \( \pi^\Atom \) is a permutation \( \Atom \simeq \Atom \) and \( \pi^\Litter \) is a permutation \( \Litter \simeq \Litter \), such that
+  \[ \pi^\Atom[\LS(L)] \near \LS(\pi^\Litter(L)) \]
+  Base permutations have a natural group structure, they act on atoms by \( \pi^\Atom \), they act on litters by \( \pi^\Litter \), and they act on near-litters by\footnote{We need to emphasise these properties, rather than emphasising the real definition \( \pi(N) = (\pi(N^\circ), \pi[N]) \).}
+  \[ \pi(N)^\circ = \pi(N^\circ);\quad a \in \pi(N) \leftrightarrow a \in \pi[N] \]
+  Base permutations are determined by their action on atoms.
+  We should avoid directly referencing \( \pi^\Atom \) and \( \pi^\Litter \) whenever possible.
+\end{definition}
+
+\section{The structural hierarchy}
+
+We will now establish the hierarchy of types that our model will be built inside.
+
+\begin{definition}[path]
+  \label{def:Path}
+  \uses{def:TypeIndex}
+  \lean{ConNF.Path}
+  \leanok
+  If \( \alpha, \beta \) are type indices, then a \emph{path} \( \alpha \tpath \beta \) is given by the constructors
+  \begin{itemize}
+    \item \( \newoperator{nil} : \alpha \tpath \alpha \);
+    \item \( \newoperator{cons} : (\alpha \tpath \beta) \to (\gamma < \beta) \to (\alpha \tpath \gamma) \).
+  \end{itemize}
+  We define by recursion a \( \newoperator{snoc} \) operation on the top of paths.
+  We also prove the induction principle for \( \newoperator{nil} \) and \( \newoperator{snoc} \).
+
+  A path \( \alpha \tpath \bot \) is called an \emph{\( \alpha \)-extended index}.
+  We write \( \nil(\alpha) \) for the path \( \{ \alpha \} : \alpha \tpath \alpha \).
+  If \( h \) is a proof of \( \beta < \alpha \), we write \( \single(h) \) for the path \( \{ \alpha, \beta \} : \alpha \tpath \beta \).
+
+  We have the inequality
+  \begin{align*}
+    \#(\alpha \tpath \beta)
+    &\leq (\#\{ \gamma : \lambda^\bot \mid \gamma \leq \alpha \})^{<\omega} \\
+    &= \max(\aleph_0, \#\{ \gamma : \lambda^\bot \mid \gamma \leq \alpha \}) \\
+    &< \cof(\ord(\#\mu))
+  \end{align*}
+\end{definition}
+
+Many of the objects in this construction have an associated type level \( \alpha : \lambda^\bot \), and by application of a path of the form \( \alpha \tpath \beta \) or \( \beta \tpath \alpha \), we can often define a new object of type level \( \beta \).
+For this common task, we register the following notation typeclasses.
+\begin{itemize}
+  \item \( x \Downarrow A \) is the \emph{derivative} of an object of type \( \beta \) along a path \( A : \beta \tpath \gamma \), giving an object of type \( \gamma \);
+  \item \( x \downarrow h \) abbreviates \( x \Downarrow \single(h) \);\footnote{In practice the typeclasses will probably not formally depend on each other, and this `abbreviation' may not be a definitional equality.}
+  \item \( x \underset{\bot}{\Downarrow} A \) is the \emph{base derivative} of an object of type \( \beta \) along a path \( A : \beta \tpath \bot \);
+  \item \( x \underset{\bot}{\downarrow} \) abbreviates \( x \underset{\bot}{\Downarrow} \single(h) \) where \( h \) is the canonical proof of \( \bot < \beta \) whenever \( \beta : \lambda \);
+  \item \( x \Uparrow A \) is the \emph{coderivative} of an object of type \( \beta \) along a path \( A : \alpha \tpath \beta \), giving an object of type \( \alpha \);
+  \item \( x \uparrow h \) abbreviates \( x \Uparrow \single(h) \).
+\end{itemize}
+
+When we say that an object has an associated type level in this context, we mean that the notation typeclass is registered in the following form.
+
+\begin{verbatim}
+class Derivative (X : Type _) (Y : outParam (Type _))
+    (β : outParam TypeIndex) (γ : TypeIndex) where
+  deriv : X → Path β γ → Y
+\end{verbatim}
+
+This means that when inferring the type of the expression \( x \Downarrow A \), we first compute the type of \( x \), which gives rise to a unique type index \( \beta \), then the type of \( A \) is inferred to give \( \gamma \), then the output type \( Y \) is uniquely determined.
+
+The reason that we distinguish \( \underset{\bot}{\Downarrow} \) from \( \Downarrow \) is that the associated type \( Y \) is allowed to differ between the two forms.
+We will give a brief example motivated by a definition we are about to make.
+For each type index \( \beta \), there is a type of \( \beta \)-structural permutation, comprised of many base permutations.
+If we have a path \( \beta \tpath \gamma \), we can convert a \( \beta \)-structural permutation into a \( \gamma \)-structural permutation; this will be the derivative map.
+We will see that a given \( \bot \)-structural permutation contains exactly one base permutation, and so the types are in canonical isomorphism.
+If \( x \) is a \( \beta \)-structural permutation and \( A : \beta \tpath \bot \), then \( x \Downarrow A \) is a \( \bot \)-structural permutation, and \( x \underset{\bot}{\Downarrow} A \) is the corresponding base permutation.
+
+Because \( \uparrow, \downarrow \) and others are already used by Lean, we use slightly different notation in practice (e.g.\ \( \nearrow, \searrow \)).
+In this writeup, however, we will use subscripts for derivatives and superscripts for coderivatives.
+We will not distinguish typographically here between the single- and double-struck variants, or between \( \Downarrow \) and \( \underset{\bot}{\Downarrow} \); in the latter case, the syntax \( x_A \) always means \( x \underset{\bot}{\Downarrow} A \) whenever \( A \) has minimal element \( \bot \).
+We will also use \( x_\gamma \) to denote the derivative \( x_h \) where \( h \) is some proof of \( \gamma < \beta \), and use \( x^\alpha \) to denote \( x^h \) where \( h : \beta < \alpha \).
+
+\begin{definition-no-bp}[derivatives of paths]
+  If \( A : \alpha \tpath \beta \) and \( B : \beta \tpath \gamma \), the derivative \( A_B \) is defined to be the union \( A \cup B : \alpha \tpath \gamma \), and the coderivative \( B^A \) is defined to be \( A_B \).
+\end{definition-no-bp}
+
+\begin{definition}[tree]
+  \label{def:Tree}
+  \uses{def:Path}
+  \lean{ConNF.Tree}
+  \leanok
+  Let \( \tau \) be any type, and let \( \alpha \) be a type index.
+  An \emph{\( \alpha \)-tree of \( \tau \)} is a function \( t \) that maps each \( \alpha \)-extended index \( A \) to an object \( t_A : \tau \); this defines its base derivatives.
+  The type of \( \bot \)-trees of \( \tau \) is canonically isomorphic to \( \tau \).
+  If \( t \) is an \( \alpha \)-tree and \( A : \alpha \tpath \beta \), we define the derivative \( t_A \) to be the \( \beta \)-tree defined by \( (t_A)_B = t_{(A_B)} \).
+  This derivative map is functorial: for any paths \( A : \alpha \tpath \beta \) and \( B : \beta \tpath \gamma \), we have \( t_{(A_B)} = (t_A)_B \).
+  If \( \tau \) has a group structure, then so does its type of trees: \( (t \cdot u)_A = t_A \cdot u_A \) and \( (t^{-1})_A = (t_A)^{-1} \).
+  If \( \tau \) acts on \( \upsilon \), then \( \alpha \)-trees of \( \tau \) act on \( \alpha \)-trees of \( \upsilon \): \( (t(u))_A = t_A(u_A) \).
+
+  If \( \#\tau \leq \#\mu \), there are at most \( \#\mu \)-many \( \alpha \)-trees of \( \tau \), since there are less than \( \cof(\ord(\#\mu)) \)-many \( \alpha \)-extended indices, allowing us to conclude by \cref{prop:card_subset_card_lt_cof} as each such tree is a subset of \( (\alpha \tpath \bot) \times \tau \) of size less than \( \cof(\ord(\#\mu)) \).
+  If \( \#\tau < \#\mu \), there are less than \( \#\mu \)-many \( \alpha \)-trees of \( \tau \), since there are less than \( \cof(\ord(\#\mu)) \)-many \( \alpha \)-extended indices and strong limits are closed under exponentials.
+\end{definition}
+\begin{definition}[structural permutation]
+  \label{def:StrPerm}
+  \uses{def:BasePerm,def:Tree}
+  \lean{ConNF.StrPerm}
+  \leanok
+  Let \( \alpha \) be a type index.
+  Then an \emph{\( \alpha \)-structural permutation} (or just \emph{\( \alpha \)-permutation}) is an \( \alpha \)-tree of base permutations.
+  The type of \( \alpha \)-permutations is written \( \StrPerm_\alpha \).
+\end{definition}
+As an implementation detail, we create a typeclass \( \texttt{StrPermClass}_\alpha \) for permutations that `act like' \( \alpha \)-permutations: they have a group structure and a canonical group embedding into \( \StrPerm_\alpha \).
+When we quantify over structural permutations in this paper, it should be formalised using an additional quantification over \( \texttt{StrPermClass}_\alpha \).
+\begin{definition}[enumeration]
+  \label{def:Enumeration}
+  \uses{def:Small}
+  \lean{ConNF.Enumeration}
+  \leanok
+  Let \( \tau \) be a type.
+  An \emph{enumeration} of \( \tau \) is a pair \( E = (i, f) \) where \( i : \kappa \) and \( f \) is a partial function \( \kappa \to \tau \), such that all domain elements of \( f \) are strictly less than \( i \).\footnote{This should be encoded as a coinjective relation \( \kappa \to \tau \to \Prop \); see \cref{def:relation_props}.}
+  If \( x : \tau \), we write \( x \in E \) for \( x \in \ran f \).
+  The set \( \{ y \mid y \in E \} \), which we may also loosely call \( E \), is small.
+  We will write \( \varnothing \) for the empty enumeration \( (0, \varnothing) \).
+
+  If \( g : \tau \to \sigma \), then \( g \) lifts to a direct image function mapping enumerations of \( \tau \) to enumerations of \( \sigma \):
+  \[ g(i, f) = (i, f');\quad f' = \{ (j, g(x)) \mid (j, x) \in f \} \]
+  Thus, \( x \in g(E) \leftrightarrow x \in g[E] \).
+  In the same way, groups that act on \( \tau \) also act on enumerations of \( \tau \).\footnote{Actually, we should probably implement this using the inverse image not the direct image for better definitional equalities.}
+  If \( g : \sigma \to \tau \) is injective, then \( g \) lifts to an inverse image function mapping enumerations of \( \tau \) to enumerations of \( \sigma \):
+  \[ g^{-1}(i, f) = (i, f');\quad f' = \{ (j, x) \mid (j, g(x)) \in f \} \]
+  This operation may cause the domain of \( f \) to shrink, but we will keep \( i \) the same.
+
+  If \( E = (i, e) \) and \( F = (j, f) \) are enumerations of \( \tau \), we define their \emph{concatenation} by
+  \[ E + F = (i + j, e \cup f');\quad f' = \{(i + k, x) \mid (k, x) \in f \} \]
+  This operation commutes with the others: \( x \in E + F \leftrightarrow x \in E \vee x \in F \), \( g[E + F] = g[E] + g[F] \), and \( g^{-1}[E + F] = g^{-1}[E] + g^{-1}[F] \).
+
+  We define a partial order on enumerations by setting \( (i, e) \leq (j, f) \) if and only if \( f \) extends \( e \) as a partial function.
+  We obtain various corollaries, such as \( E \leq F \to g(E) \leq g(F) \) and \( E \leq E + F \).
+
+  Every small subset of \( \tau \) is the range of some enumeration of \( \tau \).
+
+  If \( \#\tau \leq \#\mu \), then there are at most \( \#\mu \)-many enumerations of \( \tau \): enumerations are determined by an element of \( \kappa \) and a small subset of \( \kappa \times \tau \).
+  If \( \#\tau < \#\mu \), then there are strictly less than \( \#\mu \)-many enumerations of \( \tau \): use the same reasoning and apply \cref{prop:card_subset_card_lt_cof}.
+\end{definition}
+\begin{definition}[base support]
+  \label{def:BaseSupport}
+  \uses{def:Enumeration,def:NearLitter}
+  \lean{ConNF.BaseSupport}
+  \leanok
+  A \emph{base support} is a pair \( S = (S^\Atom, S^\NearLitter) \) where \( S^\Atom \) is an enumeration of atoms and \( S^\NearLitter \) is an enumeration of near-litters.
+  There are precisely \( \#\mu \) base supports.
+\end{definition}
+\begin{definition}[structural support]
+  \label{def:StrSupport}
+  \uses{def:BaseSupport,def:StrPerm}
+  \lean{ConNF.Support}
+  \leanok
+  A \emph{\( \beta \)-structural support} (or just \emph{\( \beta \)-support}) is a pair \( S = (S^\Atom, S^\NearLitter) \) where \( S^\Atom \) is an enumeration of \( (\beta \tpath \bot) \times \Atom \) and \( S^\NearLitter \) is an enumeration of \( (\beta \tpath \bot) \times \NearLitter \).
+  The type of \( \beta \)-supports is written \( \StrSupp_\beta \).
+  There are precisely \( \#\mu \) structural supports for any type index \( \beta \).
+
+  For a path \( A : \beta \tpath \bot \), we write \( S_A \) for the base support \( T \) given by
+  \[ T^\Atom = \{ (i, a) \mid (i, (A, a)) \in S^\Atom \};\quad T^\NearLitter = \{ (i, N) \mid (i, (A, N)) \in S^\NearLitter \} \]
+  More generally, for a path \( A : \beta \tpath \gamma \), we write \( S_A \) for the \( \gamma \)-support \( T \) given by
+  \[ T^\Atom = \{ (i, (B, a)) \mid (i, (A_B, a)) \in S^\Atom \};\quad T^\NearLitter = \{ (i, (B, N)) \mid (i, (A_B, N)) \in S^\NearLitter \} \]
+  For a path \( A : \alpha \tpath \beta \), we write \( S^A \) for the \( \alpha \)-support \( T \) given by
+  \[ T^\Atom = \{ (i, (A_B, a)) \mid (i, (B, a)) \in S^\Atom \};\quad T^\NearLitter = \{ (i, (A_B, N)) \mid (i, (B, N)) \in S^\NearLitter \} \]
+  Clearly, \( (S^A)_A = S \).
+
+  \( \beta \)-structural permutations act on pairs \( (A, x) \) by \( \pi(A, x) = (A, \pi_A(x)) \), where \( x \) is either an atom or a near-litter.
+  Hence, structural permutations act on structural supports.
+
+  Let \( \tau \) be a type, and let \( G \) be a \( \texttt{StrPermClass}_\beta \)-group that acts on \( \tau \).
+  We say that \( S \) \emph{supports} \( x : \tau \) under the action of \( G \) if whenever \( \pi : G \) fixes \( S \), it also fixes \( x \), and moreover, if \( \beta = \bot \) then \( S_A^\NearLitter \) is empty for any \( A : \bot \tpath \bot \) (and of course there is exactly one such path).
+\end{definition}
+\begin{definition}[structural set]
+  \label{def:StrSet}
+  \uses{def:StrPerm}
+  \lean{ConNF.StrSet}
+  \leanok
+  The type of \emph{\( \alpha \)-structural sets}, denoted \( \StrSet_\alpha \), is defined by well-founded recursion on \( \lambda^\bot \).
+  \begin{itemize}
+    \item \( \StrSet_\bot \coloneq \Atom \);
+    \item \( \StrSet_\alpha \coloneq \prod_{\beta : \lambda^\bot} \beta < \alpha \to \Set \StrSet_\beta \) where \( \alpha : \lambda \).
+  \end{itemize}
+  These equalities will in fact only be equivalences in the formalisation.
+  We define the action of \( \alpha \)-permutations (more precisely, inhabitants of some type with a \( \texttt{StrPermClass}_\alpha \) instance) on \( \alpha \)-structural sets by well-founded recursion.
+  \begin{itemize}
+    \item \( \pi(x) = \pi_{\nil(\bot)}(x) \) if \( \alpha \equiv \bot \);
+    \item \( \pi(x) = (\beta, h \mapsto \pi_h[x(\beta, h)]) \) if \( \alpha : \lambda \).
+  \end{itemize}
+\end{definition}
+
+\section{Position functions}
+\begin{definition}[position function]
+  \label{def:Position}
+  \uses{def:Params}
+  \lean{ConNF.Position}
+  \leanok
+  Let \( \tau \) be a type.
+  A \emph{position function} for \( \tau \) is an injection \( \iota : \tau \to \mu \).
+  This is a typeclass.
+\end{definition}
+\begin{proposition}[injective functions from denied sets]
+  \label{prop:funOfDeny}
+  \uses{def:Params}
+  \lean{ConNF.funOfDeny}
+  \leanok
+  Let \( \tau \) be a type such that \( \#\tau \leq \#\mu \).
+  Let \( D : \tau \to \Set(\mu) \) be a function such that for each \( x : \tau \), the set \( D(x) \), called the \emph{denied set} of \( x \), has size less than \( \cof(\ord(\#\mu)) \).
+  Then there is an injective function \( f : \tau \to \mu \) such that if \( \nu \in D(x) \), then \( \nu < f(x) \).
+\end{proposition}
+\begin{proof}
+  \leanok
+  Pick a well-ordering \( \prec \) of \( \tau \) of length at most \( \ord(\#\mu) \).
+  Define \( f \) by well-founded recursion on \( \prec \).
+  Suppose that we have already defined \( f \) for all \( y \prec x \).
+  Then let
+  \[ X = \{ f(y) \mid y \prec x \} \cup \{ \nu \mid \exists \nu' \in D(x),\, \nu \leq \nu' \} \]
+  This set has size strictly less than \( \mu \), so there is some \( \nu : \mu \) not contained in it.
+  Set \( f(x) = \nu \).
+\end{proof}
+\begin{proposition}[base positions]
+  \label{prop:BasePositions}
+  \uses{def:Position}
+  \leanok
+  There are position functions on \( \Atom, \NearLitter \) that are jointly injective and satisfy
+  \begin{itemize}
+    \item \( \iota(\NL(a^\circ)) < \iota(a) \) for every atom \( a \);
+    \item \( \iota(\NL(N^\circ)) \leq \iota(N) \) for every near-litter \( N \);
+    \item \( \iota(a) < \iota(N) \) for every near-litter \( N \) and atom \( a \in N \symmdiff \LS(N^\circ) \).\footnote{TODO: Make syntax for \( N \symmdiff \LS(N^\circ) \).}
+  \end{itemize}
+  We register these position functions as instances for use in typeclass inference.
+  We also define \( \iota(L) = \iota(\NL(L)) \) for litters.
+\end{proposition}
+\begin{proof}
+  \uses{prop:funOfDeny}
+  \leanok
+  First, establish an equivalence \( f_\Litter : \Litter \simeq \mu \).
+  Use \cref{prop:funOfDeny} to obtain an injective map \( f_\Atom : \NearLitter \to \mu \) such that \( f_\Litter(a^\circ) < f_\Atom(a) \) for each atom \( a \).
+  Now use \cref{prop:funOfDeny} again to obtain an injective map \( f_\NearLitter : \NearLitter \to \mu \) such that
+  \[ f_\Litter(N^\circ) < f_\NearLitter(N);\quad f_\Atom(a) < f_\NearLitter(N) \text{ for } a \in N \symmdiff \LS(N^\circ) \]
+  Endow \( 3 \times \mu \) with its lexicographic order, of order type \( \ord(\#\mu) \), giving an order isomorphism \( e : 3 \times \mu \simeq \mu \).
+  Finally, we define
+  \[ \iota(a) = e(1, f_\Atom(a));\quad \iota(N) = \begin{cases}
+    e(0, f_\Litter(N^\circ)) & \text{if } N = \NL(N^\circ) \\
+    e(2, f_\NearLitter(N)) & \text{otherwise}
+  \end{cases} \]
+\end{proof}
+
+\section{Hypotheses of the recursion}
+\begin{definition}[model data]
+  \label{def:ModelData}
+  \uses{def:StrSupport,def:StrSet}
+  \lean{ConNF.ModelData}
+  \leanok
+  Let \( \alpha \) be a type index.
+  \emph{Model data} at type \( \alpha \) consists of:\footnote{A type theory problem with \texttt{export}ing this data is that under different assumptions, things like different spellings of \( \TSet_\alpha \) might require case splitting on \( \alpha \) before they become defeq (e.g.\ see the old version of \texttt{Model/FOA.lean}). There doesn't seem to be an easy way around this.}
+  \begin{itemize}
+    \item a \( \TSet_\alpha \) called the type of \emph{tangled sets} or \emph{t-sets}, which will be our type of model elements at level \( \alpha \), with an embedding \( U_\alpha : \TSet_\alpha \to \StrSet_\alpha \);
+    \item a group \( \AllPerm_\alpha \) called the type of \emph{allowable permutations}, with a \( \texttt{StrPermClass}_\alpha \) instance and a specified action on \( \TSet_\alpha \),
+  \end{itemize}
+  such that
+  \begin{itemize}
+    \item if \( \rho : \AllPerm_\alpha \) and \( x : \TSet_\alpha \), then \( \rho(U_\alpha(x)) = U_\alpha(\rho(x)) \);
+    \item every t-set of type \( \alpha \) has an \( \alpha \)-support (\cref{def:StrSupport}) for its action under the \( \alpha \)-allowable permutations.
+  \end{itemize}
+\end{definition}
+\begin{definition}[tangle]
+  \label{def:Tangle}
+  \uses{def:ModelData}
+  \lean{ConNF.Tangle}
+  \leanok
+  Let \( \alpha \) be a type index with model data.
+  An \emph{\( \alpha \)-tangle} is a pair \( t = (x, S) \) where \( x \) is a tangled set of type \( \alpha \) and \( S \) is an \( \alpha \)-support for \( x \).
+  We define \( \set(t) = x \) and \( \supp(t) = S \).
+  The type of \( \alpha \)-tangles is denoted \( \Tang_\alpha \).
+  Allowable permutations \( \rho \) act on tangles by \( \rho((x, S)) = (\rho(x), \rho(S)) \), and so \( \supp(t) \) supports \( t \) for its action under the allowable permutations.
+  Therefore, each tangled set \( x \) is of the form \( \set(t) \) for some tangle \( t \).
+\end{definition}
+\begin{proposition}[fuzz maps]
+  \label{prop:fuzz}
+  \uses{def:Tangle,def:Position}
+  \lean{ConNF.fuzz}
+  \leanok
+  Let \( \beta \) be a type index with model data, and suppose that \( \Tang_\beta \) has a position function.
+  Let \( \gamma \) be any proper type index not equal to \( \beta \).
+  Then there is an injective \emph{fuzz map} \( f_{\beta,\gamma} : \Tang_\beta \to \Litter \) such that \( \iota(t) < \iota(f_{\beta,\gamma}(t)) \), and the different \( f_{\beta,\gamma} \) all have disjoint ranges.
+  In particular, for any near-litter \( N \) with \( N^\circ = f_{\beta,\gamma}(t) \), we have \( \iota(t) < \iota(N) \), and additionally, for any atom \( a \) with \( a^\circ = f_{\beta,\gamma}(t) \), we have \( \iota(t) < \iota(a) \).\footnote{We might want to encapsulate atoms and near-litters somehow. We could make a typeclass, or write theorems in terms of the coproduct \( \Atom \oplus \NearLitter \).}
+\end{proposition}
+\begin{proof}
+  \uses{prop:funOfDeny}
+  \leanok
+  We define \( g : \Tang_\beta \to \mu \) by \cref{prop:funOfDeny}, where the denied sets are given by \( D(t) = \{ \iota(t) \} \).
+  Then we set \( f_{\beta,\gamma}(t) = (g(t), \beta, \gamma) \).
+\end{proof}
+\begin{definition}[inflexible path]
+  \label{def:InflexiblePath}
+  \uses{prop:fuzz}
+  \lean{ConNF.InflexiblePath}
+  \leanok
+  Let \( \alpha \) be a proper type index.
+  Suppose that we have model data for all type indices \( \beta \leq \alpha \) and position functions for \( \Tang_\beta \) for all \( \beta < \alpha \).
+  For any type index \( \beta \leq \alpha \), a \emph{inflexible \( \beta \)-path} is a tuple \( I = (\gamma, \delta, \varepsilon, A) \) where \( \delta, \varepsilon < \gamma \) are distinct, the index \( \varepsilon \) is proper, and \( A : \beta \tpath \gamma \).
+  We will write \( \gamma_I, \delta_I, \varepsilon_I, A_I \) for its fields.
+  Inflexible paths have a coderivative operation, given by \( (\gamma, \delta, \varepsilon, A)^B = (\gamma, \delta, \varepsilon, A^B) \).
+\end{definition}
+\begin{definition}[typed near-litter]
+  \label{def:TypedNearLitter}
+  \uses{def:ModelData,def:Tangle,prop:BasePositions}
+  \lean{ConNF.TypedNearLitters}
+  \leanok
+  Let \( \alpha \) be a proper type index with model data, and suppose that \( \Tang_\alpha \) has a position function.
+  We say that \( \alpha \) has \emph{typed near-litters} if there is an embedding \( \typed_\alpha : \NearLitter \to \TSet_\alpha \) such that
+  \begin{itemize}
+    \item if \( \rho : \AllPerm_\alpha \) and \( N : \NearLitter \), then \( \rho(\typed_\alpha(N)) = \typed_\alpha(\rho_\bot(N)) \); and
+    \item if \( N \) is a near-litter and \( t \) is an \( \alpha \)-tangle such that \( \set(t) = \typed_\alpha(N) \), we have \( \iota(N) \leq \iota(t) \).
+  \end{itemize}
+  Objects of the form \( \typed_\alpha \) are called \emph{typed near-litters}.
+\end{definition}
+\begin{definition}[coherent data]
+  \label{def:CoherentData}
+  \uses{def:TypedNearLitter,def:InflexiblePath}
+  \lean{ConNF.CoherentData}
+  \leanok
+  Let \( \alpha \) be a proper type index.
+  Suppose that we have model data for all type indices \( \beta \leq \alpha \), position functions for \( \Tang_\beta \) for all \( \beta < \alpha \), and typed near-litters for all \( \beta < \alpha \).
+  We say that the model data is \emph{coherent} below level \( \alpha \) if the following hold.
+  \begin{itemize}
+    \item For \( \gamma < \beta \leq \alpha \), there is a map \( \AllPerm_\beta \to \AllPerm_\gamma \) that commutes with the coercions from \( \AllPerm_{(-)} \) to \( \StrPerm_{(-)} \).
+    We can use this map to define arbitrary derivatives of allowable permutations by recursion on paths.
+    \item If \( (x, S) \) is a \( \beta \)-tangle for \( \beta < \alpha \), and \( y \) is an atom or near-litter that occurs in the range of \( S_A \), then \( \iota(y) < \iota(x, S) \).
+    \item Let \( \beta \leq \alpha \), and let \( \gamma, \delta < \beta \) be distinct with \( \delta \) proper.
+    Let \( t : \Tang_\gamma \) and \( \rho : \AllPerm_\beta \).
+    Then
+    \[ (\rho_\delta)_\bot(f_{\gamma,\delta}(t)) = f_{\gamma,\delta}(\rho_\gamma(t)) \]
+    In particular, for every \( \beta \leq \alpha \), \( \beta \)-allowable permutation \( \rho \), and \( \beta \)-inflexible path \( I \), we obtain
+    \[ ((\rho_A)_\varepsilon)_\bot(f_{\delta,\varepsilon}(t)) = f_{\delta,\varepsilon}((\rho_A)_\delta(t)) \]
+    where subscripts of \( I \) are suppressed.
+    \item Suppose that \( \beta \leq \alpha \) and \( (\rho(\gamma))_{\gamma < \beta} \) is a collection of allowable permutations such that whenever \( \gamma, \delta < \beta \) are distinct, \( \delta \) is proper, and \( t : \Tang_\delta \), we have
+    \[ (\rho(\delta))_\bot(f_{\gamma,\delta}(t)) = f_{\gamma,\delta}(\rho(\gamma)(t)) \]
+    Then there is a \( \beta \)-allowable permutation \( \rho \) with \( \rho_\gamma = \rho(\gamma) \) for each \( \gamma < \beta \).
+    \item If \( \beta \leq \alpha \) is a proper type index and \( x : \TSet_\beta \), then for any \( \gamma < \beta \),
+    \[ U_\beta(x)(\gamma) \subseteq \ran U_\gamma \]
+    \item (extensionality) If \( \beta, \gamma \leq \alpha \) are proper type indices where \( \gamma < \beta \), the map \( U_\beta(-)(\gamma) : \TSet_\beta \to \Set \StrSet_\gamma \) is injective.
+    \item If \( \beta, \gamma : \lambda \) where \( \gamma < \beta \), for every \( x : \TSet_\gamma \) there is some \( y : \TSet_\beta \) such that \( U_\beta(y)(\gamma) = \{ x \} \).
+    We write \( \singleton_\beta(x) \) for this object \( y \), which is uniquely defined by extensionality.
+  \end{itemize}
+  Note that this structure contains data (the derivative maps for allowable permutations and the singleton operations), but the type is a subsingleton: any two inhabitants are propositionally equal.
+  We will not use this fact directly, but the idea will have relevance in \cref{c:induction}.
+\end{definition}
+The strategy of our construction is as follows.
+\begin{itemize}
+  \item In \cref{c:construction}, we assume model data, position functions, and typed near-litters for all types \( \beta < \alpha \), and construct model data at level \( \alpha \).
+  \item In \cref{c:foa,c:counting}, we assume coherent data below level \( \alpha \) (along with the assumptions required for this definition to make sense) and prove that \( \#\TSet_\alpha = \#\mu \).
+  \item In \cref{c:induction}, we use the results of \cref{c:construction,c:foa,c:counting} to show that we can provide position functions and typed near-litters at level \( \alpha \).
+  We then show that these constructions may be iterated so that we may define all of the above structures at every proper type level.
+\end{itemize}

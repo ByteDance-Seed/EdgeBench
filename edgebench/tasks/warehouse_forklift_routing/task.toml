@@ -1,0 +1,35 @@
+schema_version = 0
+id = "warehouse_forklift_routing"
+name = "Warehouse Forklift Routing"
+category = "Combinatorial Optimization"
+language = "Python"
+description = "Route a forklift in a grid warehouse to receive goods arriving in random order, store them, and dispatch them in sequential order, minimizing total movement."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python310"
+platform = "linux/amd64"
+cwd = "/home/workspace/warehouse_manager"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["solution.py"]
+exclude = []
+
+[judge]
+cmd = "python3 /judge/grade.py"
+timeout_sec = 3600
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# eval_warehouse_manager.py runs the 50 cases 8 at a time, each `python3 solution.py` under a 60 s
+# wall-clock timeout. Scores of time-limited (anytime) solutions depend on host CPU speed and
+# load; see NOTES.md.
+
+[score]
+direction = "minimize"
+rescale = { kind = "piecewise_log_min", baseline = 23277.847205, rank30 = 804.959064, rank1 = 395.802847, super_anchor = 293.51379275 }

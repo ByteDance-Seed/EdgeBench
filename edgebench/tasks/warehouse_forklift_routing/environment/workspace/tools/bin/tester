@@ -1,0 +1,178 @@
+#!/usr/bin/env python3
+"""Scoring program for Warehouse Manager (CodeChef WAREHOUS).
+Usage: ./tester <input_file> <output_file>
+Outputs "Score = <float>" to stderr on success, or "wrong answer: <reason>" on failure.
+Exit code: 0 on success, 1 on failure.
+
+Score = average over T test cases of: (S+2)/(R+C-1) - 2*R*C + 20
+where S is the instruction string length. Lower is better.
+"""
+import sys
+from collections import deque
+
+def main():
+    if len(sys.argv) < 3:
+        print("Usage: ./tester <input_file> <output_file>", file=sys.stderr)
+        sys.exit(1)
+
+    input_file = sys.argv[1]
+    output_file = sys.argv[2]
+
+    with open(input_file, 'r') as f:
+        in_lines = f.read().strip().split('\n')
+
+    with open(output_file, 'r') as f:
+        out_lines = f.read().strip().split('\n')
+
+    li = 0
+    T = int(in_lines[li]); li += 1
+
+    if len(out_lines) != T:
+        print(f"wrong answer: expected {T} output lines, got {len(out_lines)}", file=sys.stderr)
+        sys.exit(1)
+
+    total_score = 0.0
+
+    for tc in range(T):
+        R, C = map(int, in_lines[li].split()); li += 1
+        shipments = list(map(int, in_lines[li].split())); li += 1
+        n = R * C - 1
+
+        instructions = out_lines[tc].strip()
+        S = len(instructions)
+
+        if S > 500000:
+            print(f"wrong answer: test case {tc+1}: instructions too long ({S} > 500000)", file=sys.stderr)
+            sys.exit(1)
+
+        # Simulate the forklift to validate
+        grid = [[0]*C for _ in range(R)]  # 0 = empty, >0 = good ID
+        fr, fc = 0, 0  # forklift position
+        carrying = 0  # 0 = nothing, >0 = good ID
+        arrival_idx = 0  # next good to arrive
+        dispatch_idx = 0  # next good to dispatch (1-indexed, dispatch order 1..n)
+        all_arrived = False
+        dispatched = set()
+
+        dir_map = {'N': (-1, 0), 'S': (1, 0), 'W': (0, -1), 'E': (0, 1)}
+
+        i = 0
+        while i < len(instructions):
+            cmd = instructions[i]
+
+            if cmd in 'NSWE':
+                dr, dc = dir_map[cmd]
+                nr, nc = fr + dr, fc + dc
+                if not (0 <= nr < R and 0 <= nc < C):
+                    print(f"wrong answer: tc {tc+1}: move {cmd} goes out of bounds at ({fr},{fc})", file=sys.stderr)
+                    sys.exit(1)
+                if carrying == 0 and grid[nr][nc] != 0:
+                    # Can move to occupied if not carrying
+                    pass
+                if carrying != 0 and grid[nr][nc] != 0:
+                    print(f"wrong answer: tc {tc+1}: carrying good into occupied cell ({nr},{nc})", file=sys.stderr)
+                    sys.exit(1)
+                fr, fc = nr, nc
+                i += 1
+
+            elif cmd == 'P':
+                if fr != 0 or fc != 0:
+                    print(f"wrong answer: tc {tc+1}: P not at entrance", file=sys.stderr)
+                    sys.exit(1)
+                if carrying != 0:
+                    print(f"wrong answer: tc {tc+1}: P while carrying", file=sys.stderr)
+                    sys.exit(1)
+                if arrival_idx >= n:
+                    print(f"wrong answer: tc {tc+1}: P but all goods arrived", file=sys.stderr)
+                    sys.exit(1)
+                carrying = shipments[arrival_idx]
+                arrival_idx += 1
+                if arrival_idx >= n:
+                    all_arrived = True
+                i += 1
+
+            elif cmd == 'D':
+                if fr != 0 or fc != 0:
+                    print(f"wrong answer: tc {tc+1}: D not at entrance", file=sys.stderr)
+                    sys.exit(1)
+                if carrying == 0:
+                    print(f"wrong answer: tc {tc+1}: D while not carrying", file=sys.stderr)
+                    sys.exit(1)
+                if not all_arrived:
+                    print(f"wrong answer: tc {tc+1}: D before all arrived", file=sys.stderr)
+                    sys.exit(1)
+                expected = dispatch_idx + 1
+                if carrying != expected:
+                    print(f"wrong answer: tc {tc+1}: dispatching {carrying} but expected {expected}", file=sys.stderr)
+                    sys.exit(1)
+                dispatched.add(carrying)
+                dispatch_idx += 1
+                carrying = 0
+                i += 1
+
+            elif cmd == 'L':
+                i += 1
+                if i >= len(instructions):
+                    print(f"wrong answer: tc {tc+1}: L at end of string", file=sys.stderr)
+                    sys.exit(1)
+                d = instructions[i]
+                if d not in dir_map:
+                    print(f"wrong answer: tc {tc+1}: invalid L direction {d}", file=sys.stderr)
+                    sys.exit(1)
+                dr, dc = dir_map[d]
+                nr, nc = fr + dr, fc + dc
+                if not (0 <= nr < R and 0 <= nc < C):
+                    print(f"wrong answer: tc {tc+1}: L{d} goes out of bounds", file=sys.stderr)
+                    sys.exit(1)
+                if carrying != 0:
+                    print(f"wrong answer: tc {tc+1}: L while carrying", file=sys.stderr)
+                    sys.exit(1)
+                if grid[nr][nc] == 0:
+                    print(f"wrong answer: tc {tc+1}: L{d} but cell ({nr},{nc}) is empty", file=sys.stderr)
+                    sys.exit(1)
+                carrying = grid[nr][nc]
+                grid[nr][nc] = 0
+                i += 1
+
+            elif cmd == 'U':
+                i += 1
+                if i >= len(instructions):
+                    print(f"wrong answer: tc {tc+1}: U at end of string", file=sys.stderr)
+                    sys.exit(1)
+                d = instructions[i]
+                if d not in dir_map:
+                    print(f"wrong answer: tc {tc+1}: invalid U direction {d}", file=sys.stderr)
+                    sys.exit(1)
+                dr, dc = dir_map[d]
+                nr, nc = fr + dr, fc + dc
+                if not (0 <= nr < R and 0 <= nc < C):
+                    print(f"wrong answer: tc {tc+1}: U{d} goes out of bounds", file=sys.stderr)
+                    sys.exit(1)
+                if carrying == 0:
+                    print(f"wrong answer: tc {tc+1}: U while not carrying", file=sys.stderr)
+                    sys.exit(1)
+                if grid[nr][nc] != 0:
+                    print(f"wrong answer: tc {tc+1}: U{d} but cell ({nr},{nc}) occupied", file=sys.stderr)
+                    sys.exit(1)
+                grid[nr][nc] = carrying
+                carrying = 0
+                i += 1
+
+            else:
+                print(f"wrong answer: tc {tc+1}: unknown command '{cmd}'", file=sys.stderr)
+                sys.exit(1)
+
+        if dispatch_idx != n:
+            print(f"wrong answer: tc {tc+1}: only dispatched {dispatch_idx}/{n} goods", file=sys.stderr)
+            sys.exit(1)
+
+        case_score = (S + 2) / (R + C - 1) - 2 * R * C + 20
+        total_score += case_score
+
+    avg_score = total_score / T
+    # Round to int for display
+    print(f"Score = {avg_score:.1f}", file=sys.stderr)
+    sys.exit(0)
+
+if __name__ == "__main__":
+    main()

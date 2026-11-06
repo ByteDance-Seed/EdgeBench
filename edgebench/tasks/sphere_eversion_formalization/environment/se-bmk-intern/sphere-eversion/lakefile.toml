@@ -1,0 +1,18 @@
+name = "SphereEversion"
+defaultTargets = ["SphereEversion"]
+
+[leanOptions]
+pp.unicode.fun = true
+autoImplicit = false
+relaxedAutoImplicit = false
+linter.mathlibStandardSet = true
+linter.flexible = true
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.28.0"
+
+[[lean_lib]]
+name = "SphereEversion"
+roots = ["SphereEversion", "ListDeclAxiom"]

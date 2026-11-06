@@ -1,0 +1,31 @@
+schema_version = 0
+id = "pfr_formalization"
+name = "Pfr Formalization"
+category = "Formal Math & Theorem Proving"
+language = "Lean 4"
+description = "Resolve proof obligations in the Lean 4 formalization of the Polynomial Freiman–Ruzsa conjecture (Gowers–Green–Manners–Tao 2023), involving Shannon entropy, Ruzsa distance, and subgroup covering arguments."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "lean-4.29.0-mathlib-8a17838"
+platform = "linux/amd64"
+cwd = "/home/workspace/"
+internet = false
+cpus = 8
+memory = "16g"
+
+[submission]
+paths = ["se-bmk-intern/pfr"]
+exclude = ["se-bmk-intern/pfr/.lake"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 2400
+cpus = 8
+memory = "16g"
+
+[score]
+direction = "maximize"
+# raw score = repaired / 423 baseline sorry declarations, 0 if a HASH check fails (v1 eval_lean `score`)
+rescale = { kind = "linear", lower = 0.0, upper = 1.0 }

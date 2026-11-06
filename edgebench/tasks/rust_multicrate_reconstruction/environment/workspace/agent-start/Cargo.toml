@@ -1,0 +1,39 @@
+[workspace]
+resolver = "2"
+members = [
+    "cas-cli",
+    "crates/cas-types",
+    "crates/cas-search",
+    "crates/cas-store",
+    "crates/cas-core",
+    "crates/cas-mcp",
+    "crates/cas-code",
+    "crates/cas-mux",
+    "crates/cas-pty",
+    "crates/cas-recording",
+    "crates/cas-factory-protocol",
+    "crates/cas-diffs",
+    "crates/cas-factory",
+    "crates/cas-tui-test",
+    "crates/ghostty_vt_sys",
+    "crates/ghostty_vt",
+]
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+[profile.dev]
+debug = 1
+incremental = true
+
+[profile.dev.package."*"]
+opt-level = 1
+
+[profile.release-fast]
+inherits = "release"
+lto = "thin"
+codegen-units = 16
+strip = "debuginfo"
+panic = "abort"

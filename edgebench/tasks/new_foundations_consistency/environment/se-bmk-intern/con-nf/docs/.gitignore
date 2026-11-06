@@ -1,0 +1,9 @@
+_site
+.sass-cache
+.jekyll-cache
+.jekyll-metadata
+vendor
+docs/
+depgraph.*
+unseen_defs.txt
+index.csv

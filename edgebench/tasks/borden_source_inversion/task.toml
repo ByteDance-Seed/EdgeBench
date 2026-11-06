@@ -1,0 +1,35 @@
+schema_version = 0
+id = "borden_source_inversion"
+name = "Borden Source Inversion"
+category = "Scientific Problems & ML"
+language = "Python"
+description = "Infer a finite-duration rectangular contaminant source from sparse, noisy monitoring-well observations in a 3D hydrogeological scene. The agent must implement its own forward model and inversion optimizer from scratch."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python310"
+platform = "linux/amd64"
+cwd = "/home/workspace/borden_inverse"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["."]
+exclude = ["scoring/", "__pycache__/", ".pytest_cache/", "*.pyc", "private_generation_record_not_for_agent.json", "score.json"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 600
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# The grader is deterministic (closed-form ADE forward model, no timing); a run takes a few
+# seconds.
+
+[score]
+direction = "maximize"
+# raw score = v1 structured_json score = evaluate.py total_score (0..100 by construction).
+# v1 defined no rescale (score_0_100 was null), so none is set here either; see NOTES.md.

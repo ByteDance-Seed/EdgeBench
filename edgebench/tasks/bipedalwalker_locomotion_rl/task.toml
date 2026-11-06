@@ -1,0 +1,36 @@
+schema_version = 0
+id = "bipedalwalker_locomotion_rl"
+name = "Bipedalwalker Locomotion Rl"
+category = "Scientific Problems & ML"
+language = "Python"
+description = "Train a CPU-only locomotion policy for BipedalWalker and its Hardcore variant. The judge evaluates only the submitted policy checkpoint, not the training process. Pre-trained policies and external RL libraries are prohibited."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python"            # bases/python (python:3.11 + git curl jq build-essential); torch 2.3.1+cpu, gymnasium[box2d] 0.29.1 etc. added by the task
+platform = "linux/amd64"
+cwd = "/home/workspace/loco-rl"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["submission/"]
+exclude = ["submission/eval_results.json", "submission/checkpoints/", "submission/*.log", "submission/*.tmp", "__pycache__/", "eval/", "sebench_eval.py", ".git/"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 900
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# sebench_eval.py runs 10 deterministic episodes per environment (fixed seeds, deterministic
+# actions), each environment under its own 300 s subprocess timeout. No wall-clock dependence in
+# the score unless a policy is slow enough to hit that timeout.
+
+[score]
+direction = "maximize"
+# raw score = v1 structured_json score (0..30 by construction); v1 rescale linear 0..100 (identity).
+rescale = { kind = "linear", lower = 0.0, upper = 100.0 }

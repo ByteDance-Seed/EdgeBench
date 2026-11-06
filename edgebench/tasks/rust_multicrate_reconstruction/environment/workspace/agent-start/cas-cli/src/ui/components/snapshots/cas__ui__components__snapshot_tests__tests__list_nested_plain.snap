@@ -1,0 +1,10 @@
+---
+source: cas-cli/src/ui/components/snapshot_tests.rs
+expression: tf.output()
+---
+- Parent
+- Has children
+  - Child A
+  - Child B
+    - Grandchild
+- Another top-level

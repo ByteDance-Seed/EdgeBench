@@ -1,0 +1,17 @@
+*.pdf
+*.paux
+*.aux
+*.log
+*.synctex
+print
+web
+__pycache__
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz
+*.xdv
+*.maf
+*.mtc
+*.mtc0
+build

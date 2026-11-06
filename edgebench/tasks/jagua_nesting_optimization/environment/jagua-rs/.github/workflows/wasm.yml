@@ -1,0 +1,58 @@
+name: Build and Deploy WASM
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - '**.rs'
+      - '**.toml'
+      - '**.yml'
+      - 'lbf/wasm-demo/**'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - '**.rs'
+      - '**.toml'
+      - '**.yml'
+      - 'lbf/wasm-demo/**'
+  workflow_dispatch: # Added for manual triggering if needed
+
+jobs:
+  wasm_build_deploy:
+    name: Build and Deploy LBF.wasm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: 'latest'
+      - name: Build LBF.wasm demo
+        run: |
+          cd lbf
+          wasm-pack build --target web --release --out-dir wasm-demo/pkg
+      - name: Copy built files to deployment directory
+        run: |
+          mkdir -p deploy
+          mv lbf/wasm-demo/index.html deploy/index.html
+          mv lbf/wasm-demo/index.js deploy/index.js
+          mv lbf/wasm-demo/coi-serviceworker.js deploy/coi-serviceworker.js
+          mv lbf/wasm-demo/pkg deploy/pkg   
+          rm -f deploy/pkg/.gitignore
+          ls -R deploy
+      - name: Deploy LBF.wasm demo
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: JamesIves/github-pages-deploy-action@v4.7.3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: gh-pages
+          folder: deploy
+          target-folder: lbf-wasm-demo
+          clean: false 
+          commit-message: "auto deploy wasm demo"
+          single-commit: true

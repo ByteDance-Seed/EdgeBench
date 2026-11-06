@@ -1,0 +1,37 @@
+schema_version = 0
+id = "k12_math_recommendation"
+name = "K12 Math Recommendation"
+category = "Professional Knowledge Work"
+language = "Python"
+description = "Build a knowledge-tracing and question-recommendation system from hundreds of thousands of student interaction records, evaluated on prediction accuracy, mastery calibration, learning gain, and pedagogical constraint satisfaction."
+version = "1.0.0"
+status = "migrated"
+
+[environment]
+base = "python"
+platform = "linux/amd64"
+cwd = "/home/workspace"
+internet = false
+cpus = 4
+memory = "16g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+
+[submission]
+paths = ["train.py", "infer.py", "models", "submission.json", "requirements.txt", "README.md"]
+exclude = [".git", "__pycache__", "*.pyc", "node_modules", "bin", "obj"]
+
+[judge]
+cmd = "bash /judge/run.sh"
+timeout_sec = 900
+cpus = 4
+memory = "8g"
+# Official leaderboard limits (v1 kept them only in the experiment YAMLs).
+# The grader runs the submitted infer.py once on the 100 hidden scenarios (subprocess timeout 600
+# s inside evaluate.py); its wall-clock time feeds M5 (full marks at <= 200 s), so M5 can depend
+# on host speed.
+
+[score]
+direction = "maximize"
+# raw score = v1 structured_json score = evaluate.py total_score (0..100 by construction,
+# clipped by score.py). v1 defined no rescale (score_0_100 was null), so none is set here
+# either; see NOTES.md.

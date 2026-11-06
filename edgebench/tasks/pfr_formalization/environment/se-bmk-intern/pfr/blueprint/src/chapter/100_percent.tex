@@ -1,0 +1,59 @@
+\chapter{The 100\% version of PFR}
+
+\begin{definition}[Symmetry group]\label{sym-group-def}
+\lean{symmGroup}\leanok
+If $X$ is a $G$-valued random variable, then the symmetry group $\mathrm{Sym}[X]$ is the set of all $h \in G$ such that $X +h$ has the same distribution as $X$.
+\end{definition}
+
+\begin{lemma}[Symmetry group is a group]\label{sym-group}\uses{sym-group-def}
+\lean{symmGroup}\leanok
+If $X$ is a $G$-valued random variable, then $\mathrm{Sym}[X]$ is a subgroup of $G$.
+\end{lemma}
+
+\begin{proof}\leanok Direct verification of the group axioms.
+\end{proof}
+
+\begin{lemma}[Zero Ruzsa distance implies large symmetry group]\label{zero-large}
+  \lean{sub_mem_symmGroup}\leanok  If $X$ is a $G$-valued random variable such that
+  $d[X ;X]=0$, and $x,y \in G$ are such that $P[X=x], P[X=y]>0$, then $x-y \in \mathrm{Sym}[X]$.
+\end{lemma}
+
+\begin{proof}
+  \uses{ruz-indep, ruz-copy, relabeled-entropy-cond,vanish-entropy, alternative-mutual, independent-exist,sym-group-def}\leanok
+   Let $X_1,X_2$ be independent copies of $X$ (from \Cref{independent-exist}). Let $A$ denote the range of $X$.  From \Cref{ruz-indep} and \Cref{ruz-copy} we have
+  $$ \bbH[X_1-X_2] = \bbH[X_1].$$
+Observe from \Cref{relabeled-entropy-cond} that
+$$ \bbH[X_1-X_2|X_2] = \bbH[X_1|X_2] = \bbH[X_1]$$
+and hence by \Cref{alternative-mutual}
+$$ \bbI[X_1-X_2 : X_1] = 0.$$
+By \Cref{vanish-entropy}, $X_1-X_2$ and $X_1$ are therefore independent, thus the law of $(X_1-X_2|X_1=x)$ does not depend on $x \in A$. The claim follows.
+\end{proof}
+
+\begin{lemma}[Translate is uniform on symmetry group]\label{sym-zero}
+\lean{isUniform_sub_const_of_rdist_eq_zero}\leanok
+  If $X$ is a $G$-valued random variable with $d[X ;X]=0$, and $x_0$ is a point with $P[X=x_0] > 0$, then $X-x_0$ is uniformly distributed on $\mathrm{Sym}[X]$.
+\end{lemma}
+
+\begin{proof}\uses{zero-large,sym-group-def,uniform-def}\leanok  The law of $X-x_0$ is invariant under $\mathrm{Sym}[X]$, non-zero at the origin, and supported on  $\mathrm{Sym}[X]$, giving the claim.
+\end{proof}
+
+
+\begin{lemma}[Symmetric 100\% inverse theorem]\label{lem:100pc-self}
+  \lean{exists_isUniform_of_rdist_self_eq_zero}\leanok
+  Suppose that $X$ is a $G$-valued random variable such that
+  $d[X ;X]=0$. Then there exists a subgroup $H \leq G$ such that $d[X ;U_H] = 0$.
+\end{lemma}
+
+\begin{proof}\uses{sym-group, sym-zero}\leanok
+Take $H$ to be the symmetry group of $X$, which is a group by \Cref{sym-group}. From \Cref{sym-zero}, $X-x_0$ is uniform on $H$, and $d[X ;X-x_0] = d[X ;X] \leq 0$, and the claim follows.
+\end{proof}
+
+\begin{corollary}[General 100\% inverse theorem]\label{lem:100pc}
+  \lean{exists_isUniform_of_rdist_eq_zero}\leanok
+  Suppose that $X_1,X_2$ are $G$-valued random variables such that
+  $d[X_1;X_2]=0$. Then there exists a subgroup $H \leq G$ such that $d[X_1;U_H] = d[X_2;U_H] = 0$.
+\end{corollary}
+
+\begin{proof}\uses{lem:100pc-self,ruzsa-triangle, ruzsa-nonneg}\leanok
+Using \Cref{ruzsa-triangle} and \Cref{ruzsa-nonneg} we have $d[X_1;X_1]=0$, hence by \Cref{lem:100pc-self} $d[X_1;U_H]=0$ for some subgroup $H$.  By \Cref{ruzsa-triangle} and \Cref{ruzsa-nonneg} again we also have $d[X_2;U_H]$ as required.
+\end{proof}

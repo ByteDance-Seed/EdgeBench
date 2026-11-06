@@ -15,7 +15,7 @@
 """Abstract container backend interface for SForge.
 
 Provides ContainerBackend ABC with Docker and Kubernetes implementations.
-Select via --backend flag or SFORGE_BACKEND env var.
+Select via the --backend flag.
 """
 
 from sforge.harness.backend.base import (

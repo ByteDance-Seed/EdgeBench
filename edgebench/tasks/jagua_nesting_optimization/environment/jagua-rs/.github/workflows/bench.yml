@@ -1,0 +1,65 @@
+name: Perf Tracker
+
+on:
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - '**.rs'
+      - '**.toml'
+      - '**.yml'
+  push:
+    branches: ["main"]
+    paths:
+      - '**.rs'
+      - '**.toml'
+      - '**.yml'
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    name: CI Benchmarks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # Fetch full history for commit comparisons
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run benchmarks
+        env:
+          RUSTFLAGS: '-C target-cpu=native -Awarnings'
+        run: |
+          export RUSTFLAGS=$RUSTFLAGS
+          cargo bench --bench ci_bench -- --output-format bencher | tee output.txt
+
+      - name: Summarize benchmark result
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Performance Tracker
+          tool: 'cargo'
+          output-file-path: output.txt
+          benchmark-data-dir-path: 'benchmarks'
+          save-data-file: false
+          summary-always: true
+
+      - name: Store benchmark result
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Performance Tracker
+          tool: 'cargo'
+          output-file-path: output.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          # Enable alerts for performance regressions
+          alert-threshold: '120%' # Alert if performance regresses by more than 20%
+          benchmark-data-dir-path: 'benchmarks'
+          summary-always: true
+          comment-always: true
