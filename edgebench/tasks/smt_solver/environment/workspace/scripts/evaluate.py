@@ -26,11 +26,14 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 sys.setrecursionlimit(max(sys.getrecursionlimit(), 20000))
+VALIDATOR_RECURSION_LIMIT = 1_000_000
+VALIDATOR_STACK_BYTES = 2 * 1024**3  # address space; pages are committed as the recursion reaches them
 
 LOGICS = ["QF_UF", "QF_LRA", "QF_LIA", "QF_UFLRA"]
 DIFFICULTIES = ["easy", "medium", "hard"]
@@ -536,6 +539,8 @@ class WitnessChecker:
             try:
                 if self.logic != "QF_UF":
                     return ("num", parse_numeric_literal(term))
+            except MemoryError:
+                raise
             except Exception:
                 pass
             if term in self.decls:
@@ -643,8 +648,37 @@ class WitnessChecker:
             seen[key] = result
 
 
+class ValidatorFailure(BaseException):
+    """The validator could not run, which says nothing about the model. Not an Exception, so that
+    run_solver_case does not record it as an invalid model: it ends the evaluation without a score."""
+
+
 def validate_sat_witness(benchmark_path, witness):
-    WitnessChecker(benchmark_path, witness).validate()
+    # Hard files nest deeply enough to overflow the default stack, which kills the pool worker and ends the
+    # whole evaluation, and to pass 20000 recursions. Too deep even for this is a rejected model, not a crash.
+    box = {}
+
+    def run():
+        limit = sys.getrecursionlimit()
+        sys.setrecursionlimit(VALIDATOR_RECURSION_LIMIT)
+        try:
+            WitnessChecker(benchmark_path, witness).validate()
+        except BaseException as exc:
+            box["exc"] = exc
+        finally:
+            sys.setrecursionlimit(limit)
+
+    try:
+        threading.stack_size(VALIDATOR_STACK_BYTES)
+        thread = threading.Thread(target=run)
+        thread.start()
+    except (RuntimeError, ValueError, MemoryError) as exc:
+        raise ValidatorFailure(f"cannot start the validator thread: {exc}") from exc
+    thread.join()
+    if isinstance(box.get("exc"), MemoryError):
+        raise ValidatorFailure("the validator ran out of memory")
+    if "exc" in box:
+        raise box["exc"]
 
 
 def parse_solver_output(stdout):

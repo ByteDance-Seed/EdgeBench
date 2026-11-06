@@ -53,6 +53,25 @@ shared host, two runs each. Raw score; 0..100 in brackets.
 Deterministic rows match exactly, including per-logic counts. The timed rows differ by a few cases
 near the 60 s limit; the old-new difference of means is smaller than either side's own spread.
 
+## Changes
+
+### 1.1.0
+
+`validate_sat_witness` recursed with a limit of 20000, more than the default 8 MiB stack holds. On deep
+files a correct `sat` model segfaulted the pool worker and ended the evaluation with no score file,
+which the judge reported as a valid 0 (`correct=0/0`). Validation now runs in a thread with a 2 GiB
+stack (address space; pages are committed as the recursion reaches them) and a recursion limit of
+1,000,000. A correct model deeper than that scores as an invalid model, but the evaluation continues.
+If the thread cannot start or the validator runs out of memory, the evaluation ends as it did on a
+crash, rather than rejecting the model.
+
+The formula and scale are unchanged. Regrade crashed evaluations (a valid 0 with `correct=0/0` from a
+submission that built and ran), and models rejected at the old recursion limit or because the validator
+ran out of memory. Other verdicts stay, on a host that can reserve 2 GiB of address space per validation. At 8 CPUs and 7 GiB a real solver goes from 0.00 to 46.15; of its 354
+models, 350 get the same verdict from both validators and the other 4 are the crashes. Failure-path
+controls are unchanged. Source, Deviations and Regression summary describe 1.0.0. Issue:
+https://github.com/ByteDance-Seed/EdgeBench/issues/42
+
 ## Known issues
 
 Kept as in v1, so scores stay comparable. Fixing any of them changes scores and bumps `version`.
