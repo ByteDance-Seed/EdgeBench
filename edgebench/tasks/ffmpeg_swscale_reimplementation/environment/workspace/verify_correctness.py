@@ -3,7 +3,7 @@
 verify_correctness.py — Agent development tool.
 
 Loads the candidate shared library, runs a set of public conversion workloads,
-and compares outputs against the reference FFmpeg binary.  Reports per-workload
+and compares outputs against the public scalar baseline. Reports per-workload
 PSNR and overall pass/fail.
 
 Usage:
@@ -47,6 +47,7 @@ from pixel_formats import (
 )
 
 FFMPEG_BIN = "/reference/ffmpeg"
+BASELINE_LIB = "/app/libswscale_public_baseline.so"
 MEDIA_DIR = Path("/app/media")
 
 PSNR_THRESHOLD_CONVERT = 60.0  # format conversion only (same size)
@@ -93,53 +94,31 @@ def compute_psnr(data_a: bytes, data_b: bytes) -> float:
     return 10.0 * math.log10(255.0 * 255.0 / mse)
 
 
-def generate_reference_output(
-    src_path: Path,
-    src_fmt: str,
-    src_w: int,
-    src_h: int,
-    dst_fmt: str,
-    dst_w: int,
-    dst_h: int,
-    algo: int = ALGO_BILINEAR,
-) -> bytes:
-    """Use reference FFmpeg to produce golden output."""
-    algo_flag_map = {
-        ALGO_NEAREST: "point",
-        ALGO_BILINEAR: "bilinear",
-        ALGO_BICUBIC: "bicubic",
-    }
-    sws_flag = algo_flag_map.get(algo, "bilinear")
+def generate_reference_output(reference, workload: dict, src_planes: list[bytes]) -> list[bytes]:
+    """Use the public C-only baseline, with the same C ABI as the candidate.
 
-    with tempfile.NamedTemporaryFile(suffix=".raw", delete=False) as f:
-        dst_path = f.name
+    The CLI binary enables assembly and uses different rounding on some paths.
+    Separate source buffers also prevent a candidate that mutates its input from
+    changing the reference output.
+    """
+    src_fmt, dst_fmt = workload["src_fmt"], workload["dst_fmt"]
+    src_w, src_h = workload["src_w"], workload["src_h"]
+    dst_w, dst_h = workload["dst_w"], workload["dst_h"]
+    src_data, src_stride, src_bufs = allocate_image(src_fmt, src_w, src_h)
+    dst_data, dst_stride, dst_bufs = allocate_image(dst_fmt, dst_w, dst_h)
+    fill_image_from_bytes(src_fmt, src_w, src_h, src_data, src_stride, src_planes)
+    ctx = reference.swscale_create(
+        src_w, src_h, src_fmt, dst_w, dst_h, dst_fmt, workload["algo"]
+    )
+    if not ctx:
+        raise RuntimeError("Scalar reference swscale_create returned NULL")
     try:
-        cmd = [
-            FFMPEG_BIN,
-            "-y",
-            "-f",
-            "rawvideo",
-            "-pix_fmt",
-            src_fmt,
-            "-s",
-            f"{src_w}x{src_h}",
-            "-i",
-            str(src_path),
-            "-f",
-            "rawvideo",
-            "-pix_fmt",
-            dst_fmt,
-            "-s",
-            f"{dst_w}x{dst_h}",
-            "-sws_flags",
-            sws_flag,
-            dst_path,
-        ]
-        subprocess.run(cmd, check=True, capture_output=True)
-        return Path(dst_path).read_bytes()
+        ret = reference.swscale_process(ctx, src_data, src_stride, dst_data, dst_stride)
+        if ret != 0:
+            raise RuntimeError(f"Scalar reference swscale_process returned {ret}")
+        return image_to_bytes(dst_fmt, dst_w, dst_h, dst_data, dst_stride)
     finally:
-        if os.path.exists(dst_path):
-            os.unlink(dst_path)
+        reference.swscale_destroy(ctx)
 
 
 def load_raw_planes(path: Path, fmt: int, w: int, h: int) -> list[bytes]:
@@ -296,7 +275,7 @@ PUBLIC_WORKLOADS = [
 ]
 
 
-def run_workload(lib, workload: dict) -> dict:
+def run_workload(lib, workload: dict, reference=None) -> dict:
     """Run a single conversion workload and return result dict."""
     label = workload["label"]
     src_fmt = workload["src_fmt"]
@@ -346,7 +325,11 @@ def run_workload(lib, workload: dict) -> dict:
     else:
         src_planes = load_raw_planes(src_file, src_fmt, src_w, src_h)
 
-    # Allocate buffers
+    if reference is None:
+        reference = load_swscale_library(BASELINE_LIB)
+    ref_planes = generate_reference_output(reference, workload, src_planes)
+
+    # Allocate independent candidate buffers
     src_data, src_stride, src_bufs = allocate_image(src_fmt, src_w, src_h)
     dst_data, dst_stride, dst_bufs = allocate_image(dst_fmt, dst_w, dst_h)
 
@@ -375,33 +358,7 @@ def run_workload(lib, workload: dict) -> dict:
     # Extract candidate output
     candidate_planes = image_to_bytes(dst_fmt, dst_w, dst_h, dst_data, dst_stride)
 
-    # Generate reference output
-    dst_name = FFMPEG_PIXFMT[dst_fmt]
-    src_name_ffmpeg = FFMPEG_PIXFMT[src_fmt]
-
-    # Write src to temp file for FFmpeg
-    with tempfile.NamedTemporaryFile(suffix=".raw", delete=False) as f:
-        for plane in src_planes:
-            f.write(plane)
-        tmp_src = f.name
-
-    try:
-        ref_raw = generate_reference_output(
-            Path(tmp_src), src_name_ffmpeg, src_w, src_h, dst_name, dst_w, dst_h, algo
-        )
-    finally:
-        os.unlink(tmp_src)
-
-    # Parse reference into planes
-    ref_planes = []
     ref_desc = PIXFMT_DESCS[dst_fmt]
-    offset = 0
-    for i in range(ref_desc.num_planes):
-        pw = ref_desc.plane_width(i, dst_w) * ref_desc.planes[i].bpp
-        ph = ref_desc.plane_height(i, dst_h)
-        plane_size = pw * ph
-        ref_planes.append(ref_raw[offset : offset + plane_size])
-        offset += plane_size
 
     # Compute PSNR per plane
     is_scaling = (src_w != dst_w) or (src_h != dst_h)
@@ -445,12 +402,14 @@ def main():
         print("Searched:", find_candidate_lib() or "(nothing found)")
         sys.exit(1)
 
-    if not os.path.exists(FFMPEG_BIN):
-        print(f"ERROR: Reference FFmpeg not found at {FFMPEG_BIN}")
+    if not os.path.exists(BASELINE_LIB):
+        print(f"ERROR: Scalar baseline library not found at {BASELINE_LIB}")
         sys.exit(1)
 
     print(f"Loading candidate: {candidate_path}")
     lib = load_swscale_library(candidate_path)
+    reference = load_swscale_library(BASELINE_LIB)
+    print(f"Scalar reference: {BASELINE_LIB}")
 
     results = []
     passed = 0
@@ -459,7 +418,7 @@ def main():
     for wl in PUBLIC_WORKLOADS:
         total += 1
         try:
-            result = run_workload(lib, wl)
+            result = run_workload(lib, wl, reference)
         except Exception as e:
             result = {"label": wl["label"], "status": "error", "reason": str(e)}
         results.append(result)

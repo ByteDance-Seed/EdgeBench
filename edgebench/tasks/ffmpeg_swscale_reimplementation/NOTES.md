@@ -22,7 +22,7 @@ fails (maximize). The rescale is the v1 one (`log_anchor`, anchor 14.155 -> 43).
   snapshot of v1's build day, at v1's versions. Base: `bases/cpp`.
 - The reference FFmpeg build, the baseline library, all toolchains and the generated media are
   byte-identical to the published v1 images.
-- `instruction.md`: v1's prompt, verbatim.
+- `instruction.md`: v1's prompt, with the development-reference correction documented below.
 
 ## Deviations from v1
 
@@ -89,7 +89,26 @@ Kept as in v1, so scores stay comparable. Fixing any of them changes scores and 
    exported symbols. Re-implementing FFmpeg code statically is allowed by design.
 8. **The submission can tamper with grading.** Its build scripts run as root in the judge
    container before scoring (the cross-task issue in `tasks/SCHEMA.md`).
-9. **The dev tool disagrees with the judge.** `verify_correctness.py` compares against the
-   assembly-optimized reference, the judge against the C-only baseline; the scaffold, which passes
-   all 30 hidden workloads, shows 9/13 on the public tool.
-10. `language = "C++"` in the task metadata; the deliverable is Rust or Zig.
+9. `language = "C++"` in the task metadata; the deliverable is Rust or Zig.
+
+## Changes
+
+### 1.0.1 — align public correctness feedback with the scalar baseline
+
+`verify_correctness.py` now compares with the already-shipped
+`libswscale_public_baseline.so`, using the same C ABI as `run_dev_bench.py`.
+Previously the assembly-enabled CLI rounded differently on some paths, and its
+nearest `point` flag failed to parse. This sent a correct candidate back into
+unnecessary correctness debugging. Input-media generation may still use the CLI;
+the expected output always comes from the scalar library, with separate buffers.
+A missing or failed reference remains an error, without a CLI fallback.
+
+In an isolated amd64 work image, with the same media, baseline and rebuilt Rust
+scaffold, the old public checker passed 9/13 for **both** the scalar baseline and
+the scaffold. The new checker passed 13/13 for both, including nearest scaling;
+a candidate returning a null context still failed. The workload list, per-plane
+PSNR thresholds, candidate implementation, judge source and score definition are
+unchanged. This fixes development feedback, not historical scores, and does not
+establish correctness on unseen inputs or a solver performance gain. The work
+image comparison uses an immutable image plus the changed public Python script;
+it is not a fresh toolchain rebuild or a new judge benchmark.
