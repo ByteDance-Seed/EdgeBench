@@ -149,10 +149,13 @@ cat /app/media/manifest.json  # Format, size, path metadata
     -f rawvideo -pix_fmt rgb24 /tmp/gradient_rgb24.raw
 ```
 
-**Note:** `verify_correctness.py` is a development-only tool that uses
-`/reference/ffmpeg` to generate golden outputs. The reference binary is
-deleted before final scoring — the actual verifier compares your output
-against the baseline library instead.
+**Note:** `verify_correctness.py` compares public workloads against
+`/app/libswscale_public_baseline.so`, the C-only reference also used by
+`run_dev_bench.py`. It calls the same C API as your candidate, including nearest
+scaling. `/reference/ffmpeg` remains useful for generating input media, but its
+assembly-optimized conversions can round differently from this scalar reference.
+Passing the public workloads does not establish correctness on unseen inputs.
+The candidate must implement conversion itself; it may not wrap the reference.
 
 ### Study the FFmpeg source:
 
