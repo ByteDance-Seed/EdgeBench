@@ -898,7 +898,7 @@ def main():
     solver = os.path.abspath(args.solver)
     if not os.path.isfile(solver) or not os.access(solver, os.X_OK):
         print(f"Error: solver is not executable: {args.solver}", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(2)
     if not os.path.isdir(args.benchmarks):
         print(f"Error: benchmark directory does not exist: {args.benchmarks}", file=sys.stderr)
         sys.exit(1)

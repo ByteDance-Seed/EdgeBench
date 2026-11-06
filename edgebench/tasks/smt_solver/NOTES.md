@@ -53,6 +53,15 @@ shared host, two runs each. Raw score; 0..100 in brackets.
 Deterministic rows match exactly, including per-logic counts. The timed rows differ by a few cases
 near the 60 s limit; the old-new difference of means is smaller than either side's own spread.
 
+## Changes
+
+### 1.1.0
+
+If the evaluator exits with anything but 0 or 2 and leaves no score file, the result is now invalid,
+not a valid 0. A build failure, a missing `solve` and a preflight rejection stay a valid 0 (the missing
+`solve` exit changes from 1 to 2 to keep that). No score changes unless the evaluator crashed. Source,
+Deviations and Regression summary describe 1.0.0. Issue: https://github.com/ByteDance-Seed/EdgeBench/issues/42
+
 ## Known issues
 
 Kept as in v1, so scores stay comparable. Fixing any of them changes scores and bumps `version`.
