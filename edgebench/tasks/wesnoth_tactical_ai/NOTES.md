@@ -13,8 +13,8 @@ efficiency = `min(1, baseline_turns / turns)` averaged over wins. The rescale is
 - No upstream repository: v1 built everything from Debian packages and two inline scripts in its
   build recipe.
 - `environment/workspace/my_custom_ai.cfg` and `judge/eval_wesnoth.py`: byte-identical to v1's
-  inline scripts and to the published v1 images. `judge/grade.py` is new and writes `result.json`
-  with v1's scoring logic.
+  inline scripts and to the published v1 images, apart from the 1.1.0 change below. `judge/grade.py`
+  is new and writes `result.json` with v1's scoring logic.
 - `instruction.md`: v1's prompt, verbatim.
 - Wesnoth `1:1.18.5-1` (`wesnoth-1.18`, `wesnoth-1.18-data`) from the Debian snapshot of
   2026-06-05, the day v1 installed it. Every file under `/usr` and every package version matches
@@ -53,9 +53,25 @@ are within about two standard errors, and the pooled means over 40 runs per side
 and 74.1 (new). Together with identical files and packages, this is agreement within v1's own
 noise.
 
+## Changes
+
+### 1.1.0
+
+Top-level `.lua` files now load. The sandbox header ended in `if io then`, and Wesnoth's Lua raises
+on an undefined global, so every such file failed at that line, before reaching the submitted code,
+and the grade reported nothing. The test is now `if rawget(_G, "io") then`. The rest of the header
+is unchanged and runs as before.
+
+A submission whose config uses a top-level `.lua` file now runs that code, so its score can change
+in either direction. There is no mapping, because the old score never ran it.
+A submission with no top-level `.lua` file runs the same code as before; its score varies only as
+in Known issue 1.
+
+Source, Deviations and Regression summary describe 1.0.0 unless they say otherwise.
+
 ## Known issues
 
-Kept as in v1, so scores stay comparable. Fixing any of them changes scores and bumps `version`.
+Not fixed. Fixing any of them changes scores and bumps `version`.
 
 1. **Games are not reproducible, so the score is noisy.** The same map and seed do not replay the
    same game, and the two repeats of a pair often disagree. A ~70-point AI has a run-to-run

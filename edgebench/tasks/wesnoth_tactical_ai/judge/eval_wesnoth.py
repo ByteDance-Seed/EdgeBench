@@ -53,7 +53,7 @@ end
 if os and os.execute then
     os.execute = function(...) error("SE-Bench: os.execute is forbidden") end
 end
-if io then
+if rawget(_G, "io") then
     io.open = function(...) error("SE-Bench: io.open is forbidden") end
 end
 """

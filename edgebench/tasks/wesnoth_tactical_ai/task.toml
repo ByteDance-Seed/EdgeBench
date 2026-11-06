@@ -4,7 +4,7 @@ name = "Wesnoth Tactical Ai"
 category = "Interactive Games & Simulators"
 language = "Python"
 description = "Write tactical AI logic for Battle for Wesnoth that defeats the built-in AI through custom recruitment, focus-fire targeting, terrain exploitation, and village-capture timing across multiple maps."
-version = "1.0.0"
+version = "1.1.0"
 status = "migrated"
 
 [environment]
