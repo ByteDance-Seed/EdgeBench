@@ -20,7 +20,7 @@ and runs each with `tsx` under `timeout 90`. Raw score = `100 × WEIGHTED_PASSED
   snapshot; all 361 packages that step adds are checked against v1's versions. Base: `bases/python`.
 - `judge/eval_hidden.py` is v1's inline eval program, verbatim; `judge/run.sh` and
   `judge/write_result.py` are new and write `result.json` with v1's structured-result logic.
-- `instruction.md`: v1's prompt, verbatim.
+- `instruction.md`: v1's prompt, verbatim in 1.0.0; 1.0.1 adds the `analyze()` return shape.
 
 ## Deviations from v1
 
@@ -47,6 +47,15 @@ each. The grader is deterministic. Raw score (= 0..100).
 | forged result (Known issue 2) | 100 | 100 |
 
 Every row matches exactly, including raw and weighted counts, and equals the historical v1 scores.
+
+## Changes
+
+### 1.0.1
+
+The hidden type-system suites (1000 of the 2970 weighted points, 33.67 of 100) call `.filter` on the
+return value of `analyze()`, but nothing the agent sees gives that shape, and the starter returns an
+object. A submission that keeps the object scores 0 on those suites. `instruction.md` now states the
+shape. The judge and work images are unchanged (same tags), so grading is unchanged.
 
 ## Known issues
 

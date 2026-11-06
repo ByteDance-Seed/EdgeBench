@@ -4,7 +4,7 @@ name = "Arc Compiler Runtime"
 category = "Systems & Software Engineering"
 language = "Python"        # v1 tasks.jsonl value (base image); the submission itself is JavaScript run by Node 20
 description = "Implement a complete TypeScript compiler pipeline (lexer, parser, type checker, code generator) for a novel programming language defined by specification documents."
-version = "1.0.0"
+version = "1.0.1"
 status = "migrated"
 
 [environment]

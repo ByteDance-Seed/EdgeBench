@@ -1,1 +1,3 @@
 Implement the missing Arc compiler and runtime modules under compiler/src/. Use CHEATSHEET.md, TASK.md, and the public smoke tests as the language contract. Modify only files under compiler/src/. Do not modify tests, scoring scripts, task metadata, Dockerfiles, package files, node_modules, generated dist artifacts, source maps, or evaluator-owned files. Work offline and do not depend on hidden tests or hard-coded answers.
+
+The evaluator calls `analyze(parse(lex(source)))`. `analyze` in `compiler/src/semantic.js` must return an array of diagnostics (empty when there are none), each an object with `level` (`"error"` or `"warning"`) and `message` (a string). The starter's `analyze` returns a different shape.
