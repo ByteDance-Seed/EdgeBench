@@ -7,5 +7,5 @@ cd /home/workspace/swscale-impl
 /bin/bash /judge/eval.sh > "$OUT" 2>&1
 cat "$OUT"
 mkdir -p /opt/sforge
-python3 -I /judge/grade.py "$OUT" /opt/sforge/result.json
+python3 -I /judge/grade.py "$OUT" /opt/sforge/result.json /logs/verifier/reward.json
 rm -f "$OUT"

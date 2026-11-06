@@ -6,13 +6,43 @@ extract_score() = the FIRST `TOTAL_SCORE <n>` anywhere in the test output (sforg
 The test output is the text between the START/END markers (extract_test_output); in this task
 the END marker is never printed (see NOTES.md, Known issue 2), so it is the whole output.
 
-Usage: grade.py <eval output file> <result.json path>
+Usage: grade.py <eval output file> <result.json path> [reward.json path]
 """
 import json
 import re
 import sys
 
 START, END = ">>>>> Start Test Output", ">>>>> End Test Output"
+
+# Task-local stages are recorded by the failing verifier branch. Never infer them
+# from build output or forward free-form reasons (paths, workload data, exceptions).
+FAILURE_MESSAGES = {
+    "source_policy": "Source policy check failed before compilation; pixel correctness and speed were not evaluated.",
+    "build": "The candidate did not build or produce the required shared library; pixel correctness and speed were not evaluated.",
+    "artifact_policy": "The compiled candidate failed the library policy check; pixel correctness and speed were not evaluated.",
+    "candidate_load": "The candidate shared library could not be loaded; pixel correctness and speed were not evaluated.",
+    "baseline": "The verifier baseline was unavailable or failed its integrity check; no candidate quality conclusion is available.",
+    "correctness": "Pixel correctness checks failed; the performance benchmark was not run.",
+    "verifier": "The verifier did not complete; no candidate quality conclusion is available.",
+}
+
+
+def failure_diagnostic(reward_path: str | None, score: float | None) -> dict:
+    """Optional bounded feedback; unavailable or contradictory evidence stays absent."""
+    if reward_path is None or score != 0:
+        return {}
+    try:
+        with open(reward_path, encoding="utf-8") as f:
+            reward = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(reward, dict) or type(reward.get("score")) not in (int, float) or reward["score"] != 0:
+        return {}
+    additional = reward.get("additional_data")
+    stage = additional.get("failure_stage") if isinstance(additional, dict) else None
+    if not isinstance(stage, str) or stage not in FAILURE_MESSAGES:
+        return {}
+    return {"failure_stage": stage, "message": FAILURE_MESSAGES[stage]}
 
 
 def extract_test_output(raw: str) -> str:
@@ -90,6 +120,13 @@ def main() -> int:
             summary += f" (+{len(bad) - 10} more)"
     m = re.search(r"TOTAL_SCORE\s+(inf|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)", out)
     score = float(m.group(1)) if m else None
+    diagnostic = failure_diagnostic(sys.argv[3] if len(sys.argv) > 3 else None, score)
+    if diagnostic:
+        for test in tests:
+            if test["name"] == "tests/eval.py::overall_score" and test["status"] == "FAILED":
+                test.update(diagnostic)
+                summary += ". " + diagnostic["message"]
+                break
     metrics = {}
     r = re.search(r"Correctness: (\d+)/(\d+) workloads passed", out)
     if r:

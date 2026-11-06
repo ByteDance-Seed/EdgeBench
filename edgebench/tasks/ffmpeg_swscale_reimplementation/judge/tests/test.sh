@@ -55,7 +55,7 @@ echo "Step 2: Checking baseline integrity..."
 BASELINE_LIB="/verifier-data/libswscale_baseline.so"
 if [ ! -f "$BASELINE_LIB" ]; then
     "${PY_RUN[@]}" "${SCRIPT_DIR}/compute_reward.py" \
-        --fail "baseline library missing" \
+        --fail "baseline library missing" --fail-stage baseline \
         --total-time-ms "$(( $(python3 -c "import time; print(int(time.time()*1000))") - HARBOR_START_MS ))" \
         --output-dir "$VERIFIER_DIR"
     exit 0
@@ -65,7 +65,7 @@ EXPECTED_HASH=$(cat /verifier-data/baseline_hash.txt 2>/dev/null | tr -d '[:spac
 ACTUAL_HASH=$(sha256sum "$BASELINE_LIB" | awk '{print $1}')
 if [ "${EXPECTED_HASH}" != "${ACTUAL_HASH}" ]; then
     "${PY_RUN[@]}" "${SCRIPT_DIR}/compute_reward.py" \
-        --fail "baseline library integrity check failed" \
+        --fail "baseline library integrity check failed" --fail-stage baseline \
         --total-time-ms "$(( $(python3 -c "import time; print(int(time.time()*1000))") - HARBOR_START_MS ))" \
         --output-dir "$VERIFIER_DIR"
     exit 0
@@ -112,7 +112,7 @@ done < <(find "${IMPL_DIR}" \
     -type f \( -name "*.zig" -o -name "*.rs" -o -name "*.c" -o -name "*.h" -o -name "*.cc" -o -name "*.cpp" -o -name "*.hpp" -o -name "*.inc" -o -name "*.toml" -o -name "*.py" -o -name "*.sh" -o -name "*.json" -o -name "*.txt" -o -name "*.cfg" -o -name "*.ld" -o -name "*.S" -o -name "*.asm" -o -name "Makefile" -o -name "CMakeLists.txt" -o -name "*.mk" -o -name "*.cmake" \) -print0 2>/dev/null)
 if [ "$SCAN_FAILED" = "true" ]; then
     "${PY_RUN[@]}" "${SCRIPT_DIR}/compute_reward.py" \
-        --fail "source code references verifier internals or wraps FFmpeg" \
+        --fail "source code references verifier internals or wraps FFmpeg" --fail-stage source_policy \
         --total-time-ms "$(( $(python3 -c "import time; print(int(time.time()*1000))") - HARBOR_START_MS ))" \
         --output-dir "$VERIFIER_DIR"
     exit 0
@@ -129,7 +129,7 @@ CANDIDATE_LIB=""
 if [ ! -d "${IMPL_DIR}" ]; then
     echo "FAIL: implementation directory ${IMPL_DIR} does not exist"
     "${PY_RUN[@]}" "${SCRIPT_DIR}/compute_reward.py" \
-        --fail "implementation directory not found" \
+        --fail "implementation directory not found" --fail-stage build \
         --total-time-ms "$(( $(python3 -c "import time; print(int(time.time()*1000))") - HARBOR_START_MS ))" \
         --output-dir "$VERIFIER_DIR"
     exit 0
@@ -201,7 +201,7 @@ fi
 if [ "$BUILD_OK" != "true" ] || [ -z "$CANDIDATE_LIB" ]; then
     echo "FAIL: build failed or no libswscale_candidate.so produced"
     "${PY_RUN[@]}" "${SCRIPT_DIR}/compute_reward.py" \
-        --fail "build failed or library not found" \
+        --fail "build failed or library not found" --fail-stage build \
         --total-time-ms "$(( $(python3 -c "import time; print(int(time.time()*1000))") - HARBOR_START_MS ))" \
         --output-dir "$VERIFIER_DIR"
     exit 0
@@ -217,7 +217,7 @@ if [ "$IS_ORACLE" != "true" ]; then
     if ldd "$CANDIDATE_LIB" 2>/dev/null | grep -qiE 'libswscale|libavutil|libavcodec|libavformat|libswresample'; then
         echo "FAIL: candidate dynamically links against FFmpeg libraries"
         "${PY_RUN[@]}" "${SCRIPT_DIR}/compute_reward.py" \
-            --fail "candidate dynamically links FFmpeg (wrapper detected)" \
+            --fail "candidate dynamically links FFmpeg (wrapper detected)" --fail-stage artifact_policy \
             --total-time-ms "$(( $(python3 -c "import time; print(int(time.time()*1000))") - HARBOR_START_MS ))" \
             --output-dir "$VERIFIER_DIR"
         exit 0
@@ -227,7 +227,7 @@ if [ "$IS_ORACLE" != "true" ]; then
     if nm -D "$CANDIDATE_LIB" 2>/dev/null | grep -qiE '\bsws_init|\bsws_get|\bsws_free|\bsws_scale|\bav_image|\bav_pix_fmt|\bavutil_'; then
         echo "FAIL: candidate exports/imports FFmpeg symbols (static linking detected)"
         "${PY_RUN[@]}" "${SCRIPT_DIR}/compute_reward.py" \
-            --fail "candidate contains FFmpeg symbols (static link detected)" \
+            --fail "candidate contains FFmpeg symbols (static link detected)" --fail-stage artifact_policy \
             --total-time-ms "$(( $(python3 -c "import time; print(int(time.time()*1000))") - HARBOR_START_MS ))" \
             --output-dir "$VERIFIER_DIR"
         exit 0
@@ -240,7 +240,7 @@ if [ "$IS_ORACLE" != "true" ]; then
     if [ -n "$CANDIDATE_HASH" ] && [ "$CANDIDATE_HASH" = "$BASELINE_HASH_VAL" ]; then
         echo "FAIL: candidate is identical to baseline (copy detected)"
         "${PY_RUN[@]}" "${SCRIPT_DIR}/compute_reward.py" \
-            --fail "candidate is a copy of the baseline library" \
+            --fail "candidate is a copy of the baseline library" --fail-stage artifact_policy \
             --total-time-ms "$(( $(python3 -c "import time; print(int(time.time()*1000))") - HARBOR_START_MS ))" \
             --output-dir "$VERIFIER_DIR"
         exit 0
@@ -273,7 +273,7 @@ HARBOR_TOTAL_MS=$(( HARBOR_END_MS - HARBOR_START_MS ))
 
 # Fallback: if compute_reward.py crashed without writing reward, emit 0
 if [ ! -f "$VERIFIER_DIR/reward.json" ]; then
-    echo '{"reward": 0.0, "score": 0.0, "subscores": [], "additional_data": {"reason": "verifier crashed"}}' \
+    echo '{"reward": 0.0, "score": 0.0, "subscores": [], "additional_data": {"reason": "verifier crashed", "failure_stage": "verifier"}}' \
         > "$VERIFIER_DIR/reward.json"
     echo "0.0" > "$VERIFIER_DIR/reward.txt"
 fi

@@ -12,7 +12,7 @@ fails (maximize). The rescale is the v1 one (`log_anchor`, anchor 14.155 -> 43).
 
 - Workspace files, scaffolds and the judge's `tests/` (`test.sh`, `compute_reward.py`): the task
   authors' copy of the public frontier-swe task `ffmpeg-swscale-rewrite`, identical by sha256 to
-  the published v1 images. The Rust scaffold `lib.rs`, the Zig `build.zig` fix and
+  the published v1 images at migration. Subsequent changes are listed below. The Rust scaffold `lib.rs`, the Zig `build.zig` fix and
   `pytest_shim.sh` come from v1's build recipe, also byte-identical.
 - `judge/eval.sh`: v1's eval command, wrapped exactly as the v1 harness wrapped it.
   `judge/run.sh` and `judge/grade.py` are new and write `result.json` with v1's parsing.
@@ -60,6 +60,43 @@ brackets.
 Every gate outcome, pass count and summary matches. Speedups are wall-clock ratios that move by
 up to ±25% between runs of the old judge alone; the mean difference is under 0.5 points on 0..100
 for every row, well inside that spread.
+
+## Changes
+
+### 1.0.1 — distinguish verifier failure stages
+
+Failed submissions now receive a bounded stage description in `result.json`'s summary and
+existing failed overall-score detail. The producing verifier branch records the stage;
+`grade.py` reads it from `reward.json` and emits only a fixed public message. Source-policy,
+build, library-policy, library-loading, baseline, correctness and verifier failures are distinct.
+Raw reasons, submitted paths, exceptions and individual workload data are not forwarded.
+Unknown, missing, malformed or contradictory diagnostic evidence leaves the original feedback.
+
+This changes feedback, not the numeric score, validity, number of tests, source-scan rules,
+correctness thresholds, benchmark workloads or rescale. It does not certify that a source-policy
+rejection was justified. In particular, policy strings inside research notes remain subject to
+the existing scan; exclude research notes from the submitted implementation. The legacy eval
+script's richer failure-category hints remain broken (Known issue 2); the new stage feedback
+uses the structured reward path and does not depend on those hints.
+
+Same-host regression for 1.0.1 used the published 1.0.0 amd64 judge
+`e938bf6f485e` and an image derived from its immutable digest with only the four changed
+judge files replaced. Both used 4 CPUs, 8 GiB and no network. No historical solver
+submission is required to reproduce these checks.
+
+| Submission | 1.0.0 raw score | 1.0.1 raw score | New zero-score feedback |
+|---|---|---|---|
+| empty | 0 | 0 | build |
+| research note rejected by the existing scan | 0 | 0 | source policy |
+| failing Makefile | 0 | 0 | build |
+| library returning a null conversion context | 0 | 0 | correctness |
+| original Rust scaffold, repetition 1 | 0.364605 | 0.371320 | unchanged passing result |
+| original Rust scaffold, repetition 2 | 0.371796 | 0.360566 | unchanged passing result |
+
+All zero-score cases remain valid with one failed test. Both scaffold repetitions remain
+valid with one passed test and 30/30 correctness; the old/new speed ranges overlap.
+These runs check score compatibility and diagnosis delivery, not solver improvement or
+statistical performance equivalence. The scorer's speed-measurement code is unchanged.
 
 ## Known issues
 

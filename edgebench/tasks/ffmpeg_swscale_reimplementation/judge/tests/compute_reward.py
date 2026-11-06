@@ -52,6 +52,7 @@ def parse_args():
     parser.add_argument("--total-time-ms", type=int, default=0)
     parser.add_argument("--oracle", action="store_true")
     parser.add_argument("--fail", type=str, default=None)
+    parser.add_argument("--fail-stage", choices=("baseline", "source_policy", "build", "artifact_policy"))
     return parser.parse_args()
 
 
@@ -62,6 +63,8 @@ def emit_reward(
     total_time_ms: int,
     subscores: list[dict] | None = None,
     additional_data: dict | None = None,
+    *,
+    failure_stage: str | None = None,
 ) -> None:
     payload = {
         "score": score,
@@ -73,6 +76,8 @@ def emit_reward(
             "total_time_ms": total_time_ms,
         },
     }
+    if failure_stage is not None:
+        payload["additional_data"]["failure_stage"] = failure_stage
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     with open(out_dir / "reward.json", "w") as f:
@@ -577,7 +582,8 @@ def main():
 
     # Quick-fail mode (called from test.sh on integrity failures)
     if args.fail:
-        emit_reward(args.output_dir, 0.0, f"HARD FAIL: {args.fail}", args.total_time_ms)
+        emit_reward(args.output_dir, 0.0, f"HARD FAIL: {args.fail}", args.total_time_ms,
+                    failure_stage=args.fail_stage)
         return 0
 
     # Load libraries
@@ -585,7 +591,8 @@ def main():
         candidate_lib = load_swscale_library(args.candidate)
     except Exception as e:
         emit_reward(
-            args.output_dir, 0.0, f"Failed to load candidate: {e}", args.total_time_ms
+            args.output_dir, 0.0, f"Failed to load candidate: {e}", args.total_time_ms,
+            failure_stage="candidate_load"
         )
         return 0
 
@@ -593,7 +600,8 @@ def main():
         baseline_lib = load_swscale_library(args.baseline)
     except Exception as e:
         emit_reward(
-            args.output_dir, 0.0, f"Failed to load baseline: {e}", args.total_time_ms
+            args.output_dir, 0.0, f"Failed to load baseline: {e}", args.total_time_ms,
+            failure_stage="baseline"
         )
         return 0
 
@@ -607,7 +615,8 @@ def main():
         import traceback
 
         traceback.print_exc()
-        emit_reward(args.output_dir, 0.0, f"Verifier crashed: {e}", args.total_time_ms)
+        emit_reward(args.output_dir, 0.0, f"Verifier crashed: {e}", args.total_time_ms,
+                    failure_stage="verifier")
         return 0
 
 
@@ -637,6 +646,7 @@ def _run_scoring(args, candidate_lib, baseline_lib, rng):
             0.0,
             f"Correctness failed: {passed}/{total} workloads passed",
             args.total_time_ms,
+            failure_stage="correctness",
             subscores=[
                 {
                     "name": "correctness",
