@@ -32,6 +32,7 @@ RUN sh /tmp/ebv-setup/build_ffmpeg.sh work && rm -rf /tmp/ebv-setup
 
 COPY environment/workspace/ /home/workspace/
 COPY environment/prepare_media.py /root/ebv-prepare_media.py
+COPY environment/check_baseline_padding.py /root/ebv-check-baseline-padding.py
 RUN set -eux; \
     mkdir -p /home/workspace/swscale-impl /home/workspace/media; \
     ln -sfn /home/workspace /app; \
@@ -39,6 +40,9 @@ RUN set -eux; \
     gcc -shared -fPIC -O2 -o /home/workspace/libswscale_public_baseline.so /home/workspace/baseline_wrapper.c \
         -I/usr/local/include -Wl,--whole-archive /usr/local/lib/libswscale.a -Wl,--no-whole-archive \
         /usr/local/lib/libavutil.a -lm -lpthread; \
+    FFMPEG_BASELINE_SO=/home/workspace/libswscale_public_baseline.so \
+        PYTHONPATH=/home/workspace python3 /root/ebv-check-baseline-padding.py; \
+    rm -f /root/ebv-check-baseline-padding.py; \
     python3 /root/ebv-prepare_media.py; \
     rm -f /root/ebv-prepare_media.py; \
     cp -a /home/workspace/media /home/workspace/swscale-impl/media; \
