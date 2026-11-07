@@ -13,6 +13,8 @@
  *
  * linesize[i] gives the byte stride of plane i (may be larger than the
  * minimum row size due to alignment padding).
+ * For odd-width packed RGB, the scalar baseline completes the last chroma
+ * pair with a zero-valued pixel, independently of source alignment padding.
  */
 
 #ifndef SWSCALE_API_H

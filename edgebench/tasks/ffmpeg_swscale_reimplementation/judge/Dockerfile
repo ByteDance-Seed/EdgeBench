@@ -31,6 +31,7 @@ COPY environment/workspace/pixel_formats.py environment/workspace/baseline_wrapp
      environment/workspace/run_dev_bench.py /opt/tests/
 COPY environment/workspace/pixel_formats.py environment/workspace/baseline_wrapper.c /judge/
 COPY judge/run.sh judge/eval.sh judge/grade.py /judge/
+COPY environment/check_baseline_padding.py /root/ebv-check-baseline-padding.py
 RUN set -eux; \
     chmod +x /opt/tests/*.sh; \
     chmod 755 /judge/run.sh /judge/eval.sh; \
@@ -39,6 +40,9 @@ RUN set -eux; \
     gcc -shared -fPIC -O2 -o /verifier-data/libswscale_baseline.so /judge/baseline_wrapper.c \
         -I/usr/local/include -Wl,--whole-archive /usr/local/lib/libswscale.a -Wl,--no-whole-archive \
         /usr/local/lib/libavutil.a -lm -lpthread; \
+    FFMPEG_BASELINE_SO=/verifier-data/libswscale_baseline.so \
+        PYTHONPATH=/judge python3 /root/ebv-check-baseline-padding.py; \
+    rm -f /root/ebv-check-baseline-padding.py; \
     cp /verifier-data/libswscale_baseline.so /home/workspace/libswscale_public_baseline.so; \
     sha256sum /verifier-data/libswscale_baseline.so | awk '{print $1}' > /verifier-data/baseline_hash.txt
 

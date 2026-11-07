@@ -4,7 +4,7 @@ name = "Ffmpeg Swscale Reimplementation"
 category = "Systems & Software Engineering"
 language = "C++"           # as in v1 tasks.jsonl; the deliverable is Rust (or Zig), see NOTES.md
 description = "Reimplement FFmpeg's libswscale pixel-format conversion and scaling library in Rust, handling multiple pixel formats and scaling algorithms. A correctness-passing scaffold is provided; the agent must optimize for speed via SIMD."
-version = "1.0.0"
+version = "1.1.0"
 status = "migrated"
 
 [environment]
