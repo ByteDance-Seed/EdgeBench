@@ -19,6 +19,11 @@ title: 迭代评测
 | `sforge-submit` | 提交该题的提交路径并等待结果 |
 | `sforge-submit -d` | 同时显示逐项详情 |
 | `sforge-submit -l` | 列出之前的提交 |
+| `sforge-submit --retain-archive DIR` | 提交并将实际上传的原包保存到现有 `DIR` 下的私有目录 |
+
+选择工作区和全部提交路径以外的目录。客户端会在上传前通过 stderr 打印归档路径。
+上传中断或被拒绝时也可能留下归档。引用评分前须核对已受理的提交。
+此选项按需启用，沿用原有提交额度和冷却。
 
 `--max-submissions N` 限制 Agent 的提交次数，`--submission-cooldown S` 要求两次提交至少间隔 S 秒；触发限制时 `sforge-submit` 会告诉 Agent。
 
