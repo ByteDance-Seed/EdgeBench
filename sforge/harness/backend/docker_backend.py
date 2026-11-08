@@ -19,6 +19,7 @@ from __future__ import annotations
 import io
 import logging
 import os
+import re
 import signal
 import sys
 import tarfile
@@ -41,6 +42,7 @@ from sforge.harness.backend.base import (
 )
 
 HEREDOC_DELIMITER = "EOF_SFORGE_1399519320"
+_CGROUP_ROOT = Path("/sys/fs/cgroup")
 
 
 class DockerContainerHandle(ContainerHandle):
@@ -142,6 +144,39 @@ class DockerBackend(ContainerBackend):
 
     def start_container(self, handle: ContainerHandle) -> None:
         self._raw(handle).start()
+
+    def local_memory_observation(
+        self, handle: ContainerHandle,
+    ) -> dict[str, str | int | None] | None:
+        """Read the lifetime peak of a local Docker cgroup v2 container."""
+        container = self._raw(handle)
+        container_id = container.id
+        image_id = container.attrs.get("Image")
+        if not re.fullmatch(r"[0-9a-f]{64}", container_id):
+            return None
+        if not isinstance(image_id, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
+            return None
+
+        # The exact container ID binds both common Docker cgroup layouts.
+        # Avoid a daemon request or a process inside the untrusted judge.
+        for cgroup in (_CGROUP_ROOT / "docker" / container_id,
+                       _CGROUP_ROOT / "system.slice" / f"docker-{container_id}.scope"):
+            try:
+                peak = int((cgroup / "memory.peak").read_text())
+                maximum = (cgroup / "memory.max").read_text().strip()
+            except FileNotFoundError:
+                continue
+            limit = None if maximum == "max" else int(maximum)
+            if peak < 0 or (limit is not None and limit < 0):
+                return None
+            return {
+                "container_id": container_id,
+                "image_id": image_id,
+                "memory_peak_bytes": peak,
+                "memory_limit_bytes": limit,
+                "source": "local_docker_cgroup_v2",
+            }
+        return None
 
     def cleanup_container(
         self, handle: ContainerHandle | None, logger: logging.Logger | None = None,
