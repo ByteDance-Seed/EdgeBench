@@ -36,6 +36,8 @@ def generate_submit_script(cwd: str, submit_paths: list[str], submit_exclude: li
     Flags:
       --details, -d    submit and show detailed per-test results
       --list, -l       list all previous submissions (no new submission)
+      --retain-archive DIR
+                        retain the exact uploaded archive in a private subdirectory of DIR
     """
     paths = " ".join(shlex.quote(p) for p in submit_paths)
     excludes = " ".join(shlex.quote(f"--exclude={e}") for e in submit_exclude)
@@ -52,10 +54,21 @@ set -e
 
 LIST_MODE=0
 DETAILS_MODE=0
-for arg in "$@"; do
+RETAIN_DIR=""
+while [ "$#" -gt 0 ]; do
+    arg="$1"
+    shift
     case "$arg" in
         --list|-l) LIST_MODE=1 ;;
         --details|-d) DETAILS_MODE=1 ;;
+        --retain-archive)
+            if [ "$#" -eq 0 ] || [ -z "$1" ] || [ -n "$RETAIN_DIR" ]; then
+                echo "ERROR: --retain-archive requires one existing directory" >&2
+                exit 1
+            fi
+            RETAIN_DIR="$1"
+            shift
+            ;;
         -h|--help)
             echo "Usage: sforge-submit [OPTIONS]"
             echo ""
@@ -65,6 +78,8 @@ for arg in "$@"; do
             echo "Options:"
             echo "  --list, -l      List all previous submissions and scores for this run"
             echo "  --details, -d   Submit and show detailed results (triggers a new submission)"
+            echo "  --retain-archive DIR"
+            echo "                   Save the exact upload in an existing directory outside the work tree"
             echo "  -h, --help      Show this help message"
             exit 0
             ;;
@@ -90,6 +105,10 @@ if [ -z "$TOKEN" ]; then
 fi
 
 if [ "$LIST_MODE" -eq 1 ]; then
+    if [ -n "$RETAIN_DIR" ]; then
+        echo "ERROR: --retain-archive requires a new submission" >&2
+        exit 1
+    fi
     HIST=$(curl -s -m 30 "$JUDGE_URL/api/v1/history?token=$TOKEN")
     if [ -z "$HIST" ]; then
         echo "ERROR: No response from judge server" >&2
@@ -121,16 +140,56 @@ fi
 
 # ── Archive ──
 
+if [ -n "$RETAIN_DIR" ]; then
+    if ! RETAIN_DIR=$(cd -P -- "$RETAIN_DIR" && pwd -P); then
+        echo "ERROR: Archive retention directory is unavailable" >&2
+        exit 1
+    fi
+    PATCH_ROOT=$(cd -P -- "$PATCH_DIR" && pwd -P)
+    case "$RETAIN_DIR/" in
+        "${PATCH_ROOT%/}/"*)
+            echo "ERROR: Archive retention directory must be outside the work tree" >&2
+            exit 1
+            ;;
+    esac
+fi
+
+REQUEST_TMP=$(mktemp -d)
+SAVED_DIR=""
+trap 'rm -rf -- "$REQUEST_TMP"; if [ -n "$SAVED_DIR" ]; then rm -rf -- "$SAVED_DIR"; fi' EXIT
+ARCHIVE_FILE="$REQUEST_TMP/submission.tar.gz"
+
 cd "$PATCH_DIR"
-ARCHIVE_FILE=$(mktemp --suffix=.tar.gz)
 TAR_PATHS=()
 for p in @SUBMIT_PATHS@; do
     [ -e "$p" ] && TAR_PATHS+=("$p")
 done
-if [ ${#TAR_PATHS[@]} -eq 0 ]; then
-    tar czf "$ARCHIVE_FILE" --files-from /dev/null
-else
-    tar czf "$ARCHIVE_FILE" --exclude='.git' @EXCLUDE_FLAGS@ "${TAR_PATHS[@]}"
+if [ -n "$RETAIN_DIR" ]; then
+    for submitted in "${TAR_PATHS[@]}"; do
+        [ -d "$submitted" ] || continue
+        SUBMITTED_ROOT=$(cd -P -- "$submitted" && pwd -P)
+        case "$RETAIN_DIR/" in
+            "${SUBMITTED_ROOT%/}/"*)
+                echo "ERROR: Archive retention directory overlaps a submitted path" >&2
+                exit 1
+                ;;
+        esac
+    done
+    SAVED_DIR=$(mktemp -d "$RETAIN_DIR/submission.XXXXXXXX")
+    ARCHIVE_FILE="$SAVED_DIR/submission.tar.gz"
+fi
+(
+    umask 077
+    if [ ${#TAR_PATHS[@]} -eq 0 ]; then
+        tar czf "$ARCHIVE_FILE" --files-from /dev/null
+    else
+        tar czf "$ARCHIVE_FILE" --exclude='.git' @EXCLUDE_FLAGS@ "${TAR_PATHS[@]}"
+    fi
+)
+if [ -n "$RETAIN_DIR" ]; then
+    # Keep the original request bytes even if the acknowledgement is lost.
+    SAVED_DIR=""
+    printf 'Saved submission archive: %s\n' "$ARCHIVE_FILE" >&2
 fi
 ARCHIVE_SIZE=$(wc -c < "$ARCHIVE_FILE")
 
@@ -144,12 +203,13 @@ echo ""
 
 # ── Submit + poll ──
 
-RESP_FILE=$(mktemp)
-HTTP_CODE=$(curl -s -o "$RESP_FILE" -w '%{http_code}' -m 120 -X POST "$JUDGE_URL/api/v1/submit" \
+HTTP_CODE=$(curl -s -o "$REQUEST_TMP/submit.json" -w '%{http_code}' -m 120 -X POST "$JUDGE_URL/api/v1/submit" \
     -F "token=$TOKEN" \
     -F "archive=@$ARCHIVE_FILE")
-rm -f "$ARCHIVE_FILE"
-SUBMIT_RESP=$(cat "$RESP_FILE"); rm -f "$RESP_FILE"
+if [ -z "$RETAIN_DIR" ]; then
+    rm -f -- "$ARCHIVE_FILE"
+fi
+SUBMIT_RESP=$(cat "$REQUEST_TMP/submit.json")
 
 if [ "$HTTP_CODE" = "429" ]; then
     DETAIL=$(echo "$SUBMIT_RESP" | jq -r '.detail // empty')

@@ -19,6 +19,13 @@ The [stop hook and auto-resume](/en/guide/agents#stop-hook) keep it working unti
 | `sforge-submit` | Submit the task's submission paths and wait for the result |
 | `sforge-submit -d` | Also show per-item details |
 | `sforge-submit -l` | List previous submissions |
+| `sforge-submit --retain-archive DIR` | Submit and keep the exact uploaded archive in a private subdirectory of an existing `DIR` |
+
+Use a directory outside the work tree and all submitted paths. The client prints
+the archive path to stderr before uploading. An interrupted or rejected upload
+can leave the archive without an accepted result. Match it to an accepted
+submission before citing its score. Retention is opt-in and does not change the
+submission budget or cooldown.
 
 `--max-submissions N` caps the agent's submissions and `--submission-cooldown S` requires S seconds between them; `sforge-submit` tells the agent when a limit applies.
 
