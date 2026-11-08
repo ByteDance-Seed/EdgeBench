@@ -22,9 +22,12 @@ import logging
 import time
 import traceback
 import uuid
+from contextlib import suppress
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
-from sforge.harness.backend import ContainerBackend
+from sforge.harness.backend import ContainerBackend, ContainerHandle
+from sforge.harness.backend.docker_backend import DockerBackend
 from sforge.harness.config import (
     SForgeConfig,
     resource_env,
@@ -46,6 +49,35 @@ class EvaluationError(Exception):
         super().__init__(message)
         self.task_id = task_id
         self.log_file = getattr(logger, "log_file", None)
+
+
+def _record_judge_resources(
+    backend: ContainerBackend,
+    handle: ContainerHandle | None,
+    log_dir: Path,
+    task_id: str,
+    submission_id: str,
+    logger: logging.Logger,
+) -> None:
+    """Keep best-effort operator telemetry outside the grading report."""
+    if handle is None or not isinstance(backend, DockerBackend):
+        return
+    temporary = None
+    try:
+        observation = backend.local_memory_observation(handle)
+        if observation is None:
+            return
+        record = {"task_id": task_id, "submission_id": submission_id, **observation}
+        with NamedTemporaryFile("w", dir=log_dir, encoding="utf-8", delete=False) as stream:
+            temporary = Path(stream.name)
+            json.dump(record, stream)
+        temporary.replace(log_dir / "judge_resources.json")
+    except Exception as exc:
+        logger.warning("Judge resource observation unavailable (%s)", type(exc).__name__)
+    finally:
+        if temporary is not None:
+            with suppress(OSError):
+                temporary.unlink(missing_ok=True)
 
 
 def _filter_archive_files(
@@ -293,6 +325,7 @@ def judge_submission(
         )
     finally:
         try:
+            _record_judge_resources(backend, handle, log_dir, task_spec.task_id, submission_id, logger)
             if isolation is not None:
                 isolation.cleanup()
             backend.cleanup_container(handle, logger)

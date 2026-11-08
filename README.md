@@ -221,6 +221,13 @@ sforge viewer
 - **Your own agent scaffold** — just add a new agent under [`sforge/harness/agent/`](sforge/harness/agent/) (a small `Agent` subclass declaring how to install and launch it) and register it in the factory, then run with `--agent <your-agent>`. See [Custom Agents](https://bytedance-seed.github.io/EdgeBench/en/guide/agents#custom-agents).
 - **Your own benchmark** — put your tasks in a directory with a `benchmark.toml` and run them with `-b <dir>`. See [Task Format](https://bytedance-seed.github.io/EdgeBench/en/tasks/task-format).
 
+For local Docker with cgroup v2, the judge may write `judge_resources.json`
+beside the submission's `report.json`. It records the exact image and container,
+submission ID, and the container's lifetime memory peak and limit in bytes.
+This file is for operators and lives outside the score and feedback payloads.
+A missing file means the measurement was unavailable. Match its submission ID
+to the report when reusing a log directory.
+
 Full documentation: [bytedance-seed.github.io/EdgeBench](https://bytedance-seed.github.io/EdgeBench/)
 
 ## Tasks
