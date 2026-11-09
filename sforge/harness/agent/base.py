@@ -22,6 +22,7 @@ from pathlib import Path
 
 from sforge.harness.agent.bundle import ensure_bundle, inject_bundle
 from sforge.harness.backend import ContainerBackend, ContainerHandle
+from sforge.harness.backend.base import StreamingExecResult
 from sforge.harness.config import SForgeConfig
 
 
@@ -90,6 +91,15 @@ class Agent(abc.ABC):
         Called **after** the generic env vars (proxy, API key, model,
         mirrors, extra_env) have already been applied.
         """
+
+    def resume_block_reason(self, result: StreamingExecResult) -> str | None:
+        """An Agent-owned terminal blocker for explicit deadline continuation.
+
+        Inspect only the current invocation. The runner also stops on any
+        nonzero exit, cancellation, timeout or short segment in that mode.
+        Returning None does not authorize a new session or a renewed budget.
+        """
+        return None
 
     def format_run_cmd(
         self,

@@ -38,6 +38,38 @@ tasks:
   graph_node_classification: {}
 ```
 
+## 显式按有限超时继续原会话
+
+默认自动续跑最多100次。长任务若反复正常退出，可能在时间预算尚未耗尽时触及上限。
+需要以有限超时约束正常退出后的续跑时，显式启用：
+
+```bash
+sforge run --task <task-id> --agent codex --timeout 64800 --resume-until-timeout
+```
+
+Python `run_agent` 接受 `resume_until_timeout=True`。该模式要求显式传入正整数
+`timeout` 或配置 `agent_timeout`，并且Agent有原生续跑命令；与
+`--disable-auto-resume` 冲突。容器、registration和Agent续跑命令保持同一条链，
+提交次数限制、冷却与评分不变。
+
+第一次命令准备完成后，在solver dispatch边界确定唯一的monotonic截止时间。
+首次准备与最后收集分别计成本，后续命令准备和段间开销消耗同一截止时间；续跑不会
+重新计时。准备完成、实际dispatch前再次检查Stop和剩余时间。Stop、非零退出、Agent明确的终态阻塞、
+单段超时及不足一秒的短段仍会提前结束，因此这**不是最低时长保证**。提前结束时须
+保留欠时和失败证据。后端的超时收尾可能在solver停止后继续消耗收集时间。
+
+默认Agent未新增对成功进程输出的quota解析；退出码为零的quota信息如需阻止续跑，
+须由Agent的 `resume_block_reason` 明确提供，此flag不会从任意文本推断该条件。
+
+显式模式写入 `resume-policy.json`；CLI的 `final_result.json` 和Python结果包含
+相同的 `resume_policy`，记录原截止时间、实际续跑数、进程时长、solver阶段时长、
+本次完整调用时长、停止原因和未用秒数。默认运行不增加该字段或文件。省略flag或
+在Python传入 `False` 即关闭。
+
+该模式只在同一次调用内续跑，不负责checkpoint恢复。已有 `started_at` 或policy
+receipt的目录拒绝再次以该模式启动。保留原attempt；冷启动需要新的run身份，独立
+计为另一实验。后继启用新flag不会升级或重标已有冻结运行。
+
 ## 字段说明
 
 ### `env`
