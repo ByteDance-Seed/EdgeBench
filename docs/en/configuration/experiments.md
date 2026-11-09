@@ -38,6 +38,51 @@ tasks:
   graph_node_classification: {}
 ```
 
+## Explicit continuation to a finite timeout
+
+The default auto-resume policy stops after at most 100 resumes. A long run
+whose Agent repeatedly exits successfully can reach that ceiling before its
+time budget. To use the timeout as the ceiling for successful exits, opt in:
+
+```bash
+sforge run --task <task-id> --agent codex --timeout 64800 --resume-until-timeout
+```
+
+The Python `run_agent` API accepts `resume_until_timeout=True`. The mode
+requires an explicit positive integer `timeout` argument or `agent_timeout`
+configuration and an Agent resume command. It conflicts with
+`--disable-auto-resume`. The same container, registration and Agent resume
+command are retained; submission limits, cooldown and scoring are unchanged.
+
+One monotonic deadline starts after initial command preparation at the first
+solver dispatch. Initial preparation and final collection remain separate
+costs. Later command preparation and time between segments consume the same
+deadline; resumes never renew it. Stop and remaining time are checked again
+after preparation, immediately before dispatch. Cancellation, any nonzero process exit, an Agent-owned
+terminal blocker, a timed-out segment, or a segment shorter than one second
+can still end work early. This mode does **not** guarantee a minimum duration.
+Keep any time deficit and failure evidence instead of treating an early exit
+as a completed budget. Backend timeout drain can add collection cost after
+solver work stops.
+
+Stock Agents inherit no additional classifier for successful process output.
+A quota message with exit code zero requires an explicit Agent
+`resume_block_reason` implementation to block continuation; this flag does not
+infer that condition from arbitrary text.
+
+The opt-in run writes `resume-policy.json`; the CLI's `final_result.json` and
+Python result include the same `resume_policy`. It records the original
+deadline, actual resumes, process time, solver-phase elapsed time, full
+invocation elapsed time, stop reason and unused seconds. No policy field or
+file is added to default runs. To disable the mode, omit the flag or pass
+`False` in Python.
+
+This is in-process continuation, not checkpoint restoration. An existing
+`started_at` or policy receipt rejects a new opted-in invocation in that run
+directory. Preserve the old attempt; a cold restart needs a new run identity
+and remains a separate experiment. Existing frozen runs are not upgraded or
+relabelled by enabling this flag on a later run.
+
 ## Fields
 
 ### `env`

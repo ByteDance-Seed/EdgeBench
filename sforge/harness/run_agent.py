@@ -83,6 +83,7 @@ class RunResult:
     runtime_seconds: float = 0.0
     resume_count: int = 0
     usage: dict | None = None  # LLM gateway totals (tokens, requests, by model)
+    resume_policy: dict | None = None  # Present only for the explicit timeout policy.
 
     def to_dict(self) -> dict:
         d = {
@@ -100,6 +101,8 @@ class RunResult:
             d["best_score"] = self.best_score
         if self.usage is not None:
             d["usage"] = self.usage
+        if self.resume_policy is not None:
+            d["resume_policy"] = self.resume_policy
         return d
 
 
@@ -408,6 +411,7 @@ def run_agent(
     shutdown_event: threading.Event | None = None,
     max_submissions: int | None = None,
     submission_cooldown: int | None = None,
+    resume_until_timeout: bool = False,
 ) -> RunResult:
     """Run an agent on a task with iterative evaluation.
 
@@ -419,11 +423,40 @@ def run_agent(
     3. Install agent + tools (submit script, stop hook, auto-eval daemon)
     4. Run agent (high max-turns for iterative work)
     5. Read final state, extract archive
+
+    ``resume_until_timeout`` explicitly replaces the 100-resume ceiling for
+    successful exits with one finite solver-phase deadline. It requires an
+    explicit timeout (argument or config), the same Agent's resume command,
+    and a fresh run directory. Setup and collection costs remain separate;
+    time between segments consumes this deadline. Failure, cancellation and
+    short-segment guards can still end the run early. This is not checkpoint
+    or cross-process session restoration.
     """
+    run_started = time.monotonic()
+    if type(resume_until_timeout) is not bool:
+        raise ValueError("resume_until_timeout must be a boolean")
     effective_timeout = timeout or config.agent_timeout or agent.timeout
+    if resume_until_timeout:
+        declared_timeout = timeout if timeout is not None else config.agent_timeout
+        if type(declared_timeout) is not int or declared_timeout < 1:
+            raise ValueError("resume_until_timeout requires an explicit positive integer timeout")
+        if disable_auto_resume or not isinstance(agent.resume_cmd, str) or not agent.resume_cmd.strip():
+            raise ValueError("resume_until_timeout requires enabled auto-resume and an Agent resume command")
+        effective_timeout = declared_timeout
 
     log_dir = config.log_dir / "runs" / run_id / task_spec.task_id
     log_dir.mkdir(parents=True, exist_ok=True)
+    resume_policy = None
+    policy_path = log_dir / "resume-policy.json"
+    if resume_until_timeout:
+        if (log_dir / "started_at").exists():
+            raise ValueError("resume_until_timeout requires a fresh run; retain the original attempt")
+        resume_policy = {"mode": "until_timeout", "timeout_seconds": effective_timeout,
+                         "status": "starting", "stop_reason": "not_started"}
+        # An uncertain prior invocation must not restart its deadline or claim
+        # a cold session is an in-process continuation.
+        with policy_path.open("x") as stream:
+            json.dump(resume_policy, stream)
     logger = setup_logger(
         f"agent.{task_spec.task_id}.{run_id}",
         log_dir / "run_agent.log",
@@ -447,8 +480,14 @@ def run_agent(
     auto_eval_stop = None
     session_stop = threading.Event()
     admin_secret = ""
+    phase_started = phase_finished = None
+    solver_dispatch_active = False
+    stop_reason = "runner_error"
 
     try:
+        if resume_until_timeout and shutdown_event is not None and shutdown_event.is_set():
+            stop_reason = "shutdown_requested"
+            return RunResult(resume_policy=resume_policy)
         admin_secret = get_admin_secret(config.log_dir)
         # 0. Clean up stale iptables chains from previous runs that were killed
         if backend.backend_name == "docker":
@@ -714,24 +753,67 @@ def run_agent(
         started_at = time.time()
         from datetime import datetime
         started_at_iso = datetime.fromtimestamp(started_at).strftime("%Y-%m-%dT%H:%M:%S")
-        (log_dir / "started_at").write_text(f"{started_at_iso}\n{started_at}\n")
+        if not resume_until_timeout:
+            (log_dir / "started_at").write_text(f"{started_at_iso}\n{started_at}\n")
 
         on_chunk_cb = None
 
         while remaining_timeout > 0:
-            is_resume = resume_count > 0
+            if resume_until_timeout:
+                if shutdown_event is not None and shutdown_event.is_set():
+                    stop_reason = "shutdown_requested"
+                    break
+                if phase_started is not None:
+                    remaining_timeout = phase_deadline - time.monotonic()
+                    if remaining_timeout < 1:
+                        agent_timed_out = True
+                        stop_reason = "budget_exhausted"
+                        break
+            is_resume = bool(all_output_parts) if resume_until_timeout else resume_count > 0
             run_cmd = agent.format_run_cmd(
                 prompt_path, model=model,
                 internet=internet, resume=is_resume,
             )
             if is_resume:
+                limit = "deadline" if resume_until_timeout else MAX_RESUMES
+                attempt = resume_count + 1 if resume_until_timeout else resume_count
                 logger.info(
-                    f"Resuming agent (attempt {resume_count}/{MAX_RESUMES}, "
+                    f"Resuming agent (attempt {attempt}/{limit}, "
                     f"{remaining_timeout:.0f}s left): {run_cmd[:200]}..."
                 )
             else:
                 logger.info(f"Running agent: {run_cmd[:200]}... (timeout={remaining_timeout:.0f}s)")
 
+            if resume_until_timeout:
+                # Formatting can prepare a session or context and take real
+                # time. Initial formatting is setup; later formatting consumes
+                # the one deadline. Never dispatch with its earlier remainder.
+                if shutdown_event is not None and shutdown_event.is_set():
+                    stop_reason = "shutdown_requested"
+                    break
+                if phase_started is None:
+                    phase_started = time.monotonic()
+                    started_at = time.time()
+                    phase_deadline = phase_started + effective_timeout
+                    started_at_iso = datetime.fromtimestamp(started_at).strftime("%Y-%m-%dT%H:%M:%S")
+                    (log_dir / "started_at").write_text(f"{started_at_iso}\n{started_at}\n")
+                    resume_policy.update(status="running", started_at_unix=started_at,
+                                         deadline_unix=started_at + effective_timeout)
+                    policy_path.write_text(json.dumps(resume_policy, indent=2) + "\n")
+                if shutdown_event is not None and shutdown_event.is_set():
+                    stop_reason = "shutdown_requested"
+                    break
+                remaining_timeout = phase_deadline - time.monotonic()
+                # Backends take whole seconds; a fractional remainder cannot
+                # launch another process, even after slow preparation or IO.
+                if remaining_timeout < 1:
+                    agent_timed_out = True
+                    stop_reason = "budget_exhausted"
+                    break
+                if is_resume:
+                    resume_count += 1
+            if resume_until_timeout:
+                solver_dispatch_active = True
             seg_result = backend.exec_run_with_timeout(
                 handle,
                 ["/bin/bash", "-c", run_cmd],
@@ -744,31 +826,53 @@ def run_agent(
                 log_append=is_resume,
                 on_chunk=on_chunk_cb,
             )
+            if resume_until_timeout:
+                solver_dispatch_active = False
             all_output_parts.append(seg_result.output)
             total_runtime += seg_result.elapsed_seconds
 
+            if resume_until_timeout and shutdown_event is not None and shutdown_event.is_set():
+                stop_reason = "shutdown_requested"
+                break
             if seg_result.timed_out:
                 agent_timed_out = True
+                stop_reason = "segment_timeout"
                 break
 
             if not can_resume:
+                stop_reason = "auto_resume_disabled"
                 break
+            if resume_until_timeout:
+                # A provider may already expose a typed terminal blocker. Do
+                # not infer one from arbitrary prose or retry failed processes
+                # without the legacy attempt ceiling.
+                blocked = agent.resume_block_reason(seg_result)
+                if blocked is not None:
+                    stop_reason = "provider_blocked"
+                    logger.warning("Agent resume blocked by provider: %s", blocked)
+                    break
+                if seg_result.exit_code != 0:
+                    stop_reason = "process_failed"
+                    break
             if seg_result.elapsed_seconds < MIN_RUNTIME_FOR_RESUME:
+                stop_reason = "short_segment"
                 logger.warning(
                     f"Agent exited after only {seg_result.elapsed_seconds:.1f}s "
                     f"(< {MIN_RUNTIME_FOR_RESUME}s), not resuming (likely systematic failure)"
                 )
                 break
-            if resume_count >= MAX_RESUMES:
+            if not resume_until_timeout and resume_count >= MAX_RESUMES:
                 logger.warning(f"Max resume attempts ({MAX_RESUMES}) reached")
                 break
 
-            remaining_timeout -= seg_result.elapsed_seconds
-            resume_count += 1
+            if not resume_until_timeout:
+                remaining_timeout -= seg_result.elapsed_seconds
+                resume_count += 1
             logger.info(f"Agent exited after {seg_result.elapsed_seconds:.1f}s, will resume")
 
         agent_output = "\n".join(all_output_parts)
         runtime = total_runtime
+        phase_finished = time.monotonic()
         logger.info(
             f"Agent finished: runtime={runtime:.1f}s, timed_out={agent_timed_out}, "
             f"resumes={resume_count}"
@@ -843,6 +947,7 @@ def run_agent(
                 timed_out=agent_timed_out,
                 runtime_seconds=runtime,
                 resume_count=resume_count,
+                resume_policy=resume_policy,
             )
             logger.info(
                 f"Done (game): best_score={best_score} ({best_round}), "
@@ -919,6 +1024,7 @@ def run_agent(
                 timed_out=agent_timed_out,
                 runtime_seconds=runtime,
                 resume_count=resume_count,
+                resume_policy=resume_policy,
             )
 
             logger.info(
@@ -941,6 +1047,9 @@ def run_agent(
         return result
 
     except KeyboardInterrupt:
+        if phase_started is not None and phase_finished is None and not solver_dispatch_active:
+            phase_finished = time.monotonic()
+        stop_reason = "interrupted"
         logger.info("Run interrupted by user (Ctrl+C)")
 
         # Stop auto-eval thread
@@ -1010,8 +1119,12 @@ def run_agent(
             agent_output="Stopped by user (Ctrl+C)",
             timed_out=False,
             resume_count=resume_count,
+            runtime_seconds=locals().get("total_runtime", 0.0) if resume_until_timeout else 0.0,
+            resume_policy=resume_policy,
         )
     except Exception as e:
+        if phase_started is not None and phase_finished is None and not solver_dispatch_active:
+            phase_finished = time.monotonic()
         logger.error(f"Error: {e}\n{traceback.format_exc()}")
         if backend.backend_name == "e2b":
             # E2B transport or lifecycle failures must remain visible to the
@@ -1049,8 +1162,12 @@ def run_agent(
             agent_output=str(e),
             timed_out=False,
             resume_count=locals().get("resume_count", 0),
+            runtime_seconds=locals().get("total_runtime", 0.0) if resume_until_timeout else 0.0,
+            resume_policy=resume_policy,
         )
     finally:
+        if phase_started is not None and phase_finished is None:
+            phase_finished = time.monotonic()
         session_stop.set()
         if auto_eval_stop is not None:
             auto_eval_stop.set()
@@ -1067,4 +1184,16 @@ def run_agent(
             signal.signal(signal.SIGINT, prev_handler)
         else:
             backend.cleanup_container(handle, logger)
+        if resume_policy is not None:
+            elapsed = 0.0 if phase_started is None else phase_finished - phase_started
+            resume_policy.update(status="terminal", stop_reason=stop_reason,
+                phase_elapsed_seconds=elapsed,
+                remaining_seconds=max(0.0, effective_timeout - elapsed),
+                process_runtime_seconds=locals().get("total_runtime", 0.0),
+                total_elapsed_seconds=time.monotonic() - run_started,
+                resume_count=locals().get("resume_count", 0))
+            try:
+                policy_path.write_text(json.dumps(resume_policy, indent=2) + "\n")
+            except OSError as exc:
+                logger.warning("Could not persist resume policy receipt: %s", type(exc).__name__)
         close_logger(logger)

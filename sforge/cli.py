@@ -246,6 +246,7 @@ def _run_single_task(
         disable_stop_hook=disable_stop_hook,
         disable_auto_eval=disable_auto_eval,
         disable_auto_resume=disable_auto_resume,
+        resume_until_timeout=getattr(args, "resume_until_timeout", False),
         internet=internet,
         verbose=verbose,
         shutdown_event=shutdown_event,
@@ -886,8 +887,12 @@ def main():
                        dest="disable_auto_eval", help="Disable background auto-evaluation daemon")
     p_run.add_argument("--disable-stop-hook", action="store_true", default=False,
                        dest="disable_stop_hook", help="Disable the agent stop hook (agent can exit normally)")
-    p_run.add_argument("--disable-auto-resume", action="store_true", default=False,
+    resume_group = p_run.add_mutually_exclusive_group()
+    resume_group.add_argument("--disable-auto-resume", action="store_true", default=False,
                        dest="disable_auto_resume", help="Disable auto-resume on abnormal agent exit")
+    resume_group.add_argument("--resume-until-timeout", action="store_true", default=False,
+                       help="Resume successful exits in the same session until the explicit timeout; "
+                            "failure, stop and short-segment guards still apply (default: max 100 resumes)")
     p_run.add_argument("--max-submissions", type=int, default=None, dest="max_submissions",
                        help="Maximum number of agent submissions per run (default: unlimited)")
     p_run.add_argument("--submission-cooldown", type=int, default=None, dest="submission_cooldown",
