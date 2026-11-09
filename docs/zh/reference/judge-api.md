@@ -12,8 +12,9 @@ Judge server 提供 REST API，用于登记运行、提交 archive、轮询结�
 |--------|------|------|
 | `sforge run`（宿主机） | admin secret | `register`、auto-eval 的 `submit`、完整 `history`、`usage` |
 | work 容器里的 Agent | session token | `submit`、`result`、Agent 视角的 `history`、`llm/...`、游戏端点 |
+| 反馈读取方 | feedback relay ID | 只读登记 `context` 与该登记的 Agent `result` |
 
-Admin secret（`SFORGE_ADMIN_SECRET`）从不进入容器。Work 容器只拿到自己的 session token（`SFORGE_TOKEN`）和 judge URL（`SFORGE_JUDGE_URL`）。
+Admin secret（`SFORGE_ADMIN_SECRET`）从不进入容器。Work 容器拿到自己的 session token（`SFORGE_TOKEN`）、judge URL（`SFORGE_JUDGE_URL`）和只读反馈 URL（`SFORGE_FEEDBACK_URL`）。反馈 URL 是读取该登记反馈的凭据，不能用于提交、读取 auto-eval 或访问其他登记。
 
 ## 登记会话
 
@@ -35,10 +36,22 @@ Content-Type: application/json
 **响应：**
 
 ```json
-{"token": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4"}
+{
+  "token": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+  "feedback_relay_id": "<opaque-read-capability>",
+  "evaluation_context": {
+    "schema_version": "sforge_run_evaluation_context_v1",
+    "task_id": "ad_placement_optimization",
+    "run_id": "run-001",
+    "registration_id": "<server-assigned-id>",
+    "evaluation_conditions": null
+  }
+}
 ```
 
 Token 标识任务和运行，并分别计数 Agent 轮次（`agent-1`、`agent-2`、...）和 auto-eval 轮次（`auto-1`、...）。
+
+评测条件已知时，同一 run/task 在条件和登记选项完全相同时返回原 token、relay 与计数器；条件或选项变化返回 `409`，需要新的 `run_id`。重试不能重置提交预算或切换运行的模型网关。条件未知的登记保留原有登记行为，不声明归因已验证。
 
 ## 提交 Archive
 
@@ -57,6 +70,7 @@ kind: agent
 | `archive` | 是 | 工作区的 `.tar.gz`，按该题的提交路径过滤 |
 | `kind` | 否 | `agent`（默认）或 `auto`；`auto` 还需要 `admin_secret` |
 | `admin_secret` | `auto` 时 | Admin secret |
+| `include_receipt` | 否 | `true` 附带已接受归档的 receipt；默认 `false` 保留原响应 |
 
 **响应：**
 
@@ -108,6 +122,63 @@ GET /api/v1/result/{submission_id}
 | `running` | 评分程序正在运行 |
 | `completed` | 评分完成，`report` 可用（仍可能是 `valid: false`） |
 | `error` | 评分直接失败，见 `error` |
+
+## 评测条件与只读反馈
+
+接受测量前，先读取一次原登记上下文：
+
+```http
+GET /api/v1/feedback/{feedback_relay_id}/context
+```
+
+响应与登记返回的 `sforge_run_evaluation_context_v1` 对象相同。条件可用时，`evaluation_conditions` 对象恰好包含以下字段：
+
+| 字段 | 含义 |
+|------|------|
+| `schema_version` | `sforge_evaluation_conditions_v1` |
+| `task_sha256` | Task loader 实际解析的 `task.toml` 字节的 SHA-256 |
+| `benchmark_sha256` | Benchmark loader 实际解析的 `benchmark.toml` 字节的 SHA-256 |
+| `task_spec_sha256` | 有效逻辑任务的 SHA-256，包括指令、judge 命令、分数方向/缩放及 Blob 路径和摘要清单；不含宿主机路径 |
+| `native_source_sha256` | 服务启动时一次观察的已安装 Python 框架源码清单的 SHA-256 |
+| `judge_image_id` | 登记时解析、评分时实际使用的本地 Docker 内容 ID（`sha256:...`） |
+| `execution_config_sha256` | 有效 judge CPU/内存/环境/网络、超时及平台的 SHA-256 |
+| `score_direction` | 冻结任务的 `maximize` 或 `minimize` |
+| `selection` | `valid_then_score`：已有的有效且已完成筛选、原始分数方向比较与并列取首条规则 |
+
+服务为已接受的工作冻结已加载任务、有效配置及 backend。登记后修改文件或镜像标签，不会改变原上下文或后续提交实际使用的镜像。Blob 下载与 SHA 校验仍归原生镜像构建路径负责；Docker ID 标识镜像中实际的评测器与数据。摘要不代表评分确定性或封闭性，也不证明外部可变服务/数据未变。协议不暴露评测器内容或原始环境变量值。
+
+一次请求读取结果原文与来源：
+
+```http
+GET /api/v1/feedback/{feedback_relay_id}/result/{submission_id}?include_receipt=true
+```
+
+响应在原结果之上增加：
+
+```json
+{
+  "receipt": {
+    "schema_version": "sforge_submission_receipt_v1",
+    "task_id": "ad_placement_optimization",
+    "round_id": "agent-1",
+    "archive_sha256": "<sha256-of-accepted-upload-bytes>",
+    "archive_bytes": 1234,
+    "evaluation_context": {
+      "schema_version": "sforge_run_evaluation_context_v1",
+      "task_id": "ad_placement_optimization",
+      "run_id": "run-001",
+      "registration_id": "<original-server-assigned-id>",
+      "evaluation_conditions": null
+    }
+  }
+}
+```
+
+上例展示条件未知的情况；条件已知时包含表中描述的对象。归档摘要覆盖按提交路径过滤之前收到的压缩上传字节。`GET /api/v1/result/{submission_id}?include_receipt=true` 与带 `include_receipt=true` 表单字段的 `POST /api/v1/submit` 也提供同一可选 receipt。省略开关时保留原反馈正文，报告仍只含原始分数。
+
+读取方每个结果只需一次 GET，即可将其上下文与安装时快照比较。上下文缺失、条件未知或不匹配时，测量归因必须保留未知，原生反馈仍可使用。读取 context/result 不会重扫源码、查询当前镜像、构建镜像或下载 Blob。不支持的 backend、游戏会话、未准备镜像及未经 loader 观察的手工 TaskSpec 返回 `evaluation_conditions: null`。旧结果缺少来源时返回 null 上下文/摘要，不借用当前条件。本接口不增加 checkpoint/restore 机制。
+
+对其他 run/task/登记、auto-eval 和未知 ID，relay 返回 `404`。它没有提交、历史、模型网关或 admin 路由。已有 session-token API 和生成的提交客户端保持可用；保留上传归档与异步客户端选项属于独立的客户端功能。
 
 ## 运行历史
 

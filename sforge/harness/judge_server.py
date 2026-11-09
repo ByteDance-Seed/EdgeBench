@@ -16,6 +16,8 @@
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import json
 import logging
 import secrets
@@ -26,6 +28,7 @@ from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
 from typing import Any
+from typing import Literal
 
 import requests
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
@@ -41,6 +44,9 @@ from sforge.harness.config import (
 )
 from sforge.harness.constants import CONTAINER_DIR, get_admin_secret
 from sforge.harness.docker_build import BuildImageError, build_judge_image
+from sforge.harness.evaluation_conditions import (
+    RegisteredEvaluator, RunEvaluationContext, capture_conditions, native_source_sha256,
+)
 from sforge.harness.llm_gateway import UsageLog, add_gateway_routes, make_client
 from sforge.harness.run_evaluation import judge_submission
 from sforge.harness.grading import select_best
@@ -60,6 +66,10 @@ class SubmissionCooldownActive(Exception):
     pass
 
 
+class RegistrationConditionsDiffer(ValueError):
+    pass
+
+
 # --- Models ---
 
 
@@ -70,11 +80,21 @@ class SubmissionStatus(str, Enum):
     ERROR = "error"
 
 
+class SubmissionReceipt(BaseModel):
+    schema_version: Literal["sforge_submission_receipt_v1"] = "sforge_submission_receipt_v1"
+    task_id: str
+    round_id: str | None
+    archive_sha256: str | None
+    archive_bytes: int | None
+    evaluation_context: RunEvaluationContext | None = None
+
+
 class ResultResponse(BaseModel):
     submission_id: str
     status: SubmissionStatus
     report: dict | None = None
     error: str | None = None
+    receipt: SubmissionReceipt | None = None
 
 
 class GameNewRequest(BaseModel):
@@ -144,6 +164,8 @@ class RegisterRequest(BaseModel):
 
 class RegisterResponse(BaseModel):
     token: str
+    feedback_relay_id: str
+    evaluation_context: RunEvaluationContext | None = None
 
 
 class SubmitResponse(BaseModel):
@@ -151,6 +173,7 @@ class SubmitResponse(BaseModel):
     round_id: str
     status: SubmissionStatus
     remaining_submissions: int | None = None
+    receipt: SubmissionReceipt | None = None
 
 
 # --- Game session state ---
@@ -202,7 +225,12 @@ class JudgeState:
         self._game_lock = threading.Lock()
         self._history_lock = threading.Lock()
         self._tokens_lock = threading.Lock()
+        self._registration_lock = threading.Lock()
+        self._evaluators: dict[str, RegisteredEvaluator] = {}
+        self._run_evaluators: dict[str, RegisteredEvaluator] = {}
+        self._feedback_relays: dict[str, str] = {}
         self.backend = create_backend_from_config(config)
+        self.native_source_sha256 = native_source_sha256()
 
         self._reaper_stop = threading.Event()
         self._reaper_thread = threading.Thread(
@@ -294,11 +322,19 @@ class JudgeState:
                          e2b_template_namespace: str | None = None,
                          llm_base_url: str | None = None,
                          llm_api_key: str | None = None) -> str:
-        if task_id not in self.tasks:
-            raise ValueError(f"Unknown task: {task_id}")
-        token = secrets.token_hex(16)
-        with self._tokens_lock:
-            self.tokens[token] = {
+        with self._registration_lock:
+            if task_id not in self.tasks:
+                raise ValueError(f"Unknown task: {task_id}")
+            request_options = {
+                "judge_cpu_limit": judge_cpu_limit, "judge_mem_limit": judge_mem_limit,
+                "backend": backend, "k8s_image_registry": k8s_image_registry,
+                "k8s_namespace": k8s_namespace, "k8s_node_selector": k8s_node_selector,
+                "k8s_kubeconfig": k8s_kubeconfig, "max_agent_submissions": max_agent_submissions,
+                "submission_cooldown": submission_cooldown,
+                "e2b_template_map": e2b_template_map, "e2b_template_namespace": e2b_template_namespace,
+                "llm_base_url": llm_base_url, "llm_api_key": llm_api_key,
+            }
+            info = {
                 "task_id": task_id,
                 "run_id": run_id,
                 "next_agent": 1,
@@ -310,15 +346,11 @@ class JudgeState:
                 "last_agent_submit_at": 0.0,
                 "llm_base_url": llm_base_url,
                 "llm_api_key": llm_api_key,
-                "usage_log": UsageLog(
-                    self.config.log_dir / "runs" / run_id / task_id / "llm_requests.jsonl"
-                ),
+                "registration_id": uuid.uuid4().hex,
+                "feedback_relay_id": secrets.token_urlsafe(24),
+                "_request_options": copy.deepcopy(request_options),
             }
             run_key = self._run_key(run_id, task_id)
-            self.run_resource_limits[run_key] = {
-                "judge_cpu_limit": judge_cpu_limit,
-                "judge_mem_limit": judge_mem_limit,
-            }
             effective_e2b_template_map = (
                 self.config.e2b_template_map
                 if not e2b_template_map
@@ -334,11 +366,12 @@ class JudgeState:
                 or effective_e2b_template_namespace
                 != self.config.e2b_template_namespace
             )
+            prepared_backend = None
             if backend and (
                 backend != self.backend.backend_name or e2b_config_changed
             ):
                 from sforge.harness.backend.factory import create_backend
-                self.run_backends[run_key] = create_backend(
+                prepared_backend = create_backend(
                     backend,
                     k8s_namespace=k8s_namespace or self.config.k8s_namespace,
                     k8s_node_selector=k8s_node_selector or self.config.k8s_node_selector,
@@ -347,7 +380,50 @@ class JudgeState:
                     e2b_template_map=effective_e2b_template_map,
                     e2b_template_namespace=effective_e2b_template_namespace,
                 )
-        return token
+            task = copy.deepcopy(self.tasks[task_id])
+            config = copy.deepcopy(self.config)
+            if judge_cpu_limit is not None:
+                config.judge_cpu_limit = judge_cpu_limit
+            if judge_mem_limit is not None:
+                config.judge_mem_limit = judge_mem_limit
+            registered_backend = prepared_backend or self.backend
+            context = RunEvaluationContext(
+                task_id=task_id, run_id=run_id, registration_id=info["registration_id"],
+                evaluation_conditions=capture_conditions(task, registered_backend,
+                                                        self.native_source_sha256, config),
+            )
+            evaluator = RegisteredEvaluator(task, config, registered_backend, context)
+            info["evaluation_context"] = context.model_dump(mode="json")
+            with self._tokens_lock:
+                for previous_token, previous in self.tokens.items():
+                    if previous["run_id"] != run_id or previous["task_id"] != task_id:
+                        continue
+                    prior = (previous.get("evaluation_context") or {}).get("evaluation_conditions")
+                    current = info["evaluation_context"]["evaluation_conditions"]
+                    if prior is not None or current is not None:
+                        if prior == current and previous.get("_request_options") == request_options:
+                            # Keep rounds, cooldown, gateway ownership and the
+                            # existing log namespace on an exact retry.
+                            return previous_token
+                        raise RegistrationConditionsDiffer(
+                            "Run/task already registered with evaluation conditions; "
+                            "reuse its registration or use a fresh run_id"
+                        )
+                token = secrets.token_hex(16)
+                info["usage_log"] = UsageLog(
+                    self.config.log_dir / "runs" / run_id / task_id / "llm_requests.jsonl"
+                )
+                self.run_resource_limits[run_key] = {
+                    "judge_cpu_limit": judge_cpu_limit, "judge_mem_limit": judge_mem_limit,
+                }
+                if prepared_backend is not None:
+                    self.run_backends[run_key] = prepared_backend
+                self._evaluators[info["registration_id"]] = evaluator
+                if context.evaluation_conditions is not None:
+                    self._run_evaluators[run_key] = evaluator
+                self._feedback_relays[info["feedback_relay_id"]] = token
+                self.tokens[token] = info
+                return token
 
     @staticmethod
     def _run_key(run_id: str, task_id: str) -> str:
@@ -375,7 +451,25 @@ class JudgeState:
             info = self.tokens.get(token)
         if info is None:
             raise KeyError("Invalid token")
-        return dict(info)
+        result = dict(info)
+        if "evaluation_context" in result:
+            result["evaluation_context"] = copy.deepcopy(result["evaluation_context"])
+        return result
+
+    def resolve_feedback_relay(self, relay_id: str) -> tuple[str, dict]:
+        """A read-only capability for one registration, without its judge token."""
+        with self._tokens_lock:
+            token = self._feedback_relays.get(relay_id)
+        if token is None:
+            raise KeyError("Invalid feedback relay")
+        return token, self.resolve_token(token)
+
+    def _evaluator_for_token(self, token: str) -> RegisteredEvaluator | None:
+        with self._tokens_lock:
+            info = self.tokens.get(token)
+            if info is None:
+                raise KeyError("Invalid token")
+            return self._evaluators.get(info.get("registration_id"))
 
     def consume_round(self, token: str, kind: str = "agent") -> tuple[str, str, str, int | None, str | None, int | None]:
         """Allocate the next round ID for a token. Returns (task_id, run_id, round_id, cpu, mem, remaining).
@@ -450,7 +544,8 @@ class JudgeState:
             entries = list(self.run_history.get(history_key, []))
 
         resolved_tid = task_id or next((e["task_id"] for e in entries if e.get("task_id")), None)
-        task_spec = self.tasks.get(resolved_tid) if resolved_tid else None
+        evaluator = self._run_evaluators.get(self._run_key(run_id, resolved_tid)) if resolved_tid else None
+        task_spec = evaluator.task if evaluator else self.tasks.get(resolved_tid) if resolved_tid else None
         best = select_best(entries, task_spec.judge.direction if task_spec else "maximize") or {}
 
         sub_entries = [e for e in entries if e.get("type") == "submission"]
@@ -469,10 +564,13 @@ class JudgeState:
         self.tasks = {t.task_id: t for t in task_list}
 
     def submit(self, task_id: str, archive: bytes, run_id: str | None = None, round: str | None = None,
-               judge_cpu_limit: int | None = None, judge_mem_limit: str | None = None) -> str:
+               judge_cpu_limit: int | None = None, judge_mem_limit: str | None = None,
+               evaluator: RegisteredEvaluator | None = None) -> str:
         """Submit and grade asynchronously. Returns submission_id for polling."""
-        if task_id not in self.tasks:
+        if evaluator is None and task_id not in self.tasks:
             raise ValueError(f"Unknown task: {task_id}")
+        if evaluator is not None and (evaluator.context.task_id != task_id or evaluator.context.run_id != run_id):
+            raise ValueError("Evaluation registration differs from the submitted run/task")
 
         submission_id = uuid.uuid4().hex[:12]
         log_run_id = run_id or submission_id
@@ -483,13 +581,17 @@ class JudgeState:
             "round": round,
             "report": None,
             "error": None,
+            "registration_id": evaluator.context.registration_id if evaluator else None,
+            "archive_sha256": hashlib.sha256(archive).hexdigest(),
+            "archive_bytes": len(archive),
+            "evaluation_context": evaluator.context.model_dump(mode="json") if evaluator else None,
         }
         self._record_submission(log_run_id, submission_id, task_id, round, None, None, status="running")
 
         thread = threading.Thread(
             target=self._grade_worker,
             args=(submission_id, task_id, archive, run_id, round,
-                  judge_cpu_limit, judge_mem_limit),
+                  judge_cpu_limit, judge_mem_limit, evaluator),
             daemon=True,
         )
         thread.start()
@@ -497,10 +599,11 @@ class JudgeState:
 
     def _grade_worker(self, submission_id: str, task_id: str, archive: bytes,
                       run_id: str | None = None, round: int | None = None,
-                      judge_cpu_limit: int | None = None, judge_mem_limit: str | None = None) -> None:
+                      judge_cpu_limit: int | None = None, judge_mem_limit: str | None = None,
+                      evaluator: RegisteredEvaluator | None = None) -> None:
         self.submissions[submission_id]["status"] = SubmissionStatus.RUNNING
         try:
-            task_spec = self.tasks[task_id]
+            task_spec = evaluator.task if evaluator else self.tasks[task_id]
             log_run_id = run_id or submission_id
             sub_num = str(round) if round is not None else "1"
             sub_log_dir = (
@@ -512,22 +615,24 @@ class JudgeState:
                 overrides["judge_cpu_limit"] = judge_cpu_limit
             if judge_mem_limit is not None:
                 overrides["judge_mem_limit"] = judge_mem_limit
-            config = replace(self.config, **overrides) if overrides else self.config
+            config = evaluator.config if evaluator else replace(self.config, **overrides) if overrides else self.config
+            conditions = evaluator.context.evaluation_conditions if evaluator else None
             report = judge_submission(
                 task_spec=task_spec,
                 archive=archive,
                 config=config,
-                backend=self._get_backend(run_id, task_id),
+                backend=evaluator.backend if evaluator else self._get_backend(run_id, task_id),
                 submission_id=submission_id,
                 log_dir=sub_log_dir,
+                **({"evaluator_image": conditions.judge_image_id} if conditions else {}),
             )
             report_dict = report.to_dict()
-            self.submissions[submission_id]["status"] = SubmissionStatus.COMPLETED
             self.submissions[submission_id]["report"] = report_dict
+            self.submissions[submission_id]["status"] = SubmissionStatus.COMPLETED
             self._record_submission(log_run_id, submission_id, task_id, round, report_dict, None)
         except Exception as e:
-            self.submissions[submission_id]["status"] = SubmissionStatus.ERROR
             self.submissions[submission_id]["error"] = str(e)
+            self.submissions[submission_id]["status"] = SubmissionStatus.ERROR
             self._record_submission(log_run_id, submission_id, task_id, round, None, str(e))
 
     def get_result(self, submission_id: str) -> dict | None:
@@ -867,6 +972,25 @@ class JudgeState:
 # --- FastAPI app factory ---
 
 
+def submission_receipt(result: dict) -> SubmissionReceipt:
+    return SubmissionReceipt(
+        task_id=result["task_id"], round_id=result.get("round"),
+        archive_sha256=result.get("archive_sha256"), archive_bytes=result.get("archive_bytes"),
+        evaluation_context=result.get("evaluation_context"),
+    )
+
+
+def public_result(submission_id: str, result: dict, include_receipt: bool) -> ResultResponse:
+    # The rescale anchors remain operator-only, including through the relay.
+    report = result["report"]
+    return ResultResponse(
+        submission_id=submission_id, status=result["status"],
+        report={k: v for k, v in report.items() if k != "score_0_100"} if report is not None else None,
+        error=result["error"],
+        **({"receipt": submission_receipt(result)} if include_receipt else {}),
+    )
+
+
 def create_app(config: SForgeConfig | None = None) -> FastAPI:
     if config is None:
         config = load_config()
@@ -875,20 +999,13 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
     state = JudgeState(config)
     state.load_tasks()
 
-    @app.get("/api/v1/result/{submission_id}")
-    def get_result(submission_id: str) -> ResultResponse:
+    @app.get("/api/v1/result/{submission_id}", response_model_exclude_unset=True)
+    def get_result(submission_id: str, include_receipt: bool = Query(False)) -> ResultResponse:
         """Get result of an async submission."""
         result = state.get_result(submission_id)
         if result is None:
             raise HTTPException(status_code=404, detail="Submission not found")
-        return ResultResponse(
-            submission_id=submission_id,
-            status=result["status"],
-            # Agents poll this; keep the rescale anchors out of their view.
-            report={k: v for k, v in (result["report"] or {}).items() if k != "score_0_100"}
-            if result["report"] is not None else None,
-            error=result["error"],
-        )
+        return public_result(submission_id, result, include_receipt)
 
     @app.post("/api/v1/register")
     def register(req: RegisterRequest) -> RegisterResponse:
@@ -912,16 +1029,21 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
                 llm_base_url=req.llm_base_url,
                 llm_api_key=req.llm_api_key,
             )
-            return RegisterResponse(token=token)
+            info = state.resolve_token(token)
+            return RegisterResponse(token=token, feedback_relay_id=info["feedback_relay_id"],
+                                    evaluation_context=info.get("evaluation_context"))
+        except RegistrationConditionsDiffer as e:
+            raise HTTPException(status_code=409, detail=str(e))
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
 
-    @app.post("/api/v1/submit")
+    @app.post("/api/v1/submit", response_model_exclude_unset=True)
     def submit(
         token: str = Form(...),
         archive: UploadFile = File(...),
         kind: str = Form("agent"),
         admin_secret: str = Form(""),
+        include_receipt: bool = Form(False),
     ) -> SubmitResponse:
         """Submit an archive using a session token.
 
@@ -933,6 +1055,7 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
         if kind == "auto" and admin_secret != state.admin_secret:
             raise HTTPException(status_code=403, detail="admin_secret required for auto submissions")
         try:
+            evaluator = state._evaluator_for_token(token)
             task_id, run_id, round_id, judge_cpu_limit, judge_mem_limit, remaining = state.consume_round(token, kind)
         except KeyError:
             raise HTTPException(status_code=401, detail="Invalid token")
@@ -944,12 +1067,14 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
         try:
             submission_id = state.submit(task_id, archive_data, run_id, round_id,
                                          judge_cpu_limit=judge_cpu_limit,
-                                         judge_mem_limit=judge_mem_limit)
+                                         judge_mem_limit=judge_mem_limit, evaluator=evaluator)
             return SubmitResponse(
                 submission_id=submission_id,
                 round_id=round_id,
                 status=SubmissionStatus.QUEUED,
                 remaining_submissions=remaining,
+                **({"receipt": submission_receipt(state.get_result(submission_id))}
+                   if include_receipt else {}),
             )
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
@@ -975,7 +1100,8 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
             for e in full.get("entries", [])
             if not (e.get("round") or "").startswith("auto-")
         ]
-        task_spec = state.tasks.get(info["task_id"])
+        evaluator = state._run_evaluators.get(state._run_key(info["run_id"], info["task_id"]))
+        task_spec = evaluator.task if evaluator else state.tasks.get(info["task_id"])
         best = select_best(agent_entries, task_spec.judge.direction if task_spec else "maximize") or {}
         return {
             "run_id": info["run_id"],
@@ -998,6 +1124,31 @@ def create_app(config: SForgeConfig | None = None) -> FastAPI:
         return info["usage_log"].summary()
 
     add_gateway_routes(app, state, make_client(config.https_proxy, config.no_proxy))
+
+    @app.get("/api/v1/feedback/{relay_id}/context")
+    def feedback_context(relay_id: str) -> RunEvaluationContext | None:
+        """Read the original registration snapshot without submission authority."""
+        try:
+            _, info = state.resolve_feedback_relay(relay_id)
+            return info.get("evaluation_context")
+        except KeyError:
+            raise HTTPException(status_code=404, detail="Feedback relay not found")
+
+    @app.get("/api/v1/feedback/{relay_id}/result/{submission_id}", response_model_exclude_unset=True)
+    def feedback_result(relay_id: str, submission_id: str,
+                        include_receipt: bool = Query(False)) -> ResultResponse:
+        """Read only this registration's agent result, never host-only auto work."""
+        try:
+            _, info = state.resolve_feedback_relay(relay_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="Feedback relay not found")
+        result = state.get_result(submission_id)
+        if (result is None or result.get("run_id") != info["run_id"]
+                or result.get("task_id") != info["task_id"]
+                or not str(result.get("round") or "").startswith("agent-")
+                or result.get("registration_id") not in (None, info.get("registration_id"))):
+            raise HTTPException(status_code=404, detail="Submission not found")
+        return public_result(submission_id, result, include_receipt)
 
     # --- Game session routes ---
 

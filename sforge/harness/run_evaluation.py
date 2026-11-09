@@ -100,6 +100,16 @@ def _filter_archive_files(
     return allowed
 
 
+def judge_container_options(task_spec: TaskSpec, config: SForgeConfig) -> dict:
+    """Resolve the execution options shared by grading and its source receipt."""
+    cpu = config.judge_cpu_limit if config.judge_cpu_limit is not None else task_spec.judge.cpu_limit
+    mem = config.judge_mem_limit if config.judge_mem_limit is not None else task_spec.judge.mem_limit
+    env = dict(config.judge_extra_env)
+    env.update(resource_env(cpu, mem))
+    return {"environment": env, "cpu_limit": cpu, "mem_limit": mem,
+            "network": task_spec.judge.internet}
+
+
 def judge_submission(
     task_spec: TaskSpec,
     archive: bytes,
@@ -109,6 +119,7 @@ def judge_submission(
     timeout: int | None = None,
     log_dir: Path | None = None,
     verbose: bool = False,
+    evaluator_image: str | None = None,
 ) -> EvalReport:
     """
     Grade an archive submission in an ephemeral judge container.
@@ -148,26 +159,19 @@ def judge_submission(
     isolation = None
     try:
         # 1. Ensure judge image exists (Docker builds locally; K8s requires pre-built images in CR)
-        if backend.backend_name == "docker":
+        if backend.backend_name == "docker" and evaluator_image is None:
             build_judge_image(task_spec, config)
 
         # 2. Create + start ephemeral container
         container_name = f"sforge.judge.{task_spec.task_id}.{submission_id}"
         # Graders run untrusted code: no model key, no proxies, nothing but
         # what the operator explicitly passes via SFORGE_JUDGE_EXTRA_ENV.
-        env = dict(config.judge_extra_env)
-        # Resolve resource limits: config > task defaults
-        cpu = config.judge_cpu_limit if config.judge_cpu_limit is not None else task_spec.judge.cpu_limit
-        mem = config.judge_mem_limit if config.judge_mem_limit is not None else task_spec.judge.mem_limit
-        env.update(resource_env(cpu, mem))
-        offline = not task_spec.judge.internet
+        options = judge_container_options(task_spec, config)
+        offline = not options["network"]
         handle = backend.create_container(
-            task_spec.judge_image_key,
+            evaluator_image or task_spec.judge_image_key,
             container_name,
-            environment=env,
-            cpu_limit=cpu,
-            mem_limit=mem,
-            network=not offline,
+            **options,
         )
         backend.start_container(handle)
         if offline and backend.backend_name != "docker":
