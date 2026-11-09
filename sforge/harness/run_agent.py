@@ -510,7 +510,8 @@ def run_agent(
                 wait = 2 * _reg_attempt
                 logger.warning("Register attempt %d/5 failed (%s), retrying in %ds...", _reg_attempt, exc, wait)
                 time.sleep(wait)
-        session_token = reg_resp.json()["token"]
+        registration = reg_resp.json()
+        session_token = registration["token"]
         logger.info("Registered session with judge server")
         # The agent reaches the model through the judge server's LLM gateway.
         api_url = f"{judge_url.rstrip('/')}{GATEWAY_ROUTE}/{session_token}"
@@ -531,6 +532,9 @@ def run_agent(
             sanitize_e2b_proxy_env(env)
         env["SFORGE_JUDGE_URL"] = judge_url
         env["SFORGE_TOKEN"] = session_token
+        relay_id = registration.get("feedback_relay_id")
+        if relay_id:
+            env["SFORGE_FEEDBACK_URL"] = f"{judge_url.rstrip('/')}/api/v1/feedback/{relay_id}"
 
         if task_spec.game_mode:
             game_api_base = (

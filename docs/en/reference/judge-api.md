@@ -12,8 +12,9 @@ The judge server exposes a REST API for registering runs, submitting archives, p
 |--------|------------|-----------|
 | `sforge run` (host) | admin secret | `register`, auto-eval `submit`, full `history`, `usage` |
 | Agent in the work container | session token | `submit`, `result`, agent `history`, `llm/...`, game endpoints |
+| Feedback reader | feedback relay ID | read-only registration `context` and that registration's agent `result` |
 
-The admin secret (`SFORGE_ADMIN_SECRET`) never enters a container. The work container gets only its session token (`SFORGE_TOKEN`) and the judge URL (`SFORGE_JUDGE_URL`).
+The admin secret (`SFORGE_ADMIN_SECRET`) never enters a container. The work container gets its session token (`SFORGE_TOKEN`), the judge URL (`SFORGE_JUDGE_URL`) and a read-only feedback URL (`SFORGE_FEEDBACK_URL`). Treat the feedback URL as a credential for reading feedback: it cannot submit, read auto-evaluations or access another run/task. Results with a recorded registration binding are further restricted to that registration.
 
 ## Session Registration
 
@@ -35,10 +36,22 @@ Optional fields: `judge_cpu_limit`, `judge_mem_limit`, `max_agent_submissions`, 
 **Response:**
 
 ```json
-{"token": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4"}
+{
+  "token": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+  "feedback_relay_id": "<opaque-read-capability>",
+  "evaluation_context": {
+    "schema_version": "sforge_run_evaluation_context_v1",
+    "task_id": "ad_placement_optimization",
+    "run_id": "run-001",
+    "registration_id": "<server-assigned-id>",
+    "evaluation_conditions": null
+  }
+}
 ```
 
 The token identifies the task and run and counts agent rounds (`agent-1`, `agent-2`, ...) and auto-eval rounds (`auto-1`, ...) separately.
+
+When evaluation conditions are known, registering the same run/task with identical conditions and registration options returns the original token, relay and counters. Changed conditions or options return `409`; use a fresh `run_id`. A retry cannot reset the submission budget or switch the run's model gateway. Registrations with unknown conditions retain the previous registration behavior and carry no verified attribution claim.
 
 ## Submit Archive
 
@@ -57,6 +70,7 @@ kind: agent
 | `archive` | yes | `.tar.gz` of the workspace; filtered by the task's submission paths |
 | `kind` | no | `agent` (default) or `auto`; `auto` also needs `admin_secret` |
 | `admin_secret` | for `auto` | Admin secret |
+| `include_receipt` | no | `true` adds the accepted archive receipt; default `false` preserves the existing response |
 
 **Response:**
 
@@ -108,6 +122,63 @@ The report is the grader's `result.json` plus timing. The 0–100 score is not i
 | `running` | The grader is running |
 | `completed` | Graded; `report` is available (it may still be `valid: false`) |
 | `error` | Grading failed outright; see `error` |
+
+## Evaluation Conditions and Read-Only Feedback
+
+Read the original registration context once before accepting measurements:
+
+```http
+GET /api/v1/feedback/{feedback_relay_id}/context
+```
+
+It returns the same `sforge_run_evaluation_context_v1` object as registration. `evaluation_conditions`, when available, is an object with exactly these fields:
+
+| Field | Meaning |
+|-------|---------|
+| `schema_version` | `sforge_evaluation_conditions_v1` |
+| `task_sha256` | SHA-256 of the `task.toml` bytes parsed by the task loader |
+| `benchmark_sha256` | SHA-256 of the `benchmark.toml` bytes parsed by the benchmark loader |
+| `task_spec_sha256` | SHA-256 of the effective logical task, including instructions, judge command, score direction/rescaling and declared Blob path/digest inventory; no host paths |
+| `native_source_sha256` | SHA-256 inventory of the service's installed Python framework source, observed once at boot |
+| `judge_image_id` | Actual local Docker content ID (`sha256:...`), resolved at registration and used for grading |
+| `execution_config_sha256` | SHA-256 of effective judge CPU/memory/environment/network, timeout and platform |
+| `score_direction` | `maximize` or `minimize` from that frozen task |
+| `selection` | `valid_then_score`: existing valid/completed filtering, raw-score direction and first-tie selection |
+
+The server freezes the loaded task, effective config and backend for accepted work. Changing files or retagging an image after registration does not change its context or the image used by subsequent submissions. Blob downloads and SHA checks remain owned by the normal image-build path; the Docker ID identifies the evaluator and data actually inside the image. The digest is not a claim of deterministic or hermetic grading and does not attest mutable external services/data. No evaluator contents or raw environment values are exposed by this contract.
+
+Poll one result with both its original feedback and provenance:
+
+```http
+GET /api/v1/feedback/{feedback_relay_id}/result/{submission_id}?include_receipt=true
+```
+
+This is the ordinary result response plus:
+
+```json
+{
+  "receipt": {
+    "schema_version": "sforge_submission_receipt_v1",
+    "task_id": "ad_placement_optimization",
+    "round_id": "agent-1",
+    "archive_sha256": "<sha256-of-accepted-upload-bytes>",
+    "archive_bytes": 1234,
+    "evaluation_context": {
+      "schema_version": "sforge_run_evaluation_context_v1",
+      "task_id": "ad_placement_optimization",
+      "run_id": "run-001",
+      "registration_id": "<original-server-assigned-id>",
+      "evaluation_conditions": null
+    }
+  }
+}
+```
+
+The context above shows the unknown-conditions case; known conditions contain the object described in the table. The archive digest covers the accepted compressed upload before submission-path filtering. The same optional receipt is available on `GET /api/v1/result/{submission_id}?include_receipt=true` and `POST /api/v1/submit` with the form field `include_receipt=true`. Omitting the flag preserves the original feedback body, including the raw-score-only report.
+
+A reader can compare this result's context to its installation snapshot with one GET per result. A missing context, unknown conditions or a mismatch must stay unknown for measurement attribution; keep the native feedback usable. Context/result reads never rescan source, inspect the current image, build an image or download a Blob. Unsupported backends, game sessions, unprepared images and unobserved/manual task specifications return `evaluation_conditions: null`. Historical results missing provenance return a null context/digest instead of borrowing current conditions. This interface adds no checkpoint/restore mechanism.
+
+The relay returns `404` for foreign runs/tasks/recorded registrations, auto-evaluations and unknown IDs. Legacy results without a registration binding remain visible only within their matching run/task and carry no recovered attribution. The relay has no submit, history, model-gateway or admin route. Existing session-token APIs and generated submit-client behavior remain available; retained-upload and asynchronous-client options are separate client features.
 
 ## Run History
 

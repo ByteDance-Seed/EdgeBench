@@ -25,8 +25,9 @@ inputs change.
 from __future__ import annotations
 
 import hashlib
+import json
 import tomllib
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
 from functools import cache, cached_property
 from pathlib import Path
 
@@ -71,6 +72,7 @@ class Benchmark:
     name: str                   # image name prefix: <name>.{base,work,judge}.<id>
     registry: str | None = None  # where pre-built images live (sforge pull, k8s)
     blob_url: str | None = None  # where task blobs are downloaded from, as <url>/<sha256>
+    _source_sha256: str | None = field(default=None, init=False, repr=False, compare=False)
 
 
 @cache
@@ -79,8 +81,20 @@ def load_benchmark(root: Path) -> Benchmark:
     path = root / "benchmark.toml"
     if not path.exists():
         raise FileNotFoundError(f"{path} not found: pass --benchmark <dir> or set SFORGE_BENCHMARK")
-    data = tomllib.loads(path.read_text())
-    return Benchmark(root, data["name"], data.get("registry"), data.get("blob_url"))
+    raw = path.read_bytes()
+    data = tomllib.loads(raw.decode("utf-8"))
+    benchmark = Benchmark(root, data["name"], data.get("registry"), data.get("blob_url"))
+    object.__setattr__(benchmark, "_source_sha256", hashlib.sha256(raw).hexdigest())
+    return benchmark
+
+
+@dataclass(frozen=True)
+class TaskSourceRevision:
+    """Hashes of the bytes and effective specification parsed by the loader."""
+
+    task_sha256: str
+    benchmark_sha256: str
+    task_spec_sha256: str
 
 
 @dataclass(frozen=True)
@@ -99,6 +113,7 @@ class TaskSpec:
     judge: JudgeSpec
     base: str | None = None
     blobs: tuple[Blob, ...] = ()
+    _source_revision: TaskSourceRevision | None = field(default=None, init=False, repr=False, compare=False)
 
     @property
     def game_mode(self) -> bool:
@@ -152,11 +167,29 @@ def _tree_hash(root: Path, skip: set[Path] = frozenset()) -> str:
     return h.hexdigest()[:12]
 
 
+def task_spec_sha256(spec: TaskSpec) -> str:
+    """Hash logical inputs, including instructions and blobs, without host paths."""
+    value = {
+        key: getattr(spec, key)
+        for key in ("task_id", "name", "version", "platform", "cwd", "internet",
+                    "submit_paths", "submit_exclude", "base")
+    }
+    value.update(
+        benchmark=spec.benchmark.name,
+        work=asdict(spec.work),
+        judge=asdict(spec.judge),
+        blobs=[asdict(blob) for blob in spec.blobs],
+    )
+    raw = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 def load_task(task_dir: Path, benchmark: Benchmark | None = None) -> TaskSpec:
     """Load ``<benchmark>/tasks/<id>/``; the benchmark defaults to the one that contains it."""
     task_dir = task_dir.resolve()
     benchmark = benchmark or load_benchmark(task_dir.parent.parent)
-    data = tomllib.loads((task_dir / "task.toml").read_text())
+    raw = (task_dir / "task.toml").read_bytes()
+    data = tomllib.loads(raw.decode("utf-8"))
     env = data["environment"]
     sub = data.get("submission", {})
     judge = data["judge"]
@@ -164,7 +197,7 @@ def load_task(task_dir: Path, benchmark: Benchmark | None = None) -> TaskSpec:
     game = data.get("game", {})
     if data["id"] != task_dir.name:
         raise ValueError(f"{task_dir}: task.toml id {data['id']!r} does not match the directory name")
-    return TaskSpec(
+    spec = TaskSpec(
         task_id=data["id"],
         name=data.get("name", data["id"]),
         version=data.get("version", "0"),
@@ -193,6 +226,17 @@ def load_task(task_dir: Path, benchmark: Benchmark | None = None) -> TaskSpec:
         base=env.get("base"),
         blobs=tuple(Blob(b["path"], b["sha256"]) for b in data.get("blobs", [])),
     )
+    if benchmark._source_sha256 is not None:
+        try:
+            effective_sha256 = task_spec_sha256(spec)
+        except (TypeError, ValueError):
+            # Optional attribution cannot make a previously loadable task
+            # unavailable merely because its metadata is not canonical JSON.
+            return spec
+        object.__setattr__(spec, "_source_revision", TaskSourceRevision(
+            hashlib.sha256(raw).hexdigest(), benchmark._source_sha256, effective_sha256,
+        ))
+    return spec
 
 
 def load_all_tasks(benchmark: Benchmark) -> list[TaskSpec]:
