@@ -344,3 +344,56 @@ def test_stop_during_format_dispatches_no_process(live, monkeypatch):
     assert summary["actual_processes"] == 0
     assert value["resume_policy"]["stop_reason"] == "shutdown_requested"
     assert value["resume_policy"]["phase_elapsed_seconds"] == 0
+
+
+@pytest.mark.parametrize("error", [OSError, KeyboardInterrupt])
+def test_failed_resume_excludes_real_history_collection(live, monkeypatch, error):
+    times = {}
+
+    class FailedResume(ProcessAgent):
+        def format_run_cmd(self, *args, resume=False, **kwargs):
+            if resume:
+                time.sleep(.2)
+                times["failure"] = time.monotonic()
+                raise error("Synthetic resume preparation failure")
+            return super().format_run_cmd(*args, resume=resume, **kwargs)
+
+    original_exec = live.backend.exec_run_with_timeout
+    original_get = runner.requests.get
+
+    def dispatch(*args, **kwargs):
+        if getattr(kwargs.get("log_file"), "name", None) == "agent_output.txt":
+            times.setdefault("dispatch", time.monotonic())
+        return original_exec(*args, **kwargs)
+
+    def history(url, *args, **kwargs):
+        if "/api/v1/history" not in str(url):
+            return original_get(url, *args, **kwargs)
+        times["history_start"] = time.monotonic()
+        time.sleep(2)
+        response = original_get(url, *args, **kwargs)
+        times["history_end"] = time.monotonic()
+        return response
+
+    monkeypatch.setattr(live.backend, "exec_run_with_timeout", dispatch)
+    monkeypatch.setattr(runner.requests, "get", history)
+    result = runner.run_agent(live.task, FailedResume(live.config), live.config, live.backend,
+        "failed-" + live.name, timeout=30, resume_until_timeout=True,
+        judge_url=live.worker_url, host_judge_url=live.host_url,
+        disable_auto_eval=True, disable_stop_hook=True,
+        max_submissions=3, submission_cooldown=3600)
+    policy = result.resume_policy
+    assert len(live.backend.processes) == len(live.backend.created) == 1
+    assert len(live.states[0].tokens) == 1
+    token, info = next(iter(live.states[0].tokens.items()))
+    assert info["next_agent"] == 2 and info["submission_cooldown"] == 3600
+    history = original_get(live.host_url + "/api/v1/history", params={"token": token}, timeout=10).json()
+    assert history["agent_submissions"] == 1 and history["entries"][0]["valid"] is True
+    assert policy["stop_reason"] == ("interrupted" if error is KeyboardInterrupt else "runner_error")
+    assert times["history_start"] > times["failure"]
+    # The production dispatch receipt precedes the actual process. Retain room
+    # for its IO without admitting this two-second post-failure HTTP delay.
+    assert policy["phase_elapsed_seconds"] <= times["failure"] - times["dispatch"] + .5
+    collection = times["history_end"] - times["history_start"]
+    assert policy["total_elapsed_seconds"] - policy["phase_elapsed_seconds"] >= collection - .5
+    assert policy["phase_elapsed_seconds"] + policy["remaining_seconds"] == pytest.approx(30)

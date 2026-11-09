@@ -274,6 +274,74 @@ def test_stop_during_format_cannot_enter_backend(execution):
     assert result.resume_policy["phase_elapsed_seconds"] == 0
 
 
+@pytest.mark.parametrize("error", [OSError, KeyboardInterrupt])
+def test_failed_resume_excludes_final_collection_from_phase(execution, monkeypatch, error):
+    x = execution
+    original_format = x.agent.format_run_cmd
+    original_get = runner.requests.get
+
+    def format_cmd(*args, resume=False, **kwargs):
+        if resume:
+            x.clock.now += 2
+            raise error("Synthetic resume preparation failure")
+        return original_format(*args, resume=resume, **kwargs)
+
+    def collect(*args, **kwargs):
+        x.clock.now += 10
+        return original_get(*args, **kwargs)
+
+    x.agent.format_run_cmd = format_cmd
+    monkeypatch.setattr(runner.requests, "get", collect)
+    result = x.run(resume_until_timeout=True)
+    assert len(x.backend.calls) == len(x.registrations) == 1
+    assert result.resume_policy["phase_elapsed_seconds"] == 3
+    assert result.resume_policy["remaining_seconds"] == 127
+    assert result.resume_policy["total_elapsed_seconds"] == 13
+    assert result.runtime_seconds == 1
+
+
+def test_initial_preparation_failure_keeps_phase_unstarted(execution, monkeypatch):
+    x = execution
+    original_get = runner.requests.get
+
+    def format_cmd(*args, **kwargs):
+        x.clock.now += 2
+        raise OSError("Synthetic first preparation failure")
+
+    def collect(*args, **kwargs):
+        x.clock.now += 10
+        return original_get(*args, **kwargs)
+
+    x.agent.format_run_cmd = format_cmd
+    monkeypatch.setattr(runner.requests, "get", collect)
+    result = x.run(resume_until_timeout=True)
+    assert not x.backend.calls
+    assert result.resume_policy["phase_elapsed_seconds"] == 0
+    assert result.resume_policy["remaining_seconds"] == 130
+    assert result.resume_policy["total_elapsed_seconds"] == 12
+
+
+def test_unconfirmed_exec_failure_keeps_conservative_phase_boundary(execution, monkeypatch):
+    x = execution
+    original_get = runner.requests.get
+
+    def uncertain_exec(*args, **kwargs):
+        x.clock.now += 1
+        raise OSError("Synthetic stream failure without confirmed process exit")
+
+    def collect(*args, **kwargs):
+        x.clock.now += 10
+        return original_get(*args, **kwargs)
+
+    monkeypatch.setattr(x.backend, "exec_run_with_timeout", uncertain_exec)
+    monkeypatch.setattr(runner.requests, "get", collect)
+    result = x.run(resume_until_timeout=True)
+    assert len(x.registrations) == 1
+    assert result.resume_policy["phase_elapsed_seconds"] == 11
+    assert result.resume_policy["remaining_seconds"] == 119
+    assert result.resume_policy["total_elapsed_seconds"] == 11
+
+
 def test_old_attempt_cannot_gain_new_deadline(execution):
     x = execution
     x.trial.mkdir(parents=True)

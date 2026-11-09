@@ -481,6 +481,7 @@ def run_agent(
     session_stop = threading.Event()
     admin_secret = ""
     phase_started = phase_finished = None
+    solver_dispatch_active = False
     stop_reason = "runner_error"
 
     try:
@@ -811,6 +812,8 @@ def run_agent(
                     break
                 if is_resume:
                     resume_count += 1
+            if resume_until_timeout:
+                solver_dispatch_active = True
             seg_result = backend.exec_run_with_timeout(
                 handle,
                 ["/bin/bash", "-c", run_cmd],
@@ -823,6 +826,8 @@ def run_agent(
                 log_append=is_resume,
                 on_chunk=on_chunk_cb,
             )
+            if resume_until_timeout:
+                solver_dispatch_active = False
             all_output_parts.append(seg_result.output)
             total_runtime += seg_result.elapsed_seconds
 
@@ -1042,6 +1047,8 @@ def run_agent(
         return result
 
     except KeyboardInterrupt:
+        if phase_started is not None and phase_finished is None and not solver_dispatch_active:
+            phase_finished = time.monotonic()
         stop_reason = "interrupted"
         logger.info("Run interrupted by user (Ctrl+C)")
 
@@ -1116,6 +1123,8 @@ def run_agent(
             resume_policy=resume_policy,
         )
     except Exception as e:
+        if phase_started is not None and phase_finished is None and not solver_dispatch_active:
+            phase_finished = time.monotonic()
         logger.error(f"Error: {e}\n{traceback.format_exc()}")
         if backend.backend_name == "e2b":
             # E2B transport or lifecycle failures must remain visible to the
