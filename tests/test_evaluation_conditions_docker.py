@@ -357,6 +357,7 @@ def test_actual_run_agent_delivers_relay_and_generated_client_keeps_default_feed
     list(build_log)
     image.tag(task.work_image_key)
     owned_tags.append(task.work_image_key)
+    probe_run = "probe-" + task.benchmark.name
     # Exercise the owning run_agent entrypoint without installing or calling a
     # model. Only the probe agent is synthetic; its container, registration,
     # installed submit client, grading and feedback all use the native path.
@@ -372,7 +373,7 @@ def test_actual_run_agent_delivers_relay_and_generated_client_keeps_default_feed
             probe = (
                 "import json,os,urllib.request; "
                 "ctx=json.load(urllib.request.urlopen(os.environ['SFORGE_FEEDBACK_URL']+'/context')); "
-                "assert ctx['run_id']=='probe-run'; print('CONTEXT '+json.dumps(ctx))"
+                f"assert ctx['run_id']=={probe_run!r}; print('CONTEXT '+json.dumps(ctx))"
             )
             return "python -c " + shlex.quote(probe) + " && printf '3\\n' > answer.txt && sforge-submit --details"
 
@@ -385,7 +386,7 @@ def test_actual_run_agent_delivers_relay_and_generated_client_keeps_default_feed
         port = url.rsplit(":", 1)[1]
         host = os.environ.get("SFORGE_TEST_JUDGE_HOST", "host.docker.internal")
         executed = run_agent(
-            task, FeedbackProbe(config), config, backend, "probe-run", timeout=45,
+            task, FeedbackProbe(config), config, backend, probe_run, timeout=45,
             judge_url=f"http://{host}:{port}", host_judge_url=url,
             disable_stop_hook=True, disable_auto_eval=True, disable_auto_resume=True,
         )
@@ -401,6 +402,6 @@ def test_actual_run_agent_delivers_relay_and_generated_client_keeps_default_feed
         sid = history["entries"][0]["submission_id"]
         enriched = result(relay, sid)
         assert enriched["receipt"]["evaluation_context"] == observed_context
-        graded = config.log_dir / "runs/probe-run/toy/submissions/agent-1/submission.tar.gz"
+        graded = config.log_dir / "runs" / probe_run / "toy/submissions/agent-1/submission.tar.gz"
         assert hashlib.sha256(graded.read_bytes()).hexdigest() == enriched["receipt"]["archive_sha256"]
         assert "receipt" not in get(url + "/api/v1/result/" + sid)

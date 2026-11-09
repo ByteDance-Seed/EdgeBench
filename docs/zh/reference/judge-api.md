@@ -14,7 +14,7 @@ Judge server 提供 REST API，用于登记运行、提交 archive、轮询结�
 | work 容器里的 Agent | session token | `submit`、`result`、Agent 视角的 `history`、`llm/...`、游戏端点 |
 | 反馈读取方 | feedback relay ID | 只读登记 `context` 与该登记的 Agent `result` |
 
-Admin secret（`SFORGE_ADMIN_SECRET`）从不进入容器。Work 容器拿到自己的 session token（`SFORGE_TOKEN`）、judge URL（`SFORGE_JUDGE_URL`）和只读反馈 URL（`SFORGE_FEEDBACK_URL`）。反馈 URL 是读取该登记反馈的凭据，不能用于提交、读取 auto-eval 或访问其他登记。
+Admin secret（`SFORGE_ADMIN_SECRET`）从不进入容器。Work 容器拿到自己的 session token（`SFORGE_TOKEN`）、judge URL（`SFORGE_JUDGE_URL`）和只读反馈 URL（`SFORGE_FEEDBACK_URL`）。反馈 URL 是读取反馈的凭据，不能用于提交、读取 auto-eval 或访问其他 run/task。已记录登记绑定的结果进一步限定在该登记内。
 
 ## 登记会话
 
@@ -178,7 +178,7 @@ GET /api/v1/feedback/{feedback_relay_id}/result/{submission_id}?include_receipt=
 
 读取方每个结果只需一次 GET，即可将其上下文与安装时快照比较。上下文缺失、条件未知或不匹配时，测量归因必须保留未知，原生反馈仍可使用。读取 context/result 不会重扫源码、查询当前镜像、构建镜像或下载 Blob。不支持的 backend、游戏会话、未准备镜像及未经 loader 观察的手工 TaskSpec 返回 `evaluation_conditions: null`。旧结果缺少来源时返回 null 上下文/摘要，不借用当前条件。本接口不增加 checkpoint/restore 机制。
 
-对其他 run/task/登记、auto-eval 和未知 ID，relay 返回 `404`。它没有提交、历史、模型网关或 admin 路由。已有 session-token API 和生成的提交客户端保持可用；保留上传归档与异步客户端选项属于独立的客户端功能。
+对其他 run/task/已记录登记、auto-eval 和未知 ID，relay 返回 `404`。没有登记绑定的旧结果仍只在匹配的 run/task 内可见，归因信息不会被恢复。Relay 没有提交、历史、模型网关或 admin 路由。已有 session-token API 和生成的提交客户端保持可用；保留上传归档与异步客户端选项属于独立的客户端功能。
 
 ## 运行历史
 

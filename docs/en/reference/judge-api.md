@@ -14,7 +14,7 @@ The judge server exposes a REST API for registering runs, submitting archives, p
 | Agent in the work container | session token | `submit`, `result`, agent `history`, `llm/...`, game endpoints |
 | Feedback reader | feedback relay ID | read-only registration `context` and that registration's agent `result` |
 
-The admin secret (`SFORGE_ADMIN_SECRET`) never enters a container. The work container gets its session token (`SFORGE_TOKEN`), the judge URL (`SFORGE_JUDGE_URL`) and a read-only feedback URL (`SFORGE_FEEDBACK_URL`). Treat the feedback URL as a credential for reading that registration's feedback; it cannot submit, read auto-evaluations or access another registration.
+The admin secret (`SFORGE_ADMIN_SECRET`) never enters a container. The work container gets its session token (`SFORGE_TOKEN`), the judge URL (`SFORGE_JUDGE_URL`) and a read-only feedback URL (`SFORGE_FEEDBACK_URL`). Treat the feedback URL as a credential for reading feedback: it cannot submit, read auto-evaluations or access another run/task. Results with a recorded registration binding are further restricted to that registration.
 
 ## Session Registration
 
@@ -178,7 +178,7 @@ The context above shows the unknown-conditions case; known conditions contain th
 
 A reader can compare this result's context to its installation snapshot with one GET per result. A missing context, unknown conditions or a mismatch must stay unknown for measurement attribution; keep the native feedback usable. Context/result reads never rescan source, inspect the current image, build an image or download a Blob. Unsupported backends, game sessions, unprepared images and unobserved/manual task specifications return `evaluation_conditions: null`. Historical results missing provenance return a null context/digest instead of borrowing current conditions. This interface adds no checkpoint/restore mechanism.
 
-The relay returns `404` for foreign runs/tasks/registrations, auto-evaluations and unknown IDs. It has no submit, history, model-gateway or admin route. Existing session-token APIs and generated submit-client behavior remain available; retained-upload and asynchronous-client options are separate client features.
+The relay returns `404` for foreign runs/tasks/recorded registrations, auto-evaluations and unknown IDs. Legacy results without a registration binding remain visible only within their matching run/task and carry no recovered attribution. The relay has no submit, history, model-gateway or admin route. Existing session-token APIs and generated submit-client behavior remain available; retained-upload and asynchronous-client options are separate client features.
 
 ## Run History
 
