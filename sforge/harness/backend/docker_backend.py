@@ -16,12 +16,12 @@
 
 from __future__ import annotations
 
-import io
 import logging
 import os
 import signal
 import sys
 import tarfile
+import tempfile
 import threading
 import time
 import traceback
@@ -223,13 +223,15 @@ class DockerBackend(ContainerBackend):
         if str(dst.parent) == ".":
             raise ValueError(f"Destination parent directory cannot be empty: {dst}")
 
-        buf = io.BytesIO()
-        with tarfile.open(fileobj=buf, mode="w") as tar:
-            tar.add(src, arcname=dst.name)
-        buf.seek(0)
+        # Keep the archive off the Python heap and close it even when Docker
+        # rejects the upload. TemporaryFile follows the host's TMPDIR policy.
+        with tempfile.TemporaryFile() as archive_file:
+            with tarfile.open(fileobj=archive_file, mode="w") as tar:
+                tar.add(src, arcname=dst.name)
+            archive_file.seek(0)
 
-        container.exec_run(f"mkdir -p {dst.parent}")
-        container.put_archive(str(dst.parent), buf.read())
+            container.exec_run(f"mkdir -p {dst.parent}")
+            container.put_archive(str(dst.parent), archive_file)
 
     def copy_from_container(
         self, handle: ContainerHandle, src: PurePosixPath,
